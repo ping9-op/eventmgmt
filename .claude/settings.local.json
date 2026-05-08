@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(node -v)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\GME\\\\claude_workspace\\\\event_mgmt_app\\\\src\" -Recurse -File | Where-Object { $_.Extension -in '.tsx', '.ts', '.jsx', '.js' } | Select-Object FullName)",
+      "PowerShell($content = Get-Content \"C:\\\\Users\\\\GME\\\\Downloads\\\\prototype.html\" -Encoding UTF8; $lines = $content.Count; Write-Host \"Total lines: $lines\")",
+      "PowerShell(Start-Process \"http://localhost:5174\")",
+      "PowerShell(winget install *)",
+      "PowerShell($env:PATH += \";C:\\\\Program Files\\\\Git\\\\bin\"; cd \"C:\\\\Users\\\\GME\\\\claude_workspace\\\\event_mgmt_app\"; git --version 2>&1)",
+      "PowerShell(git init *)"
+    ]
+  }
+}
