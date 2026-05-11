@@ -11,7 +11,7 @@ export default async function handler(req: any, res: any) {
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
 
     const prompt = `이 파일은 박람회 참가 Proposal 문서입니다. 아래 정보를 추출하여 JSON으로만 반환하세요. 다른 텍스트 없이 순수 JSON만 출력하세요.
 
