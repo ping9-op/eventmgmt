@@ -178,7 +178,10 @@ export default function Exhibitions() {
       })
 
       const json = await res.json()
-      if (!json.success) throw new Error(json.error)
+      if (!json.success) {
+        const detail = json.details ? '\n' + (json.details as string[]).join('\n') : ''
+        throw new Error(json.error + detail)
+      }
 
       const d = json.data
       if (d.name) setApName(d.name)
