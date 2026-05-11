@@ -148,43 +148,60 @@ export default function Exhibitions() {
     setParseState('idle'); setUploadedFileName('')
   }
 
-  function handleFileUpload(file: File) {
+  async function handleFileUpload(file: File) {
     if (!file) return
     const ext = file.name.split('.').pop()?.toLowerCase()
-    const allowed = ['pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg']
-    if (!allowed.includes(ext || '')) { alert('PDF, Word, 이미지 파일만 지원합니다.'); return }
+    const allowed = ['pdf', 'png', 'jpg', 'jpeg']
+    if (!allowed.includes(ext || '')) {
+      alert('PDF 또는 이미지(PNG/JPG) 파일만 지원합니다.\nWord 파일은 PDF로 저장 후 업로드해주세요.')
+      return
+    }
     setUploadedFileName(file.name)
     setParseState('parsing')
-    // 파일명 기반 자동 인식 시뮬레이션
-    setTimeout(() => {
-      const fn = file.name.toLowerCase()
-      if (fn.includes('kif') || fn.includes('korea import')) {
-        setApName('Korea Import Fair (KIF)')
-        setApVenue('COEX Hall B')
-        setApDate(`${new Date().getFullYear()} Jun 23-25`)
-      } else if (fn.includes('travel') || fn.includes('ts_') || fn.includes('travelshow')) {
-        setApName('Travel Show')
-        setApVenue('KINTEX')
-        setApDate(`${new Date().getFullYear()} May 14-17`)
-      } else if (fn.includes('sitf')) {
-        setApName('SITF')
-        setApVenue('COEX Hall C')
-        setApDate(`${new Date().getFullYear()} Jun 4-7`)
-      } else if (fn.includes('tokyo') || fn.includes('japan')) {
-        setApName('Korea Expo in Tokyo')
-        setApVenue('Sunshine City Convention Center, Tokyo')
-        setApDate(`${new Date().getFullYear()} Apr 16-18`)
-        setApBudget([
-          { item: 'Booth Fee', curr: 780000, currency: 'JPY', note: '' },
-          { item: 'Design', curr: 1500000, currency: 'KRW', note: '' },
-          { item: 'Gift', curr: 1500000, currency: 'KRW', note: '' },
-          { item: 'Flight', curr: 160000, currency: 'JPY', note: '' },
-        ])
+
+    try {
+      // 파일을 base64로 변환
+      const arrayBuffer = await file.arrayBuffer()
+      const bytes = new Uint8Array(arrayBuffer)
+      let binary = ''
+      for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i])
+      const base64 = btoa(binary)
+
+      const mediaType = ext === 'pdf' ? 'application/pdf'
+        : ext === 'png' ? 'image/png'
+        : 'image/jpeg'
+
+      const res = await fetch('/api/parse-proposal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileData: base64, mediaType }),
+      })
+
+      const json = await res.json()
+      if (!json.success) throw new Error(json.error)
+
+      const d = json.data
+      if (d.name) setApName(d.name)
+      if (d.year) setApYear(String(d.year))
+      if (d.author) setApAuthor(d.author)
+      if (d.date_of_event) setApDate(d.date_of_event)
+      if (d.venue) setApVenue(d.venue)
+      if (d.objective) setApObj(d.objective)
+      if (d.recurring !== undefined) setApRecurring(d.recurring ? '1' : '0')
+      if (d.budget && d.budget.length > 0) {
+        setApBudget(d.budget.map((b: any) => ({
+          item: b.item || '',
+          curr: b.curr || 0,
+          currency: b.currency || 'KRW',
+          note: b.note || ''
+        })))
       }
-      if (!apAuthor) setApAuthor('Andrew')
-      if (!apPdate) setApPdate(new Date().toISOString().split('T')[0])
       setParseState('done')
-    }, 2000)
+    } catch (err: any) {
+      alert('AI 분석 실패: ' + (err.message || '다시 시도해주세요.'))
+      setParseState('idle')
+      setUploadedFileName('')
+    }
   }
 
   function updateBudgetRow(i: number, field: keyof BudgetRow, val: string | number) {
