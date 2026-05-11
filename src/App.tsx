@@ -16,6 +16,7 @@ import SalesFunnel from './components/pages/SalesFunnel'
 import SalesFollowUp from './components/pages/SalesFollowUp'
 import SalesReports from './components/pages/SalesReports'
 import SalesSettings from './components/pages/SalesSettings'
+import EventDetail from './components/pages/EventDetail'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="sales/reports" element={<SalesReports />} />
         <Route path="sales/settings" element={<SalesSettings />} />
         <Route path="settings" element={<SalesSettings />} />
+        <Route path="expo/event/:key/:year" element={<EventDetail />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

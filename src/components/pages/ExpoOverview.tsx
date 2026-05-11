@@ -231,7 +231,8 @@ export default function ExpoOverview() {
           const hist = histByKey[e.key] || []
 
           return (
-            <div key={`${e.key}_${e.year}`} className="exh-card" style={{ display: 'flex', flexDirection: 'column' }}>
+            <div key={`${e.key}_${e.year}`} className="exh-card" style={{ display: 'flex', flexDirection: 'column', cursor: 'pointer' }}
+              onClick={() => navigate(`/expo/event/${e.key}/${e.year}`)}>
               <div className="top-bar" style={{ background: topColor }} />
               <div className="ec-body" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
                 <div className="ec-hdr">
