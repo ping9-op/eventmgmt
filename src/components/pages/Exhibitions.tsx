@@ -36,6 +36,8 @@ export default function Exhibitions() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [parseState, setParseState] = useState<'idle' | 'parsing' | 'done'>('idle')
+  const [uploadedFileName, setUploadedFileName] = useState('')
 
   // 과거 Proposal 등록 폼
   const [apExhSel, setApExhSel] = useState('')   // 기존 박람회 ID or ''
@@ -143,6 +145,46 @@ export default function Exhibitions() {
     setApAuthor('Andrew'); setApPdate(new Date().toISOString().split('T')[0])
     setApRecurring('1'); setApDate(''); setApVenue(''); setApObj('')
     setApBudget(defaultBudgetRows())
+    setParseState('idle'); setUploadedFileName('')
+  }
+
+  function handleFileUpload(file: File) {
+    if (!file) return
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    const allowed = ['pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg']
+    if (!allowed.includes(ext || '')) { alert('PDF, Word, 이미지 파일만 지원합니다.'); return }
+    setUploadedFileName(file.name)
+    setParseState('parsing')
+    // 파일명 기반 자동 인식 시뮬레이션
+    setTimeout(() => {
+      const fn = file.name.toLowerCase()
+      if (fn.includes('kif') || fn.includes('korea import')) {
+        setApName('Korea Import Fair (KIF)')
+        setApVenue('COEX Hall B')
+        setApDate(`${new Date().getFullYear()} Jun 23-25`)
+      } else if (fn.includes('travel') || fn.includes('ts_') || fn.includes('travelshow')) {
+        setApName('Travel Show')
+        setApVenue('KINTEX')
+        setApDate(`${new Date().getFullYear()} May 14-17`)
+      } else if (fn.includes('sitf')) {
+        setApName('SITF')
+        setApVenue('COEX Hall C')
+        setApDate(`${new Date().getFullYear()} Jun 4-7`)
+      } else if (fn.includes('tokyo') || fn.includes('japan')) {
+        setApName('Korea Expo in Tokyo')
+        setApVenue('Sunshine City Convention Center, Tokyo')
+        setApDate(`${new Date().getFullYear()} Apr 16-18`)
+        setApBudget([
+          { item: 'Booth Fee', curr: 780000, currency: 'JPY', note: '' },
+          { item: 'Design', curr: 1500000, currency: 'KRW', note: '' },
+          { item: 'Gift', curr: 1500000, currency: 'KRW', note: '' },
+          { item: 'Flight', curr: 160000, currency: 'JPY', note: '' },
+        ])
+      }
+      if (!apAuthor) setApAuthor('Andrew')
+      if (!apPdate) setApPdate(new Date().toISOString().split('T')[0])
+      setParseState('done')
+    }, 2000)
   }
 
   function updateBudgetRow(i: number, field: keyof BudgetRow, val: string | number) {
@@ -260,6 +302,39 @@ export default function Exhibitions() {
             <div className="modal-hdr">
               <h3>과거 Proposal 등록</h3>
               <button className="modal-close" onClick={() => { setShowAddModal(false); resetForm() }}>✕</button>
+            </div>
+
+            {/* 파일 업로드 */}
+            <div
+              className="invoice-drop"
+              style={{ marginBottom: 16 }}
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFileUpload(f) }}
+              onClick={() => document.getElementById('proposal-file-input')?.click()}
+            >
+              <input id="proposal-file-input" type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); e.target.value = '' }} />
+              {parseState === 'idle' && (
+                <>
+                  <div style={{ fontSize: 28, marginBottom: 6 }}>📄</div>
+                  <div style={{ fontSize: 14, color: 'var(--muted)', fontWeight: 500 }}>기존 승인된 Proposal 파일 업로드</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>PDF, Word, 이미지 · 클릭 또는 드래그</div>
+                </>
+              )}
+              {parseState === 'parsing' && (
+                <div style={{ textAlign: 'center', padding: 8 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#7B2D8B', marginBottom: 8 }}>📄 "{uploadedFileName}" 분석 중...</div>
+                  <div style={{ background: '#E8D8F8', borderRadius: 4, height: 6, overflow: 'hidden', maxWidth: 300, margin: '0 auto' }}>
+                    <div style={{ height: '100%', background: '#7B2D8B', borderRadius: 4, width: '80%', transition: 'width 2s ease' }} />
+                  </div>
+                </div>
+              )}
+              {parseState === 'done' && (
+                <div style={{ textAlign: 'center', color: 'var(--green)', fontSize: 14, fontWeight: 600, padding: 8 }}>
+                  ✅ "{uploadedFileName}" 분석 완료 — 아래 내용을 확인하고 수정하세요
+                  <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 400, marginTop: 4 }}>다시 업로드하려면 클릭</div>
+                </div>
+              )}
             </div>
 
             <label style={{ marginTop: 0 }}>박람회 선택 (기존 선택 또는 직접 입력)</label>
