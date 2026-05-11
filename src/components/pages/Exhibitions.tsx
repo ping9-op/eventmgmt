@@ -148,63 +148,16 @@ export default function Exhibitions() {
     setParseState('idle'); setUploadedFileName('')
   }
 
-  async function handleFileUpload(file: File) {
+  function handleFileUpload(file: File) {
     if (!file) return
     const ext = file.name.split('.').pop()?.toLowerCase()
-    const allowed = ['pdf', 'png', 'jpg', 'jpeg']
+    const allowed = ['pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'xlsx', 'xls']
     if (!allowed.includes(ext || '')) {
-      alert('PDF 또는 이미지(PNG/JPG) 파일만 지원합니다.\nWord 파일은 PDF로 저장 후 업로드해주세요.')
+      alert('PDF, Word, 이미지, Excel 파일을 업로드할 수 있습니다.')
       return
     }
     setUploadedFileName(file.name)
-    setParseState('parsing')
-
-    try {
-      // 파일을 base64로 변환
-      const arrayBuffer = await file.arrayBuffer()
-      const bytes = new Uint8Array(arrayBuffer)
-      let binary = ''
-      for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i])
-      const base64 = btoa(binary)
-
-      const mediaType = ext === 'pdf' ? 'application/pdf'
-        : ext === 'png' ? 'image/png'
-        : 'image/jpeg'
-
-      const res = await fetch('/api/parse-proposal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileData: base64, mediaType }),
-      })
-
-      const json = await res.json()
-      if (!json.success) {
-        const detail = json.details ? '\n' + (json.details as string[]).join('\n') : ''
-        throw new Error(json.error + detail)
-      }
-
-      const d = json.data
-      if (d.name) setApName(d.name)
-      if (d.year) setApYear(String(d.year))
-      if (d.author) setApAuthor(d.author)
-      if (d.date_of_event) setApDate(d.date_of_event)
-      if (d.venue) setApVenue(d.venue)
-      if (d.objective) setApObj(d.objective)
-      if (d.recurring !== undefined) setApRecurring(d.recurring ? '1' : '0')
-      if (d.budget && d.budget.length > 0) {
-        setApBudget(d.budget.map((b: any) => ({
-          item: b.item || '',
-          curr: b.curr || 0,
-          currency: b.currency || 'KRW',
-          note: b.note || ''
-        })))
-      }
-      setParseState('done')
-    } catch (err: any) {
-      alert('AI 분석 실패: ' + (err.message || '다시 시도해주세요.'))
-      setParseState('idle')
-      setUploadedFileName('')
-    }
+    setParseState('done')
   }
 
   function updateBudgetRow(i: number, field: keyof BudgetRow, val: string | number) {
@@ -337,22 +290,14 @@ export default function Exhibitions() {
               {parseState === 'idle' && (
                 <>
                   <div style={{ fontSize: 28, marginBottom: 6 }}>📄</div>
-                  <div style={{ fontSize: 14, color: 'var(--muted)', fontWeight: 500 }}>기존 승인된 Proposal 파일 업로드</div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>PDF, Word, 이미지 · 클릭 또는 드래그</div>
+                  <div style={{ fontSize: 14, color: 'var(--muted)', fontWeight: 500 }}>기존 승인된 Proposal 파일 첨부</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>PDF, Word, Excel, 이미지 · 클릭 또는 드래그</div>
                 </>
               )}
-              {parseState === 'parsing' && (
-                <div style={{ textAlign: 'center', padding: 8 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#7B2D8B', marginBottom: 8 }}>📄 "{uploadedFileName}" 분석 중...</div>
-                  <div style={{ background: '#E8D8F8', borderRadius: 4, height: 6, overflow: 'hidden', maxWidth: 300, margin: '0 auto' }}>
-                    <div style={{ height: '100%', background: '#7B2D8B', borderRadius: 4, width: '80%', transition: 'width 2s ease' }} />
-                  </div>
-                </div>
-              )}
               {parseState === 'done' && (
-                <div style={{ textAlign: 'center', color: 'var(--green)', fontSize: 14, fontWeight: 600, padding: 8 }}>
-                  ✅ "{uploadedFileName}" 분석 완료 — 아래 내용을 확인하고 수정하세요
-                  <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 400, marginTop: 4 }}>다시 업로드하려면 클릭</div>
+                <div style={{ textAlign: 'center', fontSize: 14, fontWeight: 600, padding: 8 }}>
+                  📎 "{uploadedFileName}" 첨부됨
+                  <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400, marginTop: 4 }}>아래 폼에 내용을 직접 입력해주세요 · 다시 업로드하려면 클릭</div>
                 </div>
               )}
             </div>
