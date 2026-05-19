@@ -523,9 +523,7 @@ export default function EventDetail() {
                     <td><input value={row.activity || ''} style={{ fontWeight: 600 }} onChange={e => setItinerary(p => p.map((r, j) => j === i ? { ...r, activity: e.target.value } : r))} /></td>
                     <td><input value={row.location || ''} onChange={e => setItinerary(p => p.map((r, j) => j === i ? { ...r, location: e.target.value } : r))} /></td>
                     <td>
-                      <select value={row.assignee || 'All'} onChange={e => setItinerary(p => p.map((r, j) => j === i ? { ...r, assignee: e.target.value } : r))}>
-                        {OWNERS.map(o => <option key={o}>{o}</option>)}
-                      </select>
+                      <input value={row.assignee || ''} placeholder="All" onChange={e => setItinerary(p => p.map((r, j) => j === i ? { ...r, assignee: e.target.value } : r))} />
                     </td>
                     <td><input value={row.note || ''} onChange={e => setItinerary(p => p.map((r, j) => j === i ? { ...r, note: e.target.value } : r))} /></td>
                     <td><button onClick={() => setItinerary(p => p.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 16 }}>✕</button></td>
