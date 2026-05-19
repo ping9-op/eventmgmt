@@ -113,6 +113,29 @@ async function seed() {
   if (e5) console.log('results:', e5.message)
   else console.log('✓ results')
 
+  // 6. Sales Tasks
+  const { data: leadData } = await supabase.from('sales_leads').select('id, serial_no')
+  const leadId = (sn: string) => leadData!.find(l => l.serial_no === sn)!.id
+
+  const tasks = [
+    { lead_id: leadId('L001'), task_title: 'Proposal 회신 팔로업 전화', task_type: '전화', due_date: '2026-05-20', status: 'Overdue', priority: 'High', owner: 'Andrew', note: '지난주 Proposal 보낸 후 응답 없음' },
+    { lead_id: leadId('L001'), task_title: '수수료 구조 이메일 발송', task_type: '이메일', due_date: '2026-05-21', status: 'Pending', priority: 'High', owner: 'Andrew', note: '경쟁사 대비 우위 강조' },
+    { lead_id: leadId('L002'), task_title: 'GME BIZ 브로셔 이메일 발송', task_type: '이메일', due_date: '2026-05-19', status: 'Done', priority: 'Medium', owner: 'Andrew', note: '한국어/일본어 2개 버전 첨부', completed_at: '2026-05-19' },
+    { lead_id: leadId('L003'), task_title: '미팅 발표자료 준비', task_type: '미팅 준비', due_date: '2026-05-22', status: 'Pending', priority: 'High', owner: 'Jacey', note: 'Travel Agency 특화 케이스 포함' },
+    { lead_id: leadId('L003'), task_title: '미팅 일정 확인 문자 발송', task_type: '문자', due_date: '2026-05-21', status: 'Pending', priority: 'Medium', owner: 'Jacey', note: '' },
+    { lead_id: leadId('L004'), task_title: '수정 수수료 구조안 발송', task_type: '이메일', due_date: '2026-05-18', status: 'Overdue', priority: 'High', owner: 'Violet', note: '월 $15,000 대용량 기준 특별 요율' },
+    { lead_id: leadId('L004'), task_title: '협상 미팅 스케줄 확정', task_type: '미팅', due_date: '2026-05-23', status: 'Pending', priority: 'High', owner: 'Violet', note: '' },
+    { lead_id: leadId('L006'), task_title: '서류 검토 완료 확인', task_type: '서류', due_date: '2026-05-19', status: 'Done', priority: 'High', owner: 'Andrew', note: '사업자등록증, 통장사본 수령 완료', completed_at: '2026-05-19' },
+    { lead_id: leadId('L006'), task_title: '온보딩 교육 일정 안내', task_type: '이메일', due_date: '2026-05-22', status: 'Pending', priority: 'Medium', owner: 'Andrew', note: 'GME BIZ 사용법 안내 자료 첨부' },
+    { lead_id: leadId('L007'), task_title: '첫 연락 - 카카오톡 메시지', task_type: '문자', due_date: '2026-05-19', status: 'Overdue', priority: 'High', owner: 'Jacey', note: 'Travel Show 부스 명함 기반' },
+    { lead_id: leadId('L007'), task_title: '서비스 소개 자료 발송', task_type: '이메일', due_date: '2026-05-21', status: 'Pending', priority: 'High', owner: 'Jacey', note: '월 2만달러 규모 잠재 고객' },
+    { lead_id: leadId('L009'), task_title: 'GME 서비스 브로셔 발송', task_type: '이메일', due_date: '2026-05-20', status: 'Pending', priority: 'Low', owner: 'John', note: 'Hanbit Trading 추천 고객' },
+    { lead_id: leadId('L010'), task_title: 'Proposal 응답 대기 후 팔로업', task_type: '전화', due_date: '2026-05-25', status: 'Pending', priority: 'Medium', owner: 'Andrew', note: '5/21 이후 연락 없으면 전화' },
+  ]
+  const { error: e6 } = await supabase.from('sales_tasks').insert(tasks as any)
+  if (e6) console.log('sales_tasks (may already exist):', e6.message)
+  else console.log('✓ sales_tasks')
+
   console.log('Done!')
 }
 
