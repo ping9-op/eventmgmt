@@ -74,7 +74,7 @@ export default function Schedule() {
       const { data } = await supabase.from('exhibitions').insert({
         key: form.name.replace(/[^a-zA-Z]/g, '').substring(0, 10),
         name: form.name,
-        recurring: false,
+        recurring: form.recurring || false,
       }).select().single()
       exhId = data!.id
     }
@@ -238,6 +238,24 @@ export default function Schedule() {
                 <input value={form.venue || ''} onChange={e => setForm(f => ({ ...f, venue: e.target.value }))} placeholder="COEX Hall B" />
               </div>
             </div>
+            <label style={{ marginTop: 14 }}>구분</label>
+            <select value={form.recurring ? '1' : '0'} onChange={e => setForm(f => ({ ...f, recurring: e.target.value === '1' }))}>
+              <option value="1">기존 박람회</option>
+              <option value="0">신규 박람회</option>
+            </select>
+            {!modal.isNew && (
+              <div style={{ marginTop: 16, padding: '12px 14px', background: '#FFF0F0', borderRadius: 8, border: '1px solid #F5C6C6' }}>
+                <div style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 8 }}>⚠ 이 일정 항목을 완전히 삭제합니다.</div>
+                <button className="btn btn-sm" style={{ background: '#D63031', color: 'white', border: 'none' }}
+                  onClick={async () => {
+                    if (!modal.entry || !confirm('이 일정을 삭제하시겠습니까?')) return
+                    await deleteEntry(modal.entry.key, modal.entry.year)
+                    setModal({ open: false, isNew: false })
+                  }}>
+                  🗑 이 일정 삭제
+                </button>
+              </div>
+            )}
             <div className="modal-footer">
               <button className="btn btn-muted" onClick={() => setModal({ open: false, isNew: false })}>취소</button>
               <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? '저장 중...' : '저장'}</button>

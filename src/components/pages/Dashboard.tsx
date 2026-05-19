@@ -144,7 +144,7 @@ export default function Dashboard() {
   const todayTasks = tasks.filter(t => t.due_date === todayStr).length
 
   const toUSD = (l: SalesLead) => l.volume_currency === 'KRW' ? (l.expected_monthly_volume || 0) / 1350 : (l.expected_monthly_volume || 0)
-  const topLeads = [...leads].filter(l => l.current_stage !== 'Lost').sort((a, b) => toUSD(b) - toUSD(a)).slice(0, 3)
+  const topLeads = [...leads].filter(l => l.current_stage !== 'Lost').sort((a, b) => toUSD(b) - toUSD(a)).slice(0, 5)
 
   const byStage = (s: string) => leads.filter(l => l.current_stage === s).length
 
