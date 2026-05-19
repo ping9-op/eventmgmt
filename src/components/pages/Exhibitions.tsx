@@ -207,11 +207,14 @@ export default function Exhibitions() {
           const cumBudgetStr = Object.entries(cumByCur).sort(([a], [b]) => a === 'KRW' ? -1 : 1).map(([c, v]) => fmtCur(v, c)).join(' + ') || '-'
 
           return (
-            <div key={exh.id} className="exh-card" style={{ display: 'flex', flexDirection: 'column' }}>
+            <div key={exh.id} className="exh-card" style={{ display: 'flex', flexDirection: 'column', cursor: latest ? 'default' : undefined }}>
               <div className="top-bar" style={{ background: color }} />
               <div className="ec-body" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
                 <div className="ec-hdr">
-                  <div className="ec-name" style={{ color }}>{exh.name} {latest?.year || ''}</div>
+                  <div className="ec-name" style={{ color, cursor: latest ? 'pointer' : 'default', textDecoration: latest ? 'underline' : 'none', textUnderlineOffset: 3 }}
+                    onClick={() => latest && navigate(`/expo/event/${exh.key}/${latest.year}`)}>
+                    {exh.name} {latest?.year || ''}
+                  </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
                     <span className="badge" style={{ background: exh.recurring ? '#2E7D51' : 'var(--amber)' }}>
                       {exh.recurring ? '기존' : '신규'}
@@ -228,7 +231,7 @@ export default function Exhibitions() {
 
                 {/* 참가 이력 */}
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6, fontWeight: 500 }}>참가 이력 {proposals.length}회</div>
-                <div style={{ height: 100, overflowY: 'auto', border: '0.5px solid var(--border)', borderRadius: 8, padding: '4px 10px', background: '#FDFBFB', marginBottom: 12 }}>
+                <div style={{ height: 110, overflowY: 'auto', border: '0.5px solid var(--border)', borderRadius: 8, padding: '4px 10px', background: '#FDFBFB', marginBottom: 12 }}>
                   {[...proposals].reverse().map((p, i) => (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '0.5px solid var(--border)' }}>
                       <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap', marginRight: 8 }}>

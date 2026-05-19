@@ -240,6 +240,7 @@ export default function Report() {
       <div className="sec-hdr">
         <div className="bar" />
         <div className="txt">결과 보고서</div>
+        <div className="sub">실제 지출 vs 예산 비교</div>
       </div>
       <div className="report-layout">
         {/* Left */}
@@ -254,79 +255,73 @@ export default function Report() {
         {/* Right */}
         {selected && (
           <div>
-            <div className="card" style={{ marginBottom: 16 }}>
-              <h4 style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>기본 정보</h4>
-              <div className="form-row cols2">
-                <div><label style={{ marginTop: 0 }}>보고서 제목</label><input value={r.cover_title || ''} onChange={e => updateField('cover_title', e.target.value)} /></div>
-                <div><label style={{ marginTop: 0 }}>작성자</label><input value={r.cover_author || ''} onChange={e => updateField('cover_author', e.target.value)} /></div>
-              </div>
-              <div className="form-row cols2">
-                <div><label>행사 기간</label><input value={r.event_date || ''} onChange={e => updateField('event_date', e.target.value)} /></div>
-                <div><label>장소</label><input value={r.event_venue || ''} onChange={e => updateField('event_venue', e.target.value)} /></div>
+            {/* 커버 슬라이드 */}
+            <div style={{ background: 'var(--light)', borderRadius: 10, padding: '14px 16px', marginBottom: 16, border: '1px solid var(--border2)' }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 10 }}>📄 커버 슬라이드 (자동 입력됨)</div>
+              <div className="form-row cols3">
+                <div><label style={{ marginTop: 0 }}>제목</label><input value={r.cover_title || ''} onChange={e => updateField('cover_title', e.target.value)} /></div>
+                <div><label style={{ marginTop: 0 }}>날짜</label><input type="date" value={r.cover_date || ''} onChange={e => updateField('cover_date', e.target.value)} /></div>
+                <div><label style={{ marginTop: 0 }}>작성자</label><input value={r.cover_author || 'Andrew'} onChange={e => updateField('cover_author', e.target.value)} /></div>
               </div>
             </div>
 
-            {/* Performance metrics */}
-            <div className="perf-grid">
-              {[
-                { lbl: '방문객', field: 'visitors' as keyof Result },
-                { lbl: '신규 머천트', field: 'new_merchants' as keyof Result },
-                { lbl: '신규 등록', field: 'new_registrations' as keyof Result },
-                { lbl: 'Remittance', field: 'reg_remittance' as keyof Result },
-                { lbl: 'BIZ 등록', field: 'reg_biz' as keyof Result },
-                { lbl: '온보딩', field: 'reg_onboard' as keyof Result },
-              ].map(m => (
-                <div key={m.field} className="perf-card">
-                  <div className="pl">{m.lbl}</div>
-                  <input
-                    type="number"
-                    style={{ fontSize: 26, fontWeight: 800, color: 'var(--accent)', textAlign: 'center', background: 'transparent', border: 'none', outline: 'none', width: '100%' }}
-                    value={r[m.field] as number || 0}
-                    onChange={e => updateField(m.field, parseInt(e.target.value) || 0)}
-                  />
-                </div>
-              ))}
+            {/* Section 1: Objective */}
+            <SectionHeader num={1} title="Objective" enabled={r.sections_enabled?.['1'] !== false} onToggle={v => updateField('sections_enabled', { ...r.sections_enabled, '1': v })} />
+            <textarea rows={3} style={{ width: '100%', fontSize: 13, border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 13px', resize: 'vertical', fontFamily: 'inherit', marginBottom: 4, boxSizing: 'border-box' }}
+              placeholder="박람회 참가 목적을 입력하세요..."
+              value={r.objective || ''} onChange={e => updateField('objective', e.target.value)} />
+
+            {/* Section 2: Event Overview */}
+            <SectionHeader num={2} title="Event Overview" enabled={r.sections_enabled?.['2'] !== false} onToggle={v => updateField('sections_enabled', { ...r.sections_enabled, '2': v })} />
+            <div className="form-row cols3" style={{ marginBottom: 16 }}>
+              <div><label style={{ marginTop: 0 }}>행사 기간</label><input value={r.event_date || ''} onChange={e => updateField('event_date', e.target.value)} /></div>
+              <div><label style={{ marginTop: 0 }}>장소</label><input value={r.event_venue || ''} onChange={e => updateField('event_venue', e.target.value)} /></div>
+              <div><label style={{ marginTop: 0 }}>타겟 고객</label><input value={r.event_target || ''} onChange={e => updateField('event_target', e.target.value)} /></div>
             </div>
+
+            {/* Section 3: Cost */}
+            <SectionHeader num={3} title="Cost — 예산 vs 실제 지출" enabled={r.sections_enabled?.['3'] !== false} onToggle={v => updateField('sections_enabled', { ...r.sections_enabled, '3': v })} />
 
             {/* Actual costs */}
-            <div className="card" style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
-                <h4 style={{ fontSize: 15, fontWeight: 700 }}>실제 비용</h4>
-                <button className="btn btn-muted btn-sm" onClick={addCost}>+ 항목 추가</button>
-              </div>
-              <table className="actual-table">
-                <thead><tr><th>항목</th><th>예산</th><th>실제</th><th>통화</th><th>차이</th></tr></thead>
-                <tbody>
-                  {(r.actual_costs || []).map((c, i) => {
-                    const diff = (c.actual || 0) - (c.budgeted || 0)
-                    return (
-                      <tr key={i}>
-                        <td><input value={c.item} onChange={e => updateCost(i, 'item', e.target.value)} /></td>
-                        <td><input type="number" value={c.budgeted || ''} onChange={e => updateCost(i, 'budgeted', parseInt(e.target.value) || 0)} /></td>
-                        <td><input type="number" value={c.actual || ''} onChange={e => updateCost(i, 'actual', parseInt(e.target.value) || 0)} /></td>
-                        <td>
-                          <select value={c.currency} onChange={e => updateCost(i, 'currency', e.target.value)} style={{ width: 70 }}>
-                            {['KRW','JPY','USD'].map(c => <option key={c}>{c}</option>)}
-                          </select>
-                        </td>
-                        <td><span className={diff > 0 ? 'over' : diff < 0 ? 'under' : ''}>{diff > 0 ? '+' : ''}{diff.toLocaleString()}</span></td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td>합계</td>
-                    <td>{krw(totalBudgeted)}</td>
-                    <td><strong>{krw(totalActual)}</strong></td>
-                    <td></td>
-                    <td><span className={totalActual - totalBudgeted > 0 ? 'over' : 'under'}>{totalActual - totalBudgeted > 0 ? '+' : ''}{(totalActual - totalBudgeted).toLocaleString()}</span></td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+            <table className="actual-table" style={{ marginBottom: 6 }}>
+              <thead><tr><th>항목</th><th style={{ textAlign: 'right' }}>승인 예산</th><th style={{ textAlign: 'right' }}>실제 지출</th><th style={{ textAlign: 'right' }}>차이</th><th>비고</th><th></th></tr></thead>
+              <tbody>
+                {(r.actual_costs || []).map((c, i) => {
+                  const diff = (c.actual || 0) - (c.budgeted || 0)
+                  return (
+                    <tr key={i}>
+                      <td><input value={c.item} onChange={e => updateCost(i, 'item', e.target.value)} /></td>
+                      <td><input type="number" value={c.budgeted || ''} style={{ textAlign: 'right' }} onChange={e => updateCost(i, 'budgeted', parseInt(e.target.value) || 0)} /></td>
+                      <td><input type="number" value={c.actual || ''} style={{ textAlign: 'right' }} onChange={e => updateCost(i, 'actual', parseInt(e.target.value) || 0)} /></td>
+                      <td style={{ textAlign: 'right' }}>
+                        <span className={diff > 0 ? 'over' : diff < 0 ? 'under' : ''}>
+                          {c.actual ? (diff > 0 ? `▲ ${krw(diff)}` : diff < 0 ? `▼ ${krw(Math.abs(diff))}` : '-') : '-'}
+                        </span>
+                      </td>
+                      <td><input value={(c as any).note || ''} placeholder="차이 사유..." onChange={e => updateCost(i, 'item' as any, (c as any).note = e.target.value)} /></td>
+                      <td><button onClick={() => { const arr = [...(r.actual_costs || [])]; arr.splice(i, 1); updateField('actual_costs', arr) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 15 }}>✕</button></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td><strong>합계</strong></td>
+                  <td style={{ textAlign: 'right' }}><strong>{krw(totalBudgeted)}</strong></td>
+                  <td style={{ textAlign: 'right' }}><strong style={{ color: (totalActual - totalBudgeted) > 0 ? 'var(--danger)' : (totalActual - totalBudgeted) < 0 ? 'var(--green)' : 'inherit' }}>{totalActual ? krw(totalActual) : '-'}</strong></td>
+                  <td style={{ textAlign: 'right' }}>
+                    <span className={totalActual - totalBudgeted > 0 ? 'over' : totalActual - totalBudgeted < 0 ? 'under' : ''}>
+                      {totalActual ? (totalActual - totalBudgeted > 0 ? `▲ ${krw(totalActual - totalBudgeted)} 초과` : totalActual - totalBudgeted < 0 ? `▼ ${krw(Math.abs(totalActual - totalBudgeted))} 절감` : '동일') : '-'}
+                    </span>
+                  </td>
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
+            </table>
+            <button className="add-row-btn" onClick={addCost} style={{ marginBottom: 16 }}>+ 비용 항목 추가</button>
 
-            {/* Marketing activities */}
+            {/* Section 4: Marketing Activities */}
+            <SectionHeader num={4} title="Marketing Activities" enabled={r.sections_enabled?.['4'] !== false} onToggle={v => updateField('sections_enabled', { ...r.sections_enabled, '4': v })} />
             <div className="card" style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
                 <h4 style={{ fontSize: 15, fontWeight: 700 }}>마케팅 활동</h4>
@@ -367,6 +362,50 @@ export default function Report() {
               </table>
             </div>
 
+            {/* Section 5: Registration Results */}
+            <SectionHeader num={5} title="Registration Results" enabled={r.sections_enabled?.['5'] !== false} onToggle={v => updateField('sections_enabled', { ...r.sections_enabled, '5': v })} />
+            <div className="perf-grid" style={{ marginBottom: 12 }}>
+              {([
+                { lbl: 'Remittance 등록', field: 'reg_remittance', color: 'var(--accent)' },
+                { lbl: 'Premium Card 발급', field: 'reg_card', color: '#7B2D8B' },
+                { lbl: 'BIZ Merchant 등록', field: 'reg_biz', color: 'var(--green)' },
+                { lbl: 'Onboard 완료', field: 'reg_onboard', color: 'var(--amber)' },
+                { lbl: '방문객 수', field: 'visitors', color: '#3A5FA0' },
+                { lbl: '신규 머천트', field: 'new_merchants', color: '#C47D1A' },
+              ] as { lbl: string; field: keyof Result; color: string }[]).map(m => (
+                <div key={m.field} className="perf-card">
+                  <div className="pl">{m.lbl}</div>
+                  <input
+                    type="number"
+                    style={{ fontSize: 26, fontWeight: 800, color: m.color, textAlign: 'center', background: 'transparent', border: 'none', outline: 'none', width: '100%' }}
+                    value={(r[m.field] as number) || 0}
+                    onChange={e => updateField(m.field, parseInt(e.target.value) || 0)}
+                  />
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+              <div className="card-sm" style={{ flex: 1, textAlign: 'center' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 6 }}>1인당 비용 (자동 계산)</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--accent)' }}>
+                  {(() => {
+                    const totalReg = (r.reg_remittance || 0) + (r.reg_card || 0) + (r.reg_biz || 0)
+                    return totalReg > 0 ? '₩' + Math.round(totalActual / totalReg).toLocaleString() : '-'
+                  })()}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>총 실지출 ÷ 총 등록 수</div>
+              </div>
+              <div className="card-sm" style={{ flex: 1, textAlign: 'center' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 6 }}>신규 등록</div>
+                <input
+                  type="number"
+                  style={{ fontSize: 22, fontWeight: 800, color: '#3A5FA0', textAlign: 'center', background: 'transparent', border: 'none', outline: 'none', width: '100%' }}
+                  value={r.new_registrations || 0}
+                  onChange={e => updateField('new_registrations', parseInt(e.target.value) || 0)}
+                />
+              </div>
+            </div>
+
             {/* Photo gallery */}
             <div className="card" style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>
@@ -400,21 +439,32 @@ export default function Report() {
             </div>
 
             {/* Bullet sections */}
-            {(['shortcomings', 'improvements', 'recommendations', 'requests'] as const).map(field => {
-              const labels: Record<string, string> = { shortcomings: '미흡한 점', improvements: '개선 사항', recommendations: '제언', requests: '요청 사항' }
-              return (
-                <div key={field} className="card" style={{ marginBottom: 16 }}>
+            {([
+              [6, 'Shortcomings', 'shortcomings', '미흡한 점'],
+              [7, 'Improvements', 'improvements', '개선 사항'],
+              [8, 'Recommendations & Follow-up', 'recommendations', '제언'],
+              [9, 'Request', 'requests', '요청 사항'],
+            ] as [number, string, 'shortcomings' | 'improvements' | 'recommendations' | 'requests', string][]).map(([num, title, field, label]) => (
+              <div key={field}>
+                <SectionHeader num={num} title={title} enabled={r.sections_enabled?.[String(num)] !== false} onToggle={v => updateField('sections_enabled', { ...r.sections_enabled, [String(num)]: v })} />
+                <div className="card" style={{ marginBottom: 16 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <h4 style={{ fontSize: 15, fontWeight: 700 }}>{labels[field]}</h4>
+                    <h4 style={{ fontSize: 15, fontWeight: 700 }}>{label}</h4>
                     <button className="btn btn-muted btn-sm" onClick={() => addBullet(field)}>+ 추가</button>
                   </div>
                   {((r[field] as string[]) || []).map((item, i) => (
-                    <input key={i} value={item} onChange={e => updateBullet(field, i, e.target.value)} style={{ marginBottom: 8 }} />
+                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
+                      <div style={{ minWidth: 22, height: 22, borderRadius: '50%', background: 'var(--accent)', color: 'white', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 5 }}>{i + 1}</div>
+                      <textarea rows={2} value={item} onChange={e => updateBullet(field, i, e.target.value)} style={{ flex: 1, fontSize: 13, border: '1px solid var(--border2)', borderRadius: 7, padding: '8px 10px', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+                      <button onClick={() => { const arr = [...((r[field] as string[]) || [])]; arr.splice(i, 1); updateField(field, arr) }} style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer', fontSize: 18, marginTop: 4, lineHeight: 1 }}>✕</button>
+                    </div>
                   ))}
                 </div>
-              )
-            })}
+              </div>
+            ))}
 
+            {/* Section 10: Conclusion */}
+            <SectionHeader num={10} title="Conclusion" enabled={r.sections_enabled?.['10'] !== false} onToggle={v => updateField('sections_enabled', { ...r.sections_enabled, '10': v })} />
             <div className="card" style={{ marginBottom: 16 }}>
               <label style={{ marginTop: 0, fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>종합 의견</label>
               <textarea value={r.conclusion || ''} onChange={e => updateField('conclusion', e.target.value)} rows={4} />
@@ -422,7 +472,7 @@ export default function Report() {
 
             <div style={{ display: 'flex', gap: 10 }}>
               <button className="btn btn-green" onClick={saveReport} disabled={saving} style={{ flex: 1, padding: 14 }}>
-                {saving ? '저장 중...' : '💾 보고서 저장'}
+                {saving ? '저장 중...' : '💾 저장'}
               </button>
               <button className="btn btn-primary" onClick={exportPPT} style={{ flex: 1, padding: 14 }}>
                 📊 PPT 내보내기
@@ -431,6 +481,19 @@ export default function Report() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function SectionHeader({ num, title, enabled, onToggle }: { num: number; title: string; enabled: boolean; onToggle: (v: boolean) => void }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '28px 0 14px', paddingBottom: 9, borderBottom: '2px solid var(--accent)' }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 0, margin: 0, cursor: 'pointer' }}>
+        <input type="checkbox" checked={enabled} onChange={e => onToggle(e.target.checked)} style={{ width: 18, height: 18, accentColor: 'var(--accent)', cursor: 'pointer', margin: 0 }} />
+      </label>
+      <div style={{ background: enabled ? 'var(--accent)' : 'var(--muted)', color: 'white', fontSize: 13, fontWeight: 700, width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{num}</div>
+      <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', opacity: enabled ? 1 : 0.35 }}>{title}</div>
+      <span style={{ fontSize: 11, marginLeft: 4, color: enabled ? 'var(--green)' : 'var(--muted)' }}>{enabled ? 'PPT 포함' : 'PPT 제외'}</span>
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { krw, exhColor, formatEventDate, isPastEvent } from '../../lib/utils'
 import type { Exhibition, Proposal, BudgetItem } from '../../types/database'
@@ -16,6 +17,7 @@ interface ModalState {
 }
 
 export default function Schedule() {
+  const navigate = useNavigate()
   const [entries, setEntries] = useState<ExhEntry[]>([])
   const [exhMap, setExhMap] = useState<Record<string, Exhibition>>({})
   const [loading, setLoading] = useState(true)
@@ -159,7 +161,7 @@ export default function Schedule() {
                   <th>장소 <span style={{ opacity: .7, fontSize: 10 }}>✎</span></th>
                   <th>구분</th><th>상태</th>
                   <th style={{ textAlign: 'right' }}>총 예산 <span style={{ opacity: .7, fontSize: 10 }}>✎</span></th>
-                  <th>Proposal</th><th>작성자</th><th></th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -171,7 +173,11 @@ export default function Schedule() {
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <div style={{ width: 5, height: 20, background: color, borderRadius: 3, flexShrink: 0 }} />
-                          <span style={{ fontWeight: 700, color }}>{e.name} {e.year}</span>
+                          <span style={{ fontWeight: 700, color, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3 }}
+                            onClick={() => navigate(`/expo/event/${e.key}/${e.year}`)}
+                            title={`${e.name} ${e.year} 이벤트 상세 보기`}>
+                            {e.name} {e.year}
+                          </span>
                         </div>
                       </td>
                       <td style={{ cursor: 'pointer' }} onClick={() => openEdit(e)}>{formatEventDate(e.date, e.year)}</td>
@@ -187,11 +193,8 @@ export default function Schedule() {
                         </span>
                       </td>
                       <td style={{ textAlign: 'right', fontWeight: 700, color, cursor: 'pointer' }} onClick={() => openEdit(e)}>{krw(e.total)}</td>
-                      <td style={{ fontSize: 12, color: 'var(--muted)' }}>{e.proposal_date}</td>
-                      <td style={{ fontSize: 13 }}>{e.author}</td>
                       <td>
-                        <button className="btn btn-outline btn-sm" style={{ marginRight: 6 }} onClick={() => openEdit(e)}>편집</button>
-                        <button className="btn btn-sm btn-muted" onClick={() => deleteEntry(e.key, e.year)}>삭제</button>
+                        <button className="btn btn-outline btn-sm" onClick={() => openEdit(e)}>편집</button>
                       </td>
                     </tr>
                   )

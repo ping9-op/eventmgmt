@@ -61,7 +61,7 @@ export default function Sidebar() {
 
       <NavItem path="/settings" label={t('settings')} />
 
-      <div className="sb-ver">v1.0 · GME Event Management</div>
+      <div className="sb-ver">v3.0 · GME Event Management</div>
     </div>
   )
 }

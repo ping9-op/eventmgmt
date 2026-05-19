@@ -1,105 +1,209 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { krw, exhColor, costColor } from '../../lib/utils'
+import { krw, exhColor, formatEventDate } from '../../lib/utils'
 import type { Exhibition, Proposal as ProposalType, BudgetItem, ProductTarget } from '../../types/database'
 
-const CURRENCIES = ['KRW', 'JPY', 'USD', 'AUD', 'SGD']
-const COST_ITEMS = ['Booth Fee','Design','Gift','Part Timer','Flight','Accommodation','Meal','Item Delivery']
+const CURRENCIES = ['KRW', 'JPY', 'USD', 'EUR', 'SGD']
+const COST_ITEMS = ['Booth Fee', 'Design', 'Gift', 'Part Timer', 'Flight', 'Accommodation', 'Meal', 'Item Delivery']
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+const MON_MAP: Record<string,number> = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12}
+
+function formatDateRange(start: string, end: string): string {
+  if (!start) return ''
+  const s = new Date(start + 'T00:00:00')
+  if (isNaN(s.getTime())) return ''
+  const yr = s.getFullYear(), m = MON[s.getMonth()], d1 = s.getDate()
+  if (!end || end === start) return `${yr} ${m} ${d1}`
+  const e = new Date(end + 'T00:00:00')
+  if (isNaN(e.getTime())) return `${yr} ${m} ${d1}`
+  const d2 = e.getDate()
+  if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear())
+    return `${yr} ${m} ${d1}-${d2}`
+  return `${yr} ${m} ${d1} - ${e.getFullYear()} ${MON[e.getMonth()]} ${d2}`
+}
+
+function parseDateRange(str: string): { start: string; end: string } {
+  if (!str) return { start: '', end: '' }
+  const s = str.toLowerCase()
+  let month = -1
+  for (const [k, v] of Object.entries(MON_MAP)) { if (s.includes(k)) { month = v; break } }
+  if (month < 0) return { start: '', end: '' }
+  const nums = [...s.matchAll(/\d+/g)].map(m => parseInt(m[0]))
+  const yr = nums.find(n => n > 1000) || new Date().getFullYear()
+  const days = nums.filter(n => n >= 1 && n <= 31)
+  if (!days.length) return { start: '', end: '' }
+  const mm = String(month).padStart(2, '0')
+  return {
+    start: `${yr}-${mm}-${String(days[0]).padStart(2,'0')}`,
+    end:   `${yr}-${mm}-${String(days[days.length-1]).padStart(2,'0')}`,
+  }
+}
+
+interface SavedProposal {
+  key: string; exhId: string; name: string; year: number; date: string; total: number; color: string
+}
 
 export default function Proposal() {
   const navigate = useNavigate()
   const location = useLocation()
   const initExhId = (location.state as any)?.exhId || null
 
-  const [step, setStep] = useState(0)
+  const [step, setStep] = useState(1)
   const [exhibitions, setExhibitions] = useState<Exhibition[]>([])
   const [proposals, setProposals] = useState<ProposalType[]>([])
+  const [savedList, setSavedList] = useState<SavedProposal[]>([])
+  const [proposalPage, setProposalPage] = useState(0)
+
+  // Upload area
+  const [showUpload, setShowUpload] = useState(false)
+  const [uploadFileName, setUploadFileName] = useState('')
 
   // Form state
   const [exhId, setExhId] = useState<string>(initExhId || '')
   const [isNewExh, setIsNewExh] = useState(false)
   const [newExhName, setNewExhName] = useState('')
+  const [newExhKey, setNewExhKey] = useState('')
+  const [newExhRecurring, setNewExhRecurring] = useState(false)
   const [year, setYear] = useState(new Date().getFullYear() + 1)
   const [propDate, setPropDate] = useState(new Date().toISOString().split('T')[0])
-  const [author, setAuthor] = useState('')
+  const [author, setAuthor] = useState('Andrew')
   const [dateOfEvent, setDateOfEvent] = useState('')
+  const [eventStartDate, setEventStartDate] = useState('')
+  const [eventEndDate, setEventEndDate] = useState('')
   const [venue, setVenue] = useState('')
   const [objective, setObjective] = useState('')
-  const [products, setProducts] = useState<ProductTarget[]>([{ product: '', target: '' }])
-  const [expectedResults, setExpectedResults] = useState<string[]>([''])
-  const [budget, setBudget] = useState<BudgetItem[]>([{ item: 'Booth Fee', curr: 0, prev: 0, note: '', currency: 'KRW' }])
+  const [products, setProducts] = useState<ProductTarget[]>([{ product: 'GMEBIZ', target: '' }])
+  const [expectedResults, setExpectedResults] = useState<string[]>(['Promote GME BIZ to potential merchants'])
+  const [budget, setBudget] = useState<BudgetItem[]>([
+    { item: 'Booth Fee', curr: 0, prev: 0, note: '', currency: 'KRW' },
+    { item: 'Design', curr: 0, prev: 0, note: '', currency: 'KRW' },
+    { item: 'Gift', curr: 0, prev: 0, note: '', currency: 'KRW' },
+  ])
+  const [aiMemos, setAiMemos] = useState<Record<string, string>>({})
+  const [aiOutput, setAiOutput] = useState('AI 생성 결과가 여기에 표시됩니다.\n\n"AI 변동 사유 생성" 버튼을 눌러주세요.')
+  const [aiLoading, setAiLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    async function load() {
-      const [{ data: exhData }, { data: propData }] = await Promise.all([
-        supabase.from('exhibitions').select('*').order('name'),
-        supabase.from('proposals').select('*').order('year'),
-      ])
-      setExhibitions((exhData || []) as Exhibition[])
-      setProposals((propData || []) as unknown as ProposalType[])
-
-      // Pre-fill if editing
-      if (initExhId) {
-        const exhProposals = ((propData || []) as unknown as ProposalType[]).filter(p => p.exhibition_id === initExhId)
-        const latest = exhProposals[exhProposals.length - 1]
-        if (latest) {
-          setYear(latest.year + 1)
-          setAuthor(latest.author)
-          setDateOfEvent(latest.date_of_event)
-          setVenue(latest.venue)
-          setObjective(latest.objective)
-          setProducts((latest.products as ProductTarget[]) || [{ product: '', target: '' }])
-          setExpectedResults((latest.expected_results as string[]) || [''])
-          // Set prev budget
-          const newBudget = ((latest.budget as BudgetItem[]) || []).map(b => ({ ...b, prev: b.curr, curr: b.curr }))
-          setBudget(newBudget)
-        }
-      }
-    }
     load()
   }, [initExhId])
+
+  async function load() {
+    const [{ data: exhData }, { data: propData }] = await Promise.all([
+      supabase.from('exhibitions').select('*').order('name'),
+      supabase.from('proposals').select('*').order('year'),
+    ])
+    const exhList = (exhData || []) as Exhibition[]
+    const propList = ((propData || []) as unknown as ProposalType[])
+    setExhibitions(exhList)
+    setProposals(propList)
+
+    // Build saved proposals list
+    const list: SavedProposal[] = propList.map(p => {
+      const exh = exhList.find(e => e.id === p.exhibition_id)
+      const budgetItems = (p.budget as BudgetItem[]) || []
+      return {
+        key: exh?.key || '', exhId: p.exhibition_id,
+        name: exh?.name || '', year: p.year,
+        date: p.date_of_event,
+        total: budgetItems.reduce((s, b) => s + (b.curr || 0), 0),
+        color: exhColor(exh?.name || ''),
+      }
+    }).sort((a, b) => b.year - a.year || a.name.localeCompare(b.name))
+    setSavedList(list)
+
+    // Pre-fill if editing
+    if (initExhId) {
+      const exhProposals = propList.filter(p => p.exhibition_id === initExhId)
+      const latest = exhProposals[exhProposals.length - 1]
+      if (latest) {
+        setExhId(initExhId)
+        setYear(latest.year + 1)
+        setAuthor(latest.author || 'Andrew')
+        setDateOfEvent(latest.date_of_event)
+        const { start, end } = parseDateRange(latest.date_of_event)
+        setEventStartDate(start); setEventEndDate(end)
+        setVenue(latest.venue)
+        setObjective(latest.objective)
+        setProducts((latest.products as ProductTarget[]) || [{ product: 'GMEBIZ', target: '' }])
+        setExpectedResults((latest.expected_results as string[]) || [''])
+        const newBudget = ((latest.budget as BudgetItem[]) || []).map(b => ({ ...b, prev: b.curr, curr: b.curr }))
+        setBudget(newBudget.length ? newBudget : [{ item: 'Booth Fee', curr: 0, prev: 0, note: '', currency: 'KRW' }])
+      }
+    }
+  }
+
+  function loadFromSaved(p: SavedProposal) {
+    const propEntry = proposals.find(pr => pr.exhibition_id === p.exhId && pr.year === p.year)
+    if (!propEntry) return
+    setExhId(p.exhId)
+    setIsNewExh(false)
+    setYear(p.year + 1)
+    setAuthor(propEntry.author || 'Andrew')
+    setDateOfEvent(propEntry.date_of_event)
+    const { start, end } = parseDateRange(propEntry.date_of_event)
+    setEventStartDate(start); setEventEndDate(end)
+    setVenue(propEntry.venue)
+    setObjective(propEntry.objective)
+    setProducts((propEntry.products as ProductTarget[]) || [{ product: 'GMEBIZ', target: '' }])
+    setExpectedResults((propEntry.expected_results as string[]) || [''])
+    const newBudget = ((propEntry.budget as BudgetItem[]) || []).map(b => ({ ...b, prev: b.curr, curr: b.curr }))
+    setBudget(newBudget.length ? newBudget : [{ item: 'Booth Fee', curr: 0, prev: 0, note: '', currency: 'KRW' }])
+    setSaved(false)
+    setStep(1)
+    window.scrollTo(0, 0)
+  }
 
   async function save() {
     if (!year) return
     setSaving(true)
-
     let finalExhId = exhId
     if (isNewExh && newExhName) {
-      const key = newExhName.replace(/[^a-zA-Z]/g, '').substring(0, 10) + Date.now().toString().slice(-4)
-      const { data } = await supabase.from('exhibitions').insert({
-        key, name: newExhName, recurring: false
-      }).select().single()
+      const key = newExhKey.trim().replace(/\s/g, '_') || newExhName.replace(/[^a-zA-Z]/g, '').substring(0, 10)
+      const { data } = await supabase.from('exhibitions').insert({ key, name: newExhName, recurring: newExhRecurring }).select().single()
       finalExhId = data!.id
     }
-
     await supabase.from('proposals').insert({
-      exhibition_id: finalExhId,
-      year, proposal_date: propDate, author, date_of_event: dateOfEvent,
-      venue, objective,
+      exhibition_id: finalExhId, year, proposal_date: propDate, author,
+      date_of_event: dateOfEvent, venue, objective,
       products: products.filter(p => p.product) as unknown as never,
       expected_results: expectedResults.filter(r => r) as unknown as never,
       budget: budget.filter(b => b.curr > 0) as unknown as never,
       explanations: {}
     })
-
-    // Sync to payments
-    const dbKey = exhibitions.find(e => e.id === finalExhId)?.key + '_' + year
-    const filteredBudget = budget.filter(b => b.curr > 0)
-    for (const b of filteredBudget) {
+    const exh = exhibitions.find(e => e.id === finalExhId)
+    const dbKey = (exh?.key || newExhName.replace(/[^a-zA-Z]/g, '').substring(0, 10)) + '_' + year
+    for (const b of budget.filter(b => b.curr > 0)) {
       await supabase.from('payments').insert({
-        exhibition_key: dbKey,
-        item: b.item, total: b.curr, currency: b.currency || 'KRW',
-        deposit_amount: Math.round(b.curr / 2), deposit_due: '', deposit_paid: false,
-        final_amount: Math.round(b.curr / 2), final_due: '', final_paid: false,
+        exhibition_key: dbKey, item: b.item, total: b.curr, currency: (b as any).currency || 'KRW',
+        deposit_amount: Math.round(b.curr / 2), deposit_due: null, deposit_paid: false,
+        final_amount: Math.round(b.curr / 2), final_due: null, final_paid: false,
       })
     }
-
     setSaving(false)
     setSaved(true)
-    setTimeout(() => navigate('/expo/exhibitions'), 1500)
+    await load()
+    setTimeout(() => { setSaved(false); setStep(1) }, 1500)
+  }
+
+  function runAI() {
+    setAiLoading(true)
+    setAiOutput('🤖 AI 생성 중...')
+    setTimeout(() => {
+      const changed = budget.filter(r => (r.prev && r.curr !== r.prev) || (!r.prev && r.curr > 0))
+      let txt = '✅ AI 변동 사유 생성 완료\n\n'
+      for (const r of changed) {
+        const memo = aiMemos[r.item] || ''
+        txt += `── ${r.item} ──\n`
+        txt += `[KO] ${r.curr > (r.prev || 0) ? '비용 증가에 따른 예산 조정이 필요합니다.' : !r.prev ? '신규 항목이 추가되었습니다.' : '협상을 통해 비용을 절감했습니다.'}`
+        if (memo) txt += ` (${memo})`
+        txt += '\n\n'
+      }
+      setAiOutput(txt)
+      setAiLoading(false)
+    }, 1500)
   }
 
   const prevBudgetMap: Record<string, number> = {}
@@ -109,9 +213,14 @@ export default function Proposal() {
     if (prev) for (const b of (prev.budget as BudgetItem[]) || []) prevBudgetMap[b.item] = b.curr
   }
 
-  const totalBudget = budget.reduce((s, b) => s + b.curr, 0)
+  const totalBudget = budget.reduce((s, b) => s + (b.curr || 0), 0)
+  const changedItems = budget.filter(r => (r.prev && r.curr !== r.prev) || (!r.prev && r.curr > 0))
 
-  const steps = ['기본 정보', '목적 & 제품', '예산', '확인']
+  const STEPS = ['기본 정보', '제품 & 효과', '예산', 'AI 생성 & 저장']
+
+  const PER_PAGE = 10
+  const totalPages = Math.ceil(savedList.length / PER_PAGE)
+  const pageItems = savedList.slice(proposalPage * PER_PAGE, (proposalPage + 1) * PER_PAGE)
 
   return (
     <div className="view">
@@ -120,170 +229,395 @@ export default function Proposal() {
         <div className="txt">새 Proposal 작성</div>
       </div>
 
+      {/* 파일 업로드 섹션 */}
+      <div className="card" style={{ marginBottom: 20, border: '1.5px dashed var(--border2)', background: '#FDFBFB' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: showUpload ? 12 : 0 }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>📤 Proposal 파일 업로드</div>
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 3 }}>
+              기존에 작성된 Proposal 문서(PDF, Word, 이미지)를 업로드하면 AI가 내용을 자동으로 분석해 등록합니다.
+            </div>
+          </div>
+          <button className="btn btn-purple btn-sm" onClick={() => setShowUpload(v => !v)}>
+            {showUpload ? '✕ 닫기' : '📁 파일 선택하여 업로드'}
+          </button>
+        </div>
+        {showUpload && (
+          <div className="invoice-drop"
+            onClick={() => document.getElementById('proposal-file-input')?.click()}
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) setUploadFileName(f.name) }}>
+            <div className="icon">📄</div>
+            <div className="txt">Proposal 파일을 여기에 드래그하거나 클릭하여 선택</div>
+            <div className="sub">PDF · Word (.docx) · 이미지 (JPG, PNG) · 최대 20MB</div>
+            {uploadFileName && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>📎 "{uploadFileName}" 첨부됨</div>}
+            <input id="proposal-file-input" type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" style={{ display: 'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) setUploadFileName(f.name) }} />
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+        <div style={{ flex: 1, borderTop: '1px solid var(--border)' }} />
+        <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>또는 직접 입력</div>
+        <div style={{ flex: 1, borderTop: '1px solid var(--border)' }} />
+      </div>
+
+      {/* 스텝 탭 */}
       <div className="steps">
-        {steps.map((s, i) => (
-          <div key={i} className={`step${i === step ? ' active' : i < step ? ' done' : ''}`} onClick={() => i < step && setStep(i)}>
-            {i < step ? '✓ ' : ''}{s}
+        {STEPS.map((s, i) => (
+          <div key={i} className={`step${i + 1 === step ? ' active' : i + 1 < step ? ' done' : ''}`}
+            onClick={() => { if (i + 1 < step) setStep(i + 1) }}>
+            {i + 1 < step ? '✓ ' : ''}Step {i + 1}. {s}
           </div>
         ))}
       </div>
 
-      {/* Step 0 */}
-      {step === 0 && (
+      {/* Step 1: 기본 정보 */}
+      {step === 1 && (
         <div className="card">
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ marginTop: 0 }}>박람회 선택</label>
-            <select value={isNewExh ? '__new__' : exhId} onChange={e => {
-              if (e.target.value === '__new__') { setIsNewExh(true); setExhId('') }
-              else { setIsNewExh(false); setExhId(e.target.value) }
-            }}>
-              <option value="">-- 선택 --</option>
-              {exhibitions.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-              <option value="__new__">+ 새 박람회 직접 입력</option>
-            </select>
-          </div>
+          <label style={{ marginTop: 0 }}>박람회 선택</label>
+          <select value={isNewExh ? '__new__' : exhId} onChange={e => {
+            if (e.target.value === '__new__') { setIsNewExh(true); setExhId('') }
+            else { setIsNewExh(false); setExhId(e.target.value) }
+          }}>
+            <option value="">-- 박람회를 선택하세요 --</option>
+            {exhibitions.map(e => <option key={e.id} value={e.id}>{e.key}: {e.name}</option>)}
+            <option value="__new__">+ 새 박람회 추가</option>
+          </select>
+          {/* 새 박람회 입력 영역 */}
           {isNewExh && (
-            <div style={{ marginBottom: 16 }}>
-              <label>새 박람회 이름</label>
-              <input value={newExhName} onChange={e => setNewExhName(e.target.value)} placeholder="Korea Import Fair (KIF)" />
+            <div style={{ background: '#EEF4FF', border: '1.5px solid #A8C4EE', borderRadius: 10, padding: '14px 16px', marginTop: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#3A5FA0', marginBottom: 12 }}>🆕 새 박람회 정보 입력</div>
+              <div className="form-row cols2">
+                <div>
+                  <label style={{ marginTop: 0 }}>박람회 전체 이름 *</label>
+                  <input
+                    value={newExhName}
+                    onChange={e => setNewExhName(e.target.value)}
+                    placeholder="예: Korea Import Fair (KIF)"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label style={{ marginTop: 0 }}>약칭 (Key) *</label>
+                  <input
+                    value={newExhKey}
+                    onChange={e => setNewExhKey(e.target.value)}
+                    placeholder="예: KIF, TS, SITF"
+                    maxLength={20}
+                  />
+                </div>
+              </div>
+              <div style={{ marginTop: 10 }}>
+                <label style={{ marginTop: 0 }}>반복 참가 박람회?</label>
+                <select value={newExhRecurring ? '1' : '0'} onChange={e => setNewExhRecurring(e.target.value === '1')}>
+                  <option value="0">신규 (처음 참가)</option>
+                  <option value="1">반복 참가 박람회</option>
+                </select>
+              </div>
             </div>
           )}
-          <div className="form-row cols3">
+
+          <div className="form-row cols2" style={{ marginTop: 14 }}>
             <div>
-              <label>연도</label>
-              <input type="number" value={year} onChange={e => setYear(parseInt(e.target.value))} />
+              <label style={{ marginTop: 0 }}>박람회 이름</label>
+              <input
+                value={isNewExh ? newExhName : (exhibitions.find(e => e.id === exhId)?.name || '')}
+                readOnly
+                style={{ background: '#f8f8f8', color: isNewExh && !newExhName ? 'var(--muted)' : 'var(--text)' }}
+                placeholder="위에서 박람회를 선택하거나 새 박람회를 추가하세요"
+              />
             </div>
             <div>
-              <label>작성자</label>
+              <label style={{ marginTop: 0 }}>연도</label>
+              <input type="number" value={year} onChange={e => setYear(parseInt(e.target.value) || year)} />
+            </div>
+          </div>
+          <div className="form-row cols2" style={{ marginTop: 14 }}>
+            <div>
+              <label style={{ marginTop: 0 }}>작성자</label>
               <input value={author} onChange={e => setAuthor(e.target.value)} placeholder="Andrew" />
             </div>
             <div>
-              <label>작성일</label>
+              <label style={{ marginTop: 0 }}>작성일</label>
               <input type="date" value={propDate} onChange={e => setPropDate(e.target.value)} />
             </div>
           </div>
           <div className="form-row cols2" style={{ marginTop: 14 }}>
             <div>
-              <label>행사 기간</label>
-              <input value={dateOfEvent} onChange={e => setDateOfEvent(e.target.value)} placeholder="2027 Jun 23-25" />
+              <label style={{ marginTop: 0 }}>행사 기간</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="date"
+                  value={eventStartDate}
+                  onChange={e => {
+                    const s = e.target.value
+                    setEventStartDate(s)
+                    setDateOfEvent(formatDateRange(s, eventEndDate))
+                    if (eventEndDate && s > eventEndDate) {
+                      setEventEndDate(s)
+                      setDateOfEvent(formatDateRange(s, s))
+                    }
+                  }}
+                  style={{ flex: 1 }}
+                />
+                <span style={{ color: 'var(--muted)', fontWeight: 600, flexShrink: 0 }}>~</span>
+                <input
+                  type="date"
+                  value={eventEndDate}
+                  min={eventStartDate || undefined}
+                  onChange={e => {
+                    const e2 = e.target.value
+                    setEventEndDate(e2)
+                    setDateOfEvent(formatDateRange(eventStartDate, e2))
+                  }}
+                  style={{ flex: 1 }}
+                />
+              </div>
+              {dateOfEvent && (
+                <div style={{ marginTop: 5, fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>
+                  📅 {dateOfEvent}
+                </div>
+              )}
             </div>
             <div>
-              <label>장소</label>
+              <label style={{ marginTop: 0 }}>장소</label>
               <input value={venue} onChange={e => setVenue(e.target.value)} placeholder="COEX Hall B" />
             </div>
           </div>
-          <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end' }}>
-            <button className="btn btn-primary" onClick={() => setStep(1)} disabled={!year || (!exhId && !isNewExh && !newExhName)}>다음 →</button>
+          <label>참가 목적</label>
+          <textarea value={objective} onChange={e => setObjective(e.target.value)} rows={2}
+            placeholder="To promote GME BIZ to potential Korean Merchants..." />
+          <div style={{ marginTop: 18, textAlign: 'right' }}>
+            <button className="btn btn-primary" onClick={() => { setStep(2); window.scrollTo(0,0) }}>다음 →</button>
           </div>
         </div>
       )}
 
-      {/* Step 1 */}
-      {step === 1 && (
-        <div className="card">
-          <label style={{ marginTop: 0 }}>참가 목적</label>
-          <textarea value={objective} onChange={e => setObjective(e.target.value)} rows={3} placeholder="To promote GME BIZ to potential Korean Merchants..." />
-
-          <label style={{ marginTop: 20 }}>홍보 제품 / 서비스</label>
-          {products.map((p, i) => (
-            <div key={i} className="form-row cols2" style={{ marginBottom: 8 }}>
-              <input value={p.product} onChange={e => setProducts(arr => arr.map((x, j) => j === i ? { ...x, product: e.target.value } : x))} placeholder="GMEBIZ" />
-              <input value={p.target} onChange={e => setProducts(arr => arr.map((x, j) => j === i ? { ...x, target: e.target.value } : x))} placeholder="Target (e.g. Korean Merchants)" />
-            </div>
-          ))}
-          <button className="btn btn-muted btn-sm" onClick={() => setProducts(p => [...p, { product: '', target: '' }])}>+ 항목 추가</button>
-
-          <label style={{ marginTop: 20 }}>기대 효과</label>
-          {expectedResults.map((r, i) => (
-            <input key={i} value={r} onChange={e => setExpectedResults(arr => arr.map((x, j) => j === i ? e.target.value : x))} placeholder="Promote GME BIZ to potential merchants" style={{ marginBottom: 8 }} />
-          ))}
-          <button className="btn btn-muted btn-sm" onClick={() => setExpectedResults(r => [...r, ''])}>+ 항목 추가</button>
-
-          <div style={{ marginTop: 20, display: 'flex', justifyContent: 'space-between' }}>
-            <button className="btn btn-muted" onClick={() => setStep(0)}>← 이전</button>
-            <button className="btn btn-primary" onClick={() => setStep(2)}>다음 →</button>
-          </div>
-        </div>
-      )}
-
-      {/* Step 2 */}
+      {/* Step 2: 제품 & 효과 */}
       {step === 2 && (
         <div className="card">
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>홍보 제품</div>
+          <div id="products-area">
+            {products.map((p, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <input style={{ flex: 1 }} value={p.product} onChange={e => setProducts(arr => arr.map((x, j) => j === i ? { ...x, product: e.target.value } : x))} placeholder="제품명" />
+                <input style={{ flex: 1 }} value={p.target} onChange={e => setProducts(arr => arr.map((x, j) => j === i ? { ...x, target: e.target.value } : x))} placeholder="타겟" />
+                <button onClick={() => setProducts(arr => arr.filter((_, j) => j !== i))}
+                  style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 4px', flexShrink: 0 }}>✕</button>
+              </div>
+            ))}
+          </div>
+          <button className="btn btn-muted btn-sm" style={{ marginBottom: 20 }}
+            onClick={() => setProducts(p => [...p, { product: '', target: '' }])}>
+            + 제품 추가
+          </button>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>기대 효과</div>
+          <div id="results-area">
+            {expectedResults.map((r, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <input style={{ flex: 1 }} value={r} onChange={e => setExpectedResults(arr => arr.map((x, j) => j === i ? e.target.value : x))}
+                  placeholder="Promote GME BIZ to potential merchants" />
+                <button onClick={() => setExpectedResults(arr => arr.filter((_, j) => j !== i))}
+                  style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 4px', flexShrink: 0 }}>✕</button>
+              </div>
+            ))}
+          </div>
+          <button className="btn btn-muted btn-sm" style={{ marginBottom: 20 }}
+            onClick={() => setExpectedResults(r => [...r, ''])}>
+            + 효과 추가
+          </button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
+            <button className="btn btn-muted" onClick={() => setStep(1)}>← 이전</button>
+            <button className="btn btn-primary" onClick={() => { setStep(3); window.scrollTo(0,0) }}>다음 →</button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 3: 예산 */}
+      {step === 3 && (
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>예산 입력</div>
+            <button className="btn btn-purple btn-sm"
+              onClick={() => {
+                setBudget(b => [...b, { item: 'Part Timer', curr: 500000, prev: 0, note: '추가 인력', currency: 'KRW' }])
+                alert('실제 앱에서는 엑셀 파일을 선택하면 항목과 금액을 자동으로 읽어옵니다.')
+              }}>
+              📂 엑셀 가져오기
+            </button>
+          </div>
+          {Object.keys(prevBudgetMap).length > 0 && (
+            <div style={{ fontSize: 13, color: 'var(--muted)', background: 'var(--light)', padding: '10px 14px', borderRadius: 8, marginBottom: 14 }}>
+              전년도 데이터를 불러왔습니다. 올해 금액을 수정해 주세요.
+            </div>
+          )}
           <table className="budget-table">
             <thead>
-              <tr><th>항목</th><th>금액</th><th>통화</th><th>전년도</th><th>증감</th><th>비고</th><th></th></tr>
+              <tr><th>항목</th><th>전년도</th><th>올해 금액</th><th>통화</th><th>증감</th><th>비고</th><th></th></tr>
             </thead>
             <tbody>
               {budget.map((b, i) => {
                 const prev = prevBudgetMap[b.item] || b.prev || 0
-                const diff = b.curr - prev
+                const diff = (b.curr || 0) - prev
+                const diffEl = prev
+                  ? diff > 0 ? <span className="diff-up">▲ {krw(diff)}</span>
+                    : diff < 0 ? <span className="diff-down">▼ {krw(Math.abs(diff))}</span>
+                    : <span>변동없음</span>
+                  : <span style={{ color: 'var(--amber)', fontWeight: 600 }}>신규</span>
                 return (
                   <tr key={i}>
                     <td>
-                      <select value={b.item} onChange={e => setBudget(arr => arr.map((x, j) => j === i ? { ...x, item: e.target.value } : x))}>
-                        {COST_ITEMS.map(c => <option key={c}>{c}</option>)}
-                      </select>
+                      <input value={b.item} onChange={e => setBudget(arr => arr.map((x, j) => j === i ? { ...x, item: e.target.value } : x))}
+                        style={{ width: 150 }} list="cost-items-list" />
+                      <datalist id="cost-items-list">{COST_ITEMS.map(c => <option key={c} value={c} />)}</datalist>
                     </td>
-                    <td><input type="number" value={b.curr || ''} onChange={e => setBudget(arr => arr.map((x, j) => j === i ? { ...x, curr: parseInt(e.target.value) || 0 } : x))} /></td>
+                    <td style={{ textAlign: 'right', color: 'var(--muted)' }}>{prev ? krw(prev) : '-'}</td>
                     <td>
-                      <select value={b.currency || 'KRW'} onChange={e => setBudget(arr => arr.map((x, j) => j === i ? { ...x, currency: e.target.value } : x))}>
+                      <input type="number" value={b.curr || ''} style={{ width: 120, textAlign: 'right' }}
+                        onChange={e => setBudget(arr => arr.map((x, j) => j === i ? { ...x, curr: parseInt(e.target.value) || 0 } : x))} />
+                    </td>
+                    <td>
+                      <select value={(b as any).currency || 'KRW'} style={{ width: 72 }}
+                        onChange={e => setBudget(arr => arr.map((x, j) => j === i ? { ...x, currency: e.target.value } as any : x))}>
                         {CURRENCIES.map(c => <option key={c}>{c}</option>)}
                       </select>
                     </td>
-                    <td style={{ color: 'var(--muted)' }}>{prev ? (b.currency !== 'KRW' ? b.currency + ' ' : '₩') + prev.toLocaleString() : '-'}</td>
-                    <td>{prev ? <span className={diff > 0 ? 'diff-up' : diff < 0 ? 'diff-down' : ''}>{diff > 0 ? '+' : ''}{diff.toLocaleString()}</span> : '-'}</td>
-                    <td><input value={b.note} onChange={e => setBudget(arr => arr.map((x, j) => j === i ? { ...x, note: e.target.value } : x))} placeholder="비고" /></td>
-                    <td><button className="btn btn-sm btn-muted" onClick={() => setBudget(arr => arr.filter((_, j) => j !== i))}>✕</button></td>
+                    <td>{diffEl}</td>
+                    <td>
+                      <input value={b.note} style={{ width: 130 }}
+                        onChange={e => setBudget(arr => arr.map((x, j) => j === i ? { ...x, note: e.target.value } : x))} />
+                    </td>
+                    <td>
+                      <button style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 16 }}
+                        onClick={() => setBudget(arr => arr.filter((_, j) => j !== i))}>✕</button>
+                    </td>
                   </tr>
                 )
               })}
             </tbody>
-            <tfoot>
-              <tr><td colSpan={2}><strong>합계: {krw(totalBudget)}</strong></td><td colSpan={5}></td></tr>
-            </tfoot>
           </table>
-          <button className="btn btn-muted btn-sm" style={{ marginTop: 12 }} onClick={() => setBudget(b => [...b, { item: 'Gift', curr: 0, prev: 0, note: '', currency: 'KRW' }])}>+ 항목 추가</button>
-          <div style={{ marginTop: 20, display: 'flex', justifyContent: 'space-between' }}>
-            <button className="btn btn-muted" onClick={() => setStep(1)}>← 이전</button>
-            <button className="btn btn-primary" onClick={() => setStep(3)}>다음 →</button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+            <button className="btn btn-muted btn-sm"
+              onClick={() => setBudget(b => [...b, { item: 'Booth Fee', curr: 0, prev: 0, note: '', currency: 'KRW' }])}>
+              + 항목 추가
+            </button>
+            <strong style={{ fontSize: 15, color: 'var(--accent)' }}>합계: {krw(totalBudget)}</strong>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 18 }}>
+            <button className="btn btn-muted" onClick={() => { setStep(2); window.scrollTo(0,0) }}>← 이전</button>
+            <button className="btn btn-primary" onClick={() => { setStep(4); window.scrollTo(0,0) }}>다음 →</button>
           </div>
         </div>
       )}
 
-      {/* Step 3 */}
-      {step === 3 && (
+      {/* Step 4: AI 생성 & 저장 */}
+      {step === 4 && (
         <div className="card">
-          <div style={{ background: 'var(--light)', borderRadius: 10, padding: 20, marginBottom: 20 }}>
-            <h4 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>확인</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px', fontSize: 14 }}>
-              <div><span style={{ color: 'var(--muted)' }}>박람회: </span><strong>{exhibitions.find(e => e.id === exhId)?.name || newExhName}</strong></div>
-              <div><span style={{ color: 'var(--muted)' }}>연도: </span><strong>{year}</strong></div>
-              <div><span style={{ color: 'var(--muted)' }}>행사기간: </span><strong>{dateOfEvent}</strong></div>
-              <div><span style={{ color: 'var(--muted)' }}>장소: </span><strong>{venue}</strong></div>
-              <div><span style={{ color: 'var(--muted)' }}>총 예산: </span><strong>{krw(totalBudget)}</strong></div>
-              <div><span style={{ color: 'var(--muted)' }}>작성자: </span><strong>{author}</strong></div>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>변동 사유 메모 (AI 참고용)</div>
+          <div id="memo-area">
+            {changedItems.map(r => {
+              const dir = r.curr > (r.prev || 0) ? '▲ 증가' : !r.prev ? '신규' : '▼ 감소'
+              const col = dir.includes('▲') || dir === '신규' ? 'var(--danger)' : 'var(--green)'
+              return (
+                <div key={r.item} style={{ marginBottom: 10 }}>
+                  <label style={{ color: col }}>
+                    {r.item} &nbsp; {dir} &nbsp; {r.prev ? krw(r.prev) + ' → ' : ''}{krw(r.curr)}
+                  </label>
+                  <input placeholder="변동 이유를 간단히 입력 (AI가 참고합니다)"
+                    value={aiMemos[r.item] || ''}
+                    onChange={e => setAiMemos(m => ({ ...m, [r.item]: e.target.value }))} />
+                </div>
+              )
+            })}
+            {changedItems.length === 0 && (
+              <div style={{ fontSize: 13, color: 'var(--muted)', padding: '10px 0' }}>변동된 예산 항목이 없습니다.</div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+            <button className="btn btn-purple" onClick={runAI} disabled={aiLoading}>
+              🤖 AI 변동 사유 생성
+            </button>
+            <button className="btn btn-muted" onClick={() => { setStep(3); window.scrollTo(0,0) }}>← 이전</button>
+          </div>
+          <div className="ai-box" id="ai-output" style={{ whiteSpace: 'pre-wrap' }}>{aiOutput}</div>
+          <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+            <button className="btn btn-green" onClick={save} disabled={saving || saved}>
+              📋 {saving ? '저장 중...' : saved ? '✓ 저장 완료' : '이력에 저장'}
+            </button>
+            <button className="btn btn-primary" onClick={() => {
+              const exhName = isNewExh ? newExhName : (exhibitions.find(e => e.id === exhId)?.name || '박람회')
+              const lines = [
+                `GME Booth Proposal`, `==================`, ``,
+                `박람회: ${exhName} ${year}`, `행사 기간: ${dateOfEvent}`, `장소: ${venue}`, ``,
+                `참가 목적`, `---------`, objective, ``,
+                `예산 내역`, `---------`,
+                ...budget.filter(b => b.curr > 0).map(r => `${r.item}: ${krw(r.curr)}  (${r.note || ''})`),
+                ``, `합계: ${krw(totalBudget)}`, ``, `작성자: ${author}`, `작성일: ${propDate}`,
+              ].join('\n')
+              const a = Object.assign(document.createElement('a'), {
+                href: 'data:text/plain;charset=utf-8,' + encodeURIComponent(lines),
+                download: `${exhName}_${year}_Proposal.txt`,
+              })
+              document.body.appendChild(a); a.click(); document.body.removeChild(a)
+            }}>
+              💾 .docx 저장
+            </button>
+          </div>
+          {saved && (
+            <div style={{ background: '#E5F5EC', border: '1px solid #A0D8B0', borderRadius: 8, padding: 14, marginTop: 16, color: '#2E7D51', fontWeight: 700 }}>
+              ✅ 저장 완료! 아래 목록에서 확인하세요.
             </div>
-          </div>
-          <table className="budget-table">
-            <thead><tr><th>항목</th><th>금액</th><th>통화</th><th>비고</th></tr></thead>
-            <tbody>
-              {budget.filter(b => b.curr > 0).map((b, i) => (
-                <tr key={i}>
-                  <td>{b.item}</td>
-                  <td style={{ fontWeight: 700 }}>{(b.currency !== 'KRW' ? b.currency + ' ' : '₩') + b.curr.toLocaleString()}</td>
-                  <td>{b.currency}</td>
-                  <td>{b.note}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {saved && <div style={{ background: '#E5F5EC', border: '1px solid #A0D8B0', borderRadius: 8, padding: 14, marginTop: 16, color: '#2E7D51', fontWeight: 700 }}>✓ 저장 완료! 박람회 목록으로 이동합니다...</div>}
-          <div style={{ marginTop: 20, display: 'flex', justifyContent: 'space-between' }}>
-            <button className="btn btn-muted" onClick={() => setStep(2)}>← 이전</button>
-            <button className="btn btn-green" onClick={save} disabled={saving || saved}>{saving ? '저장 중...' : '💾 Proposal 저장'}</button>
-          </div>
+          )}
         </div>
       )}
+
+      {/* 저장된 Proposal 목록 */}
+      <div style={{ marginTop: 32 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div className="sec-hdr" style={{ margin: 0 }}>
+            <div className="bar" />
+            <span className="txt">저장된 Proposal 목록</span>
+            <span className="sub">총 {savedList.length}개 &nbsp;·&nbsp; 클릭하여 편집</span>
+          </div>
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13, color: 'var(--muted)' }}>{proposalPage + 1} / {totalPages} 페이지</span>
+              <button onClick={() => setProposalPage(p => Math.max(0, p - 1))} disabled={proposalPage === 0}
+                style={{ width: 32, height: 32, borderRadius: 8, border: '1.5px solid var(--border2)', background: 'white', cursor: 'pointer', fontSize: 15 }}>‹</button>
+              <button onClick={() => setProposalPage(p => Math.min(totalPages - 1, p + 1))} disabled={proposalPage === totalPages - 1}
+                style={{ width: 32, height: 32, borderRadius: 8, border: '1.5px solid var(--border2)', background: 'white', cursor: 'pointer', fontSize: 15 }}>›</button>
+            </div>
+          )}
+        </div>
+
+        {pageItems.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 32, color: 'var(--muted)', fontSize: 14, background: 'var(--light)', borderRadius: 10 }}>
+            저장된 Proposal이 없습니다.<br />위에서 새 Proposal을 작성하거나 파일을 업로드하세요.
+          </div>
+        ) : (
+          pageItems.map((p, idx) => (
+            <div key={`${p.exhId}-${p.year}`} className="proposal-list-item"
+              style={{ cursor: 'default', transition: 'box-shadow .15s' }}
+              onMouseOver={e => (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 14px rgba(0,0,0,.1)'}
+              onMouseOut={e => (e.currentTarget as HTMLDivElement).style.boxShadow = ''}>
+              <div style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 600, width: 24, textAlign: 'center', flexShrink: 0 }}>
+                {proposalPage * PER_PAGE + idx + 1}
+              </div>
+              <div className="pli-color" style={{ background: p.color }} />
+              <div className="pli-body">
+                <div className="pli-name">{p.name} {p.year}</div>
+                <div className="pli-meta">{p.year} &nbsp;·&nbsp; {formatEventDate(p.date, p.year)} &nbsp;·&nbsp; 총 {krw(p.total)}</div>
+              </div>
+              <div className="pli-actions">
+                <button className="btn btn-outline btn-sm" onClick={() => loadFromSaved(p)}>✏️ 편집</button>
+                <button className="btn btn-muted btn-sm" onClick={() => { loadFromSaved(p); setYear(p.year + 1) }}>복사 작성</button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   )
 }

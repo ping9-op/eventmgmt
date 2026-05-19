@@ -1,202 +1,90 @@
 import { useState } from 'react'
-import { useLang } from '../../contexts/LangContext'
-import { useAuth } from '../../contexts/AuthContext'
+import { loadSalesSettings, saveSalesSettings } from '../../lib/settings'
+import { STAGE_ORDER } from '../../lib/utils'
 import { useToast } from '../../contexts/ToastContext'
-import { loadSalesSettings, saveSalesSettings, DEFAULT_OWNERS, DEFAULT_SOURCES, DEFAULT_BUSINESS_TYPES, DEFAULT_CORRIDORS } from '../../lib/settings'
 
-const DEFAULT_STAGES = ['New Lead', 'Contacted', 'Meeting Scheduled', 'Proposal Sent', 'Negotiation', 'Onboarding', 'Onboarded / Won', 'Lost']
-
-type ListKey = 'owners' | 'sources' | 'businessTypes' | 'corridors'
-
-function loadSettings() { return loadSalesSettings() }
-function saveSettings(data: object) { saveSalesSettings(data as any) }
-
-function EditableList({
-  title, items, onAdd, onRemove, placeholder,
-}: {
-  title: string
-  items: string[]
-  onAdd: (v: string) => void
-  onRemove: (v: string) => void
-  placeholder?: string
-}) {
-  const [input, setInput] = useState('')
-
-  function handleAdd() {
-    const v = input.trim()
-    if (!v || items.includes(v)) return
-    onAdd(v)
-    setInput('')
-  }
-
-  return (
-    <div className="card" style={{ marginBottom: 16 }}>
-      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: 'var(--text)' }}>{title}</div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-        {items.map(item => (
-          <div key={item} style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            background: 'var(--light)', borderRadius: 20, padding: '5px 12px',
-            fontSize: 13, fontWeight: 500,
-          }}>
-            <span>{item}</span>
-            <button
-              onClick={() => onRemove(item)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 14, lineHeight: 1, padding: 0 }}
-              title="삭제"
-            >×</button>
-          </div>
-        ))}
-        {items.length === 0 && <span style={{ fontSize: 13, color: 'var(--muted)' }}>항목 없음</span>}
-      </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleAdd()}
-          placeholder={placeholder || '새 항목 입력'}
-          style={{ flex: 1 }}
-        />
-        <button className="btn btn-primary btn-sm" onClick={handleAdd} disabled={!input.trim()}>추가</button>
-      </div>
-    </div>
-  )
-}
+const CONTACT_METHODS = ['Email', 'Call', 'SMS', 'Kakao', 'Visit']
+const LOST_REASONS = ['No Demand', 'Price Issue', 'Competitor Already Used', 'No Response', 'Compliance Issue', 'Service Not Available', 'Internal Priority Low', 'Other']
+const CONTRACT_STATUSES = ['Not Sent', 'Sent', 'Under Review', 'Revision Requested', 'Signed', 'Rejected']
+const ONBOARD_STATUSES = ['Not Started', 'Waiting Docs', 'Under Review', 'Approved', 'Rejected', 'Completed']
 
 export default function SalesSettings() {
-  const { lang, setLang } = useLang()
-  const { user, signOut } = useAuth()
   const { showToast } = useToast()
+  const [settings, setSettings] = useState(loadSalesSettings())
+  const [addInputs, setAddInputs] = useState<Record<string, string>>({})
 
-  const saved = loadSettings()
-  const [owners, setOwners] = useState<string[]>(saved?.owners || DEFAULT_OWNERS)
-  const [sources, setSources] = useState<string[]>(saved?.sources || DEFAULT_SOURCES)
-  const [businessTypes, setBusinessTypes] = useState<string[]>(saved?.businessTypes || DEFAULT_BUSINESS_TYPES)
-  const [corridors, setCorridors] = useState<string[]>(saved?.corridors || DEFAULT_CORRIDORS)
-  function persist(key: ListKey, value: string[]) {
-    const current = loadSettings()
-    saveSettings({ ...current, [key]: value })
-    showToast('설정이 저장되었습니다.')
+  function addItem(key: keyof typeof settings, val: string) {
+    if (!val.trim()) return
+    const updated = { ...settings, [key]: [...settings[key], val.trim()] }
+    setSettings(updated)
+    saveSalesSettings(updated)
+    setAddInputs(p => ({ ...p, [key]: '' }))
+    showToast('추가되었습니다.')
   }
 
-  function addItem(key: ListKey, setter: (fn: (prev: string[]) => string[]) => void, value: string) {
-    setter(prev => {
-      const next = [...prev, value]
-      persist(key, next)
-      return next
-    })
+  function removeItem(key: keyof typeof settings, idx: number) {
+    const arr = [...settings[key]]
+    arr.splice(idx, 1)
+    const updated = { ...settings, [key]: arr }
+    setSettings(updated)
+    saveSalesSettings(updated)
   }
 
-  function removeItem(key: ListKey, setter: (fn: (prev: string[]) => string[]) => void, value: string) {
-    setter(prev => {
-      const next = prev.filter(v => v !== value)
-      persist(key, next)
-      return next
-    })
-  }
-
-  function resetAll() {
-    if (!window.confirm('모든 설정을 초기값으로 되돌리시겠습니까?')) return
-    localStorage.removeItem('gme_sales_settings')
-    setOwners(DEFAULT_OWNERS)
-    setSources(DEFAULT_SOURCES)
-    setBusinessTypes(DEFAULT_BUSINESS_TYPES)
-    setCorridors(DEFAULT_CORRIDORS)
-  }
+  const settingsGroups: { name: string; key?: keyof typeof settings; items: string[] }[] = [
+    { name: 'Lead Source', key: 'sources', items: settings.sources },
+    { name: 'Funnel Stage', items: STAGE_ORDER },
+    { name: 'Contact Method', items: CONTACT_METHODS },
+    { name: 'Lost Reason', items: LOST_REASONS },
+    { name: 'Priority', items: ['High', 'Medium', 'Low'] },
+    { name: 'Contract Status', items: CONTRACT_STATUSES },
+    { name: 'Onboarding Status', items: ONBOARD_STATUSES },
+    { name: 'Owner', key: 'owners', items: settings.owners },
+    { name: 'Corridor', key: 'corridors', items: settings.corridors },
+    { name: 'Business Type', key: 'businessTypes', items: settings.businessTypes },
+  ]
 
   return (
-    <div className="view">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <div className="sec-hdr" style={{ margin: 0 }}>
-          <div className="bar" />
-          <div className="txt">Sales 설정</div>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button className="btn btn-outline btn-sm" onClick={resetAll}>초기화</button>
-        </div>
+    <div className="view wide">
+      <div className="sec-hdr">
+        <div className="bar" />
+        <div className="txt">Sales 설정</div>
+        <div className="sub">Sales 모듈 마스터 데이터 관리</div>
       </div>
-
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div>
-          <EditableList
-            title="담당자 목록"
-            items={owners}
-            onAdd={v => addItem('owners', setOwners, v)}
-            onRemove={v => removeItem('owners', setOwners, v)}
-            placeholder="담당자 이름"
-          />
-          <EditableList
-            title="Lead 소스"
-            items={sources}
-            onAdd={v => addItem('sources', setSources, v)}
-            onRemove={v => removeItem('sources', setSources, v)}
-            placeholder="소스명"
-          />
-        </div>
-        <div>
-          <EditableList
-            title="업종"
-            items={businessTypes}
-            onAdd={v => addItem('businessTypes', setBusinessTypes, v)}
-            onRemove={v => removeItem('businessTypes', setBusinessTypes, v)}
-            placeholder="업종명"
-          />
-          <EditableList
-            title="코리도 (Country Corridor)"
-            items={corridors}
-            onAdd={v => addItem('corridors', setCorridors, v)}
-            onRemove={v => removeItem('corridors', setCorridors, v)}
-            placeholder="예: Korea → Canada"
-          />
-        </div>
-      </div>
-
-      {/* Stage 목록 (수정 불가 — 코드 레벨 고정) */}
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: 'var(--text)' }}>
-          Sales Stage
-          <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400, marginLeft: 8 }}>코드에서 고정 관리</span>
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {DEFAULT_STAGES.map((s, i) => (
-            <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 12, color: 'var(--muted)' }}>{i + 1}.</span>
-              <span style={{ background: 'var(--light)', borderRadius: 6, padding: '5px 12px', fontSize: 13 }}>{s}</span>
-              {i < DEFAULT_STAGES.length - 1 && <span style={{ color: 'var(--muted)', fontSize: 14 }}>→</span>}
+        {settingsGroups.map(group => (
+          <div key={group.name} style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '18px 22px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ fontSize: 14, fontWeight: 700 }}>{group.name}</div>
+              {group.key && (
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input value={addInputs[group.key] || ''} placeholder="추가..."
+                    onChange={e => setAddInputs(p => ({ ...p, [group.key!]: e.target.value }))}
+                    onKeyDown={e => { if (e.key === 'Enter') addItem(group.key!, addInputs[group.key!] || '') }}
+                    style={{ padding: '4px 9px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 12, width: 100 }} />
+                  <button onClick={() => addItem(group.key!, addInputs[group.key!] || '')}
+                    style={{ padding: '4px 12px', borderRadius: 6, background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
+                    + 추가
+                  </button>
+                </div>
+              )}
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 앱 설정 */}
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 16, color: 'var(--text)' }}>앱 설정</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>언어</div>
-            <div style={{ display: 'flex', background: 'var(--light)', borderRadius: 8, padding: 3, gap: 2 }}>
-              {(['ko', 'en'] as const).map(l => (
-                <button key={l} onClick={() => setLang(l)} style={{
-                  padding: '6px 18px', borderRadius: 6, fontSize: 13, fontWeight: 700,
-                  border: 'none', cursor: 'pointer',
-                  background: lang === l ? 'var(--accent)' : 'transparent',
-                  color: lang === l ? 'white' : 'var(--muted)',
-                }}>{l === 'ko' ? '한국어' : 'English'}</button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {group.items.map((v, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--light)', borderRadius: 7, fontSize: 13 }}>
+                  <span>{v}</span>
+                  {group.key && (
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button onClick={() => removeItem(group.key!, i)}
+                        style={{ padding: '2px 8px', borderRadius: 4, background: 'white', border: '1px solid #FCA5A5', fontSize: 11, cursor: 'pointer', color: '#DC2626' }}>
+                        삭제
+                      </button>
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 4 }}>로그인 계정</div>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>{user?.email || '-'}</div>
-          </div>
-          <button className="btn btn-outline btn-sm" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={signOut}>
-            로그아웃
-          </button>
-        </div>
-      </div>
-
-      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>
-        * 담당자, Lead 소스, 업종, 코리도 변경사항은 브라우저 로컬 스토리지에 저장됩니다. Lead 등록 시 반영됩니다.
+        ))}
       </div>
     </div>
   )

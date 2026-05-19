@@ -1,31 +1,49 @@
 import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { STAGE_COLORS, STAGE_ORDER, priorityColor } from '../../lib/utils'
-import type { SalesLead, SalesActivity, SalesTask } from '../../types/database'
+import { STAGE_ORDER, STAGE_COLORS, priorityColor } from '../../lib/utils'
+import type { SalesLead } from '../../types/database'
 import { loadSalesSettings } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
+import LeadDetailPanel from './LeadDetailPanel'
 
-type ViewMode = 'list' | 'group'
+type GroupBy = 'event' | 'date' | 'source'
+type ViewMode = 'group' | 'detail'
 
-const PRIORITIES = ['High','Medium','Low']
+function StageBadge({ stage }: { stage: string }) {
+  const c = STAGE_COLORS[stage] || { bg: '#6B7280' }
+  return <span style={{ display: 'inline-block', padding: '3px 9px', borderRadius: 99, fontSize: 11, fontWeight: 700, color: 'white', background: c.bg, whiteSpace: 'nowrap' }}>{stage}</span>
+}
+
+function InlineStageSelect({ lead, onUpdate }: { lead: SalesLead; onUpdate: (id: string, stage: string) => void }) {
+  return (
+    <select value={lead.current_stage}
+      onChange={e => { e.stopPropagation(); onUpdate(lead.id, e.target.value) }}
+      onClick={e => e.stopPropagation()}
+      style={{ fontSize: 12, padding: '4px 7px', border: '1.5px solid var(--border2)', borderRadius: 6, background: 'white', cursor: 'pointer', maxWidth: 170, minWidth: 120 }}>
+      {STAGE_ORDER.map(s => <option key={s} value={s}>{s}</option>)}
+    </select>
+  )
+}
 
 export default function SalesLeads() {
+  const location = useLocation()
   const { showToast } = useToast()
   const settings = loadSalesSettings()
-  const OWNERS = settings.owners
-  const LEAD_SOURCES = settings.sources
-  const BUSINESS_TYPES = settings.businessTypes
-  const CORRIDORS = settings.corridors
+  const PRIORITIES = ['High', 'Medium', 'Low']
+
   const [leads, setLeads] = useState<SalesLead[]>([])
-  const [search, setSearch] = useState('')
-  const [filterStage, setFilterStage] = useState('')
-  const [filterOwner, setFilterOwner] = useState('')
   const [loading, setLoading] = useState(true)
+  const [viewMode, setViewMode] = useState<ViewMode>('group')
+  const [groupBy, setGroupBy] = useState<GroupBy>('event')
+  const [groupKey, setGroupKey] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [stageFilter, setStageFilter] = useState<string | null>(null)
+  const [filterOwner, setFilterOwner] = useState<string | null>(null)
+  const [filterStage, setFilterStage] = useState<string | null>(null)
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
   const [showRegister, setShowRegister] = useState(false)
-  const [selectedLead, setSelectedLead] = useState<SalesLead | null>(null)
-  const [activities, setActivities] = useState<SalesActivity[]>([])
-  const [tasks, setTasks] = useState<SalesTask[]>([])
-  const [viewMode, setViewMode] = useState<ViewMode>('list')
+  const [checked, setChecked] = useState<Set<string>>(new Set())
 
   // Register form
   const [form, setForm] = useState<Partial<SalesLead>>({
@@ -33,8 +51,31 @@ export default function SalesLeads() {
     lead_source: 'Expo', business_type: 'Korean Restaurant',
     country_corridor: 'Korea → Japan', priority: 'Medium',
     owner: 'Andrew', current_stage: 'New Lead',
-    volume_currency: 'USD', first_contact_done: false
+    volume_currency: 'USD', first_contact_done: false,
   })
+
+  useEffect(() => {
+    // Handle navigation state (from dashboard/reports)
+    const state = (location.state as any)
+    if (state?.filter) {
+      if (state.filter.owner) setFilterOwner(state.filter.owner)
+      if (state.filter.stage) {
+        setFilterStage(state.filter.stage)
+        setViewMode('detail')
+        setGroupKey(null)
+      }
+      if (state.filter.event) {
+        setGroupBy('event')
+        setGroupKey(state.filter.event)
+        setViewMode('detail')
+      }
+      if (state.filter.lostReason) {
+        setFilterStage('Lost')
+        setViewMode('detail')
+      }
+    }
+    load()
+  }, [])
 
   async function load() {
     const { data } = await supabase.from('sales_leads').select('*').order('registered_date', { ascending: false })
@@ -42,27 +83,18 @@ export default function SalesLeads() {
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [])
-
-  async function openDetail(lead: SalesLead) {
-    setSelectedLead(lead)
-    const [{ data: actData }, { data: taskData }] = await Promise.all([
-      supabase.from('sales_activities').select('*').eq('lead_id', lead.id).order('activity_date', { ascending: false }),
-      supabase.from('sales_tasks').select('*').eq('lead_id', lead.id).order('due_date'),
-    ])
-    setActivities((actData || []) as SalesActivity[])
-    setTasks((taskData || []) as SalesTask[])
+  async function updateStage(leadId: string, stage: string) {
+    await supabase.from('sales_leads').update({ current_stage: stage }).eq('id', leadId)
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, current_stage: stage } : l))
   }
 
   async function register() {
+    if (!form.company_name) { alert('Company Name은 필수입니다.'); return }
     const maxSerial = leads.reduce((max, l) => {
       const n = parseInt(l.serial_no.replace(/\D/g, '')) || 0
       return n > max ? n : max
     }, 0)
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { id: _id, ...formWithoutId } = form as SalesLead
     await supabase.from('sales_leads').insert({
-      ...formWithoutId,
       serial_no: `L${String(maxSerial + 1).padStart(3, '0')}`,
       company_name: form.company_name || '',
       contact_person: form.contact_person || '',
@@ -76,337 +108,346 @@ export default function SalesLeads() {
       first_contact_done: false,
       event_name: form.event_name || '',
       registered_date: form.registered_date || new Date().toISOString().split('T')[0],
+      phone: form.phone || null,
+      email: form.email || null,
+      address: form.address || null,
+      expected_monthly_volume: form.expected_monthly_volume || null,
+      remarks: form.remarks || null,
     })
     setShowRegister(false)
-    setForm({ registered_date: new Date().toISOString().split('T')[0], lead_source: 'Expo', business_type: 'Korean Restaurant', country_corridor: 'Korea → Japan', priority: 'Medium', owner: 'Andrew', current_stage: 'New Lead', volume_currency: 'USD', first_contact_done: false })
-    showToast('Lead가 등록되었습니다.')
+    resetForm()
+    showToast('✅ Lead가 등록되었습니다.')
     load()
   }
 
-  async function updateStage(leadId: string, stage: string) {
-    await supabase.from('sales_leads').update({ current_stage: stage }).eq('id', leadId)
-    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, current_stage: stage } : l))
-    if (selectedLead?.id === leadId) setSelectedLead(prev => prev ? { ...prev, current_stage: stage } : prev)
-  }
-
-  async function addActivity(leadId: string, type: string, note: string) {
-    await supabase.from('sales_activities').insert({
-      lead_id: leadId, activity_type: type, activity_date: new Date().toISOString().split('T')[0],
-      note, created_by: 'Andrew', activity_result: 'Contacted'
+  function resetForm() {
+    setForm({
+      registered_date: new Date().toISOString().split('T')[0],
+      lead_source: 'Expo', business_type: 'Korean Restaurant',
+      country_corridor: 'Korea → Japan', priority: 'Medium',
+      owner: 'Andrew', current_stage: 'New Lead',
+      volume_currency: 'USD', first_contact_done: false,
     })
-    const { data } = await supabase.from('sales_activities').select('*').eq('lead_id', leadId).order('activity_date', { ascending: false })
-    setActivities((data || []) as SalesActivity[])
   }
 
-  const filtered = leads.filter(l => {
-    const q = search.toLowerCase()
-    const matchSearch = !q || l.company_name.toLowerCase().includes(q) || l.contact_person.toLowerCase().includes(q) || l.serial_no.toLowerCase().includes(q)
-    const matchStage = !filterStage || l.current_stage === filterStage
-    const matchOwner = !filterOwner || l.owner === filterOwner
-    return matchSearch && matchStage && matchOwner
+  function exportCSV(ids?: string[]) {
+    const toExport = ids && ids.length > 0 ? leads.filter(l => ids.includes(l.id)) : (checked.size > 0 ? leads.filter(l => checked.has(l.id)) : leads)
+    if (!toExport.length) { alert('내보낼 리드가 없습니다.'); return }
+    const H = ['SN', '등록일', '행사명', 'Company', '담당자', 'Phone', 'Email', 'Source', '주소', 'Owner', 'Stage', '첫연락', '마지막연락', '다음팔로업', '예상Volume', '통화', 'Priority', 'LostReason', 'Remarks']
+    const rows = toExport.map(l => [l.serial_no, l.registered_date, l.event_name, l.company_name, l.contact_person, l.phone || '', l.email || '', l.lead_source, l.address || '', l.owner, l.current_stage, l.first_contact_done ? 'Y' : 'N', l.last_contact_date || '', l.next_follow_up_date || '', l.expected_monthly_volume || '', l.volume_currency, l.priority, l.lost_reason || '', l.remarks || ''])
+    const csv = [H, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const a = Object.assign(document.createElement('a'), { href: 'data:text/csv;charset=utf-8,﻿' + encodeURIComponent(csv), download: `GME_Leads_${new Date().toISOString().split('T')[0]}.csv` })
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    setChecked(new Set())
+    showToast(`✅ ${toExport.length}개 다운로드 완료`)
+  }
+
+  function toggleCheck(id: string, all?: string[]) {
+    if (all) {
+      const allSet = new Set(all)
+      if (checked.size > 0 && [...allSet].every(i => checked.has(i))) {
+        setChecked(prev => { const n = new Set(prev); all.forEach(i => n.delete(i)); return n })
+      } else {
+        setChecked(prev => { const n = new Set(prev); all.forEach(i => n.add(i)); return n })
+      }
+    } else {
+      setChecked(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+    }
+  }
+
+  // Apply filters
+  let filteredLeads = leads
+  if (filterOwner) filteredLeads = filteredLeads.filter(l => l.owner === filterOwner)
+  if (filterStage) filteredLeads = filteredLeads.filter(l => l.current_stage === filterStage)
+
+  // Build groups
+  const groups: Record<string, SalesLead[]> = {}
+  filteredLeads.forEach(l => {
+    const key = groupBy === 'event' ? l.event_name : groupBy === 'date' ? l.registered_date : l.lead_source
+    if (!groups[key]) groups[key] = []
+    groups[key].push(l)
   })
 
-  function exportCSV() {
-    const headers = ['ID', '등록일', '이벤트명', '회사명', '담당자', '전화', '이메일', '업종', '소스', '코리도', '예상거래량', '통화', 'Stage', '우선순위', 'Owner', '다음액션', '비고']
-    const rows = leads.map(l => [
-      l.serial_no, l.registered_date, l.event_name, l.company_name, l.contact_person,
-      l.phone || '', l.email || '', l.business_type, l.lead_source, l.country_corridor,
-      l.expected_monthly_volume || '', l.volume_currency, l.current_stage, l.priority,
-      l.owner, l.next_action || '', l.remarks || ''
-    ])
-    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = `leads_${new Date().toISOString().split('T')[0]}.csv`; a.click()
-    URL.revokeObjectURL(url)
+  // Detail list data
+  let detailLeads = filteredLeads
+  if (groupKey) {
+    if (groupBy === 'event') detailLeads = detailLeads.filter(l => l.event_name === groupKey)
+    else if (groupBy === 'date') detailLeads = detailLeads.filter(l => l.registered_date === groupKey)
+    else detailLeads = detailLeads.filter(l => l.lead_source === groupKey)
   }
+  if (stageFilter) detailLeads = detailLeads.filter(l => l.current_stage === stageFilter)
+  if (search) {
+    const q = search.toLowerCase()
+    detailLeads = detailLeads.filter(l => [l.company_name, l.contact_person, l.owner, l.email, l.phone].some(v => (v || '').toLowerCase().includes(q)))
+  }
+
+  // Group view search
+  const groupSearchFiltered = search
+    ? Object.fromEntries(
+      Object.entries(groups).map(([k, ls]) => [k, ls.filter(l => [l.company_name, l.contact_person, l.owner, l.event_name].some(v => (v || '').toLowerCase().includes(search.toLowerCase())))])
+    )
+    : groups
+
+  const allDetailIds = detailLeads.map(l => l.id)
 
   if (loading) return <div className="view wide"><div style={{ color: 'var(--muted)', padding: 40 }}>로딩 중...</div></div>
 
   return (
     <div className="view wide">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <div className="sec-hdr" style={{ margin: 0 }}>
-          <div className="bar" />
-          <div className="txt">Lead 관리</div>
-          <div className="sub">{filtered.length}/{leads.length}건</div>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-outline btn-sm" onClick={exportCSV}>⬇️ Excel</button>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowRegister(true)}>+ Lead 등록</button>
-        </div>
-      </div>
-
-      {/* 필터 + 뷰 전환 */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="검색 (회사명, 담당자, ID)" style={{ width: 220 }} />
-        <select value={filterStage} onChange={e => setFilterStage(e.target.value)} style={{ width: 160 }}>
-          <option value="">전체 Stage</option>
-          {STAGE_ORDER.map(s => <option key={s}>{s}</option>)}
-        </select>
-        <select value={filterOwner} onChange={e => setFilterOwner(e.target.value)} style={{ width: 120 }}>
-          <option value="">전체 담당자</option>
-          {OWNERS.map(o => <option key={o}>{o}</option>)}
-        </select>
-        {(search || filterStage || filterOwner) && (
-          <button className="btn btn-muted btn-sm" onClick={() => { setSearch(''); setFilterStage(''); setFilterOwner('') }}>초기화</button>
-        )}
-        <div style={{ marginLeft: 'auto', display: 'flex', background: 'var(--light)', borderRadius: 8, padding: 3, gap: 2 }}>
-          {([['list', '목록'], ['group', '그룹']] as const).map(([v, lbl]) => (
-            <button key={v} onClick={() => setViewMode(v)} style={{
-              padding: '5px 14px', borderRadius: 6, fontSize: 12, fontWeight: 700,
-              border: 'none', cursor: 'pointer',
-              background: viewMode === v ? 'var(--accent)' : 'transparent',
-              color: viewMode === v ? 'white' : 'var(--muted)'
-            }}>{lbl}</button>
-          ))}
-        </div>
-      </div>
-
-      {/* 그룹 뷰 */}
-      {viewMode === 'group' && <GroupView leads={filtered} onOpenDetail={openDetail} />}
-
-      {/* 목록 테이블 */}
-      {viewMode === 'list' && <div style={{ overflowX: 'auto' }}>
-        <table className="sales-table">
-          <thead>
-            <tr>
-              <th>ID</th><th>회사명</th><th>담당자</th><th>업종</th><th>소스</th><th>코리도</th>
-              <th>예상 거래량</th><th>Stage</th><th>우선순위</th><th>담당자</th><th>다음 액션</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(l => (
-              <tr key={l.id} onClick={() => openDetail(l)}>
-                <td style={{ color: 'var(--muted)', fontSize: 12 }}>{l.serial_no}</td>
-                <td style={{ fontWeight: 700 }}>{l.company_name}</td>
-                <td>{l.contact_person}</td>
-                <td style={{ fontSize: 12 }}>{l.business_type}</td>
-                <td style={{ fontSize: 12 }}>{l.lead_source}</td>
-                <td style={{ fontSize: 12 }}>{l.country_corridor}</td>
-                <td style={{ fontSize: 12 }}>
-                  {l.expected_monthly_volume ? `${l.volume_currency} ${l.expected_monthly_volume.toLocaleString()}` : '-'}
-                </td>
-                <td>
-                  <span style={{ background: STAGE_COLORS[l.current_stage]?.bg || '#999', color: 'white', fontSize: 11, padding: '3px 9px', borderRadius: 99, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                    {l.current_stage}
-                  </span>
-                </td>
-                <td>
-                  <span style={{ color: priorityColor(l.priority), fontWeight: 700, fontSize: 13 }}>{l.priority}</span>
-                </td>
-                <td>{l.owner}</td>
-                <td style={{ fontSize: 12, color: 'var(--muted)' }}>{l.next_action || '-'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>}
-
-      {/* Register Modal */}
-      {showRegister && (
-        <div className="modal-bg open">
-          <div className="modal" style={{ width: 680 }}>
-            <div className="modal-hdr">
-              <h3>Lead 등록</h3>
-              <button className="modal-close" onClick={() => setShowRegister(false)}>✕</button>
-            </div>
-            <div className="form-row cols2">
-              <div><label style={{ marginTop: 0 }}>등록일</label><input type="date" value={form.registered_date || ''} onChange={e => setForm(f => ({ ...f, registered_date: e.target.value }))} /></div>
-              <div><label style={{ marginTop: 0 }}>이벤트명</label><input value={form.event_name || ''} onChange={e => setForm(f => ({ ...f, event_name: e.target.value }))} /></div>
-            </div>
-            <div className="form-row cols2">
-              <div><label>회사명</label><input value={form.company_name || ''} onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))} /></div>
-              <div><label>담당자명</label><input value={form.contact_person || ''} onChange={e => setForm(f => ({ ...f, contact_person: e.target.value }))} /></div>
-            </div>
-            <div className="form-row cols2">
-              <div><label>전화번호</label><input value={form.phone || ''} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} /></div>
-              <div><label>이메일</label><input type="email" value={form.email || ''} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></div>
-            </div>
-            <div className="form-row cols3">
-              <div>
-                <label>Lead 소스</label>
-                <select value={form.lead_source || 'Expo'} onChange={e => setForm(f => ({ ...f, lead_source: e.target.value }))}>
-                  {LEAD_SOURCES.map(s => <option key={s}>{s}</option>)}
-                </select>
-              </div>
-              <div>
-                <label>업종</label>
-                <select value={form.business_type || ''} onChange={e => setForm(f => ({ ...f, business_type: e.target.value }))}>
-                  {BUSINESS_TYPES.map(b => <option key={b}>{b}</option>)}
-                </select>
-              </div>
-              <div>
-                <label>코리도</label>
-                <select value={form.country_corridor || ''} onChange={e => setForm(f => ({ ...f, country_corridor: e.target.value }))}>
-                  {CORRIDORS.map(c => <option key={c}>{c}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="form-row cols3">
-              <div>
-                <label>예상 월거래량</label>
-                <input type="number" value={form.expected_monthly_volume || ''} onChange={e => setForm(f => ({ ...f, expected_monthly_volume: parseFloat(e.target.value) || undefined }))} />
-              </div>
-              <div>
-                <label>통화</label>
-                <select value={form.volume_currency || 'USD'} onChange={e => setForm(f => ({ ...f, volume_currency: e.target.value }))}>
-                  {['USD','KRW','JPY','AUD'].map(c => <option key={c}>{c}</option>)}
-                </select>
-              </div>
-              <div>
-                <label>우선순위</label>
-                <select value={form.priority || 'Medium'} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
-                  {PRIORITIES.map(p => <option key={p}>{p}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="form-row cols2">
-              <div>
-                <label>담당자</label>
-                <select value={form.owner || 'Andrew'} onChange={e => setForm(f => ({ ...f, owner: e.target.value }))}>
-                  {OWNERS.map(o => <option key={o}>{o}</option>)}
-                </select>
-              </div>
-              <div><label>주소</label><input value={form.address || ''} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} /></div>
-            </div>
-            <div><label>비고</label><textarea value={form.remarks || ''} onChange={e => setForm(f => ({ ...f, remarks: e.target.value }))} rows={2} /></div>
-            <div className="modal-footer">
-              <button className="btn btn-muted" onClick={() => setShowRegister(false)}>취소</button>
-              <button className="btn btn-primary" onClick={register} disabled={!form.company_name}>등록</button>
-            </div>
+      {viewMode === 'group' ? (
+        <>
+          <div className="sec-hdr">
+            <div className="bar" />
+            <div className="txt">Lead 관리</div>
+            <div className="sub">리드 등록 및 행사별·일자별 관리</div>
           </div>
-        </div>
-      )}
 
-      {/* Detail Modal */}
-      {selectedLead && (
-        <div className="modal-bg open">
-          <div className="modal" style={{ width: 700 }}>
-            <div className="modal-hdr">
-              <h3>{selectedLead.company_name} <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 400 }}>({selectedLead.serial_no})</span></h3>
-              <button className="modal-close" onClick={() => setSelectedLead(null)}>✕</button>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px', fontSize: 14, marginBottom: 16 }}>
-              {[
-                ['담당자', selectedLead.contact_person],
-                ['전화', selectedLead.phone || '-'],
-                ['이메일', selectedLead.email || '-'],
-                ['업종', selectedLead.business_type],
-                ['코리도', selectedLead.country_corridor],
-                ['소스', selectedLead.lead_source],
-                ['우선순위', selectedLead.priority],
-                ['담당자', selectedLead.owner],
-              ].map(([k, v]) => (
-                <div key={k}><span style={{ color: 'var(--muted)' }}>{k}: </span><strong>{v}</strong></div>
-              ))}
-            </div>
-
-            <label style={{ marginTop: 0 }}>Stage 변경</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
-              {STAGE_ORDER.map(s => (
-                <button key={s}
-                  onClick={() => updateStage(selectedLead.id, s)}
-                  style={{
-                    padding: '5px 12px', borderRadius: 6, fontSize: 12, cursor: 'pointer', border: 'none', fontWeight: 600,
-                    background: selectedLead.current_stage === s ? STAGE_COLORS[s]?.bg : 'var(--light)',
-                    color: selectedLead.current_stage === s ? 'white' : 'var(--muted)'
-                  }}
-                >{s}</button>
-              ))}
-            </div>
-
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>활동 이력</div>
-            {activities.map(a => (
-              <div key={a.id} style={{ fontSize: 13, padding: '6px 10px', background: 'var(--light)', borderRadius: 6, marginBottom: 6 }}>
-                <span style={{ fontWeight: 600, color: 'var(--accent)' }}>{a.activity_type}</span>
-                {' · '}{a.activity_date}{' · '}{a.note || '-'}
-              </div>
-            ))}
-            {activities.length === 0 && <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>활동 기록 없음</div>}
-
-            <AddActivityInline onAdd={(type, note) => addActivity(selectedLead.id, type, note)} />
-
-            <div className="modal-footer">
-              <button className="btn btn-muted" onClick={() => setSelectedLead(null)}>닫기</button>
-            </div>
+          {/* 액션 버튼 */}
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+            <button className="btn btn-primary" onClick={() => setShowRegister(true)}>+ Manual Lead Register</button>
+            <button className="btn btn-outline btn-sm" onClick={() => alert('PDF 첨부 — 추후 연결')}>📎 PDF</button>
+            <button className="btn btn-outline btn-sm" onClick={() => alert('Excel Upload — 추후 연결')}>📤 Excel Upload</button>
+            <button className="btn btn-outline btn-sm" onClick={() => alert('Template 다운로드')}>📋 Template</button>
+            <button className="btn btn-outline btn-sm" onClick={() => exportCSV([])}>⬇️ Excel Download</button>
           </div>
-        </div>
-      )}
-    </div>
-  )
-}
 
-function GroupView({ leads, onOpenDetail }: { leads: SalesLead[]; onOpenDetail: (l: SalesLead) => void }) {
-  const events = [...new Set(leads.map(l => l.event_name || '(미입력)'))].sort()
+          {/* 그룹 + 검색 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+            <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 500 }}>그룹:</span>
+            {([['event', '행사명'], ['date', '일자'], ['source', 'Source']] as const).map(([k, lbl]) => (
+              <button key={k} onClick={() => setGroupBy(k)}
+                style={{ padding: '5px 12px', borderRadius: 7, fontSize: 13, cursor: 'pointer', fontWeight: 600, background: groupBy === k ? 'var(--accent)' : 'white', color: groupBy === k ? 'white' : 'var(--muted)', border: `1.5px solid ${groupBy === k ? 'var(--accent)' : 'var(--border2)'}` }}>
+                {lbl}
+              </button>
+            ))}
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Company, 담당자, Owner 검색..."
+              style={{ flex: 1, minWidth: 200, padding: '7px 12px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13 }} />
+            {filterOwner && (
+              <span style={{ background: '#EEF2FF', color: '#4F46E5', padding: '4px 10px', borderRadius: 99, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                👤 {filterOwner}
+                <button onClick={() => setFilterOwner(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#4F46E5', fontSize: 13, marginLeft: 2 }}>✕</button>
+              </span>
+            )}
+            {filterStage && (
+              <span style={{ background: '#FEF2F2', color: '#DC2626', padding: '4px 10px', borderRadius: 99, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                📊 {filterStage}
+                <button onClick={() => setFilterStage(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: 13, marginLeft: 2 }}>✕</button>
+              </span>
+            )}
+            <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>총 {filteredLeads.length}개</span>
+          </div>
 
-  return (
-    <div>
-      {events.map(ev => {
-        const evLeads = leads.filter(l => (l.event_name || '(미입력)') === ev)
-        const stageCount: Record<string, number> = {}
-        for (const l of evLeads) stageCount[l.current_stage] = (stageCount[l.current_stage] || 0) + 1
-        return (
-          <div key={ev} style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, padding: '10px 14px', background: 'var(--light)', borderRadius: 8 }}>
-              <span style={{ fontWeight: 700, fontSize: 14 }}>📅 {ev}</span>
-              <span style={{ fontSize: 13, color: 'var(--muted)' }}>{evLeads.length}건</span>
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {STAGE_ORDER.filter(s => stageCount[s]).map(s => (
-                  <span key={s} style={{ background: STAGE_COLORS[s]?.bg || '#999', color: 'white', fontSize: 10, padding: '2px 8px', borderRadius: 99, fontWeight: 600 }}>
-                    {s} {stageCount[s]}
-                  </span>
-                ))}
-              </div>
-            </div>
+          {/* 그룹 테이블 */}
+          <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, overflow: 'hidden' }}>
             <div style={{ overflowX: 'auto' }}>
-              <table className="sales-table" id="leads-group-tbl">
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 900 }}>
                 <thead>
-                  <tr><th>ID</th><th>회사명</th><th>담당자</th><th>업종</th><th>소스</th><th>코리도</th><th>예상 거래량</th><th>Stage</th><th>우선순위</th><th>Owner</th></tr>
+                  <tr style={{ background: 'var(--accent)', color: 'white' }}>
+                    <th style={{ padding: '10px 14px', textAlign: 'left' }}>그룹</th>
+                    <th style={{ padding: '10px 10px', textAlign: 'center' }}>Total</th>
+                    {STAGE_ORDER.map(s => (
+                      <th key={s} style={{ padding: '10px 6px', textAlign: 'center', fontSize: 10, whiteSpace: 'nowrap' }}>{s}</th>
+                    ))}
+                  </tr>
                 </thead>
                 <tbody>
-                  {evLeads.map(l => (
-                    <tr key={l.id} onClick={() => onOpenDetail(l)}>
-                      <td style={{ color: 'var(--muted)', fontSize: 12 }}>{l.serial_no}</td>
-                      <td style={{ fontWeight: 700 }}>{l.company_name}</td>
-                      <td>{l.contact_person}</td>
-                      <td style={{ fontSize: 12 }}>{l.business_type}</td>
-                      <td style={{ fontSize: 12 }}>{l.lead_source}</td>
-                      <td style={{ fontSize: 12 }}>{l.country_corridor}</td>
-                      <td style={{ fontSize: 12 }}>
-                        {l.expected_monthly_volume ? `${l.volume_currency} ${l.expected_monthly_volume.toLocaleString()}` : '-'}
-                      </td>
-                      <td>
-                        <span style={{ background: STAGE_COLORS[l.current_stage]?.bg || '#999', color: 'white', fontSize: 11, padding: '3px 9px', borderRadius: 99, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                          {l.current_stage}
-                        </span>
-                      </td>
-                      <td><span style={{ color: priorityColor(l.priority), fontWeight: 700, fontSize: 13 }}>{l.priority}</span></td>
-                      <td>{l.owner}</td>
+                  {Object.entries(groupSearchFiltered).filter(([, ls]) => ls.length > 0).map(([k, ls]) => (
+                    <tr key={k} style={{ cursor: 'pointer', transition: 'background .1s' }}
+                      onClick={() => { setGroupKey(k); setViewMode('detail') }}
+                      onMouseOver={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = '#FDF5F5'))}
+                      onMouseOut={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = ''))}>
+                      <td style={{ padding: '11px 14px', fontWeight: 700, color: 'var(--accent)' }}>{k}</td>
+                      <td style={{ padding: '11px 10px', textAlign: 'center', fontWeight: 700 }}>{ls.length}</td>
+                      {STAGE_ORDER.map(s => {
+                        const cnt = ls.filter(l => l.current_stage === s).length
+                        const col = STAGE_COLORS[s]?.bg || '#888'
+                        return <td key={s} style={{ padding: '11px 6px', textAlign: 'center', color: col, fontWeight: 600 }}>{cnt || '—'}</td>
+                      })}
                     </tr>
                   ))}
+                  {Object.keys(groupSearchFiltered).length === 0 && (
+                    <tr><td colSpan={2 + STAGE_ORDER.length} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>해당하는 리드 없음</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
-        )
-      })}
-      {events.length === 0 && <div style={{ color: 'var(--muted)', textAlign: 'center', padding: 40 }}>리드 없음</div>}
-    </div>
-  )
-}
+        </>
+      ) : (
+        /* Detail View */
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+            <button className="btn btn-outline btn-sm" onClick={() => { setViewMode('group'); setGroupKey(null); setStageFilter(null); setSearch('') }}>← 목록</button>
+            <div className="sec-hdr" style={{ margin: 0, flex: 1 }}>
+              <div className="bar" />
+              <span className="txt">👥 {groupKey || '전체'}</span>
+              <span className="sub">{detailLeads.length}개</span>
+            </div>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 검색..."
+              style={{ padding: '7px 12px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, width: 200 }} />
+            <button className="btn btn-primary btn-sm" onClick={() => setShowRegister(true)}>+ 등록</button>
+          </div>
 
-function AddActivityInline({ onAdd }: { onAdd: (type: string, note: string) => void }) {
-  const [type, setType] = useState('Call')
-  const [note, setNote] = useState('')
-  return (
-    <div style={{ display: 'flex', gap: 8, marginTop: 8, marginBottom: 8 }}>
-      <select value={type} onChange={e => setType(e.target.value)} style={{ width: 100 }}>
-        {['Call','Email','SMS','Kakao','Visit','Meeting'].map(t => <option key={t}>{t}</option>)}
-      </select>
-      <input value={note} onChange={e => setNote(e.target.value)} placeholder="활동 내용" style={{ flex: 1 }} />
-      <button className="btn btn-primary btn-sm" onClick={() => { onAdd(type, note); setNote('') }}>추가</button>
+          {/* Stage 필터 바 */}
+          <div style={{ marginBottom: 12, padding: '8px 12px', background: 'white', border: '0.5px solid var(--border2)', borderRadius: 9, display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', marginRight: 8 }}>Stage:</span>
+            {STAGE_ORDER.map(s => {
+              const cnt = detailLeads.filter(l => l.current_stage === s).length
+              if (!cnt) return null
+              const c = STAGE_COLORS[s] || { bg: '#6B7280' }
+              const active = stageFilter === s
+              return (
+                <span key={s} onClick={() => setStageFilter(active ? null : s)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 99, cursor: 'pointer', margin: 3, border: `1.5px solid ${c.bg}`, background: active ? c.bg : 'white', color: active ? 'white' : c.bg, fontSize: 11, fontWeight: 700, transition: 'all .15s' }}>
+                  {s} <b>{cnt}</b>
+                </span>
+              )
+            })}
+            {stageFilter && (
+              <button onClick={() => setStageFilter(null)} style={{ padding: '3px 8px', borderRadius: 99, background: 'var(--light)', border: '1px solid var(--border2)', fontSize: 11, cursor: 'pointer', margin: 3 }}>✕ 해제</button>
+            )}
+          </div>
+
+          {/* 액션 바 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid var(--border)', background: '#FAFAFA', marginBottom: 0 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
+              <input type="checkbox" checked={allDetailIds.length > 0 && allDetailIds.every(i => checked.has(i))} onChange={() => toggleCheck('', allDetailIds)} style={{ width: 16, height: 16, accentColor: 'var(--accent)', cursor: 'pointer' }} />
+              전체 선택
+            </label>
+            <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700, minWidth: 70 }}>{checked.size > 0 ? `${checked.size}개 선택됨` : ''}</span>
+            <div style={{ marginLeft: 'auto' }}>
+              <button onClick={() => exportCSV()} style={{ padding: '6px 14px', borderRadius: 7, background: 'white', border: '1.5px solid #059669', color: '#059669', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                ⬇️ Excel 내보내기
+              </button>
+            </div>
+          </div>
+
+          <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: '0 0 12px 12px', overflow: 'hidden' }}>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1180 }}>
+                <thead>
+                  <tr style={{ background: 'var(--accent)', color: 'white' }}>
+                    <th style={{ padding: '9px 10px', width: 38 }}><input type="checkbox" style={{ width: 15, height: 15, cursor: 'pointer' }} /></th>
+                    <th style={{ padding: '9px 12px' }}>SN</th>
+                    <th style={{ padding: '9px 12px' }}>등록일</th>
+                    <th style={{ padding: '9px 12px' }}>행사명</th>
+                    <th style={{ padding: '9px 12px', textAlign: 'left' }}>Company</th>
+                    <th style={{ padding: '9px 12px' }}>담당자</th>
+                    <th style={{ padding: '9px 12px' }}>Phone/Email</th>
+                    <th style={{ padding: '9px 12px' }}>Source</th>
+                    <th style={{ padding: '9px 12px' }}>Owner</th>
+                    <th style={{ padding: '9px 12px' }}>Stage</th>
+                    <th style={{ padding: '9px 12px' }}>Last Contact</th>
+                    <th style={{ padding: '9px 12px' }}>Next Action</th>
+                    <th style={{ padding: '9px 12px' }}>Follow-up</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detailLeads.map(l => (
+                    <tr key={l.id} style={{ borderBottom: '0.5px solid var(--border)', cursor: 'pointer', transition: 'background .1s' }}
+                      onClick={() => setSelectedLeadId(l.id)}
+                      onMouseOver={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = '#FDF5F5'))}
+                      onMouseOut={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = ''))}>
+                      <td style={{ padding: '9px 10px', textAlign: 'center' }} onClick={e => { e.stopPropagation(); toggleCheck(l.id) }}>
+                        <input type="checkbox" checked={checked.has(l.id)} onChange={() => toggleCheck(l.id)} style={{ width: 15, height: 15, accentColor: 'var(--accent)', cursor: 'pointer' }} />
+                      </td>
+                      <td style={{ padding: '9px 12px', color: 'var(--muted)', fontWeight: 600 }}>{l.serial_no}</td>
+                      <td style={{ padding: '9px 12px' }}>{l.registered_date}</td>
+                      <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--muted)' }}>{l.event_name.replace(/ 20\d\d$/, '')}</td>
+                      <td style={{ padding: '9px 12px', fontWeight: 700 }}>{l.company_name}</td>
+                      <td style={{ padding: '9px 12px' }}>{l.contact_person}</td>
+                      <td style={{ padding: '9px 12px', fontSize: 11 }}>{l.phone || '—'}<br /><span style={{ color: 'var(--muted)' }}>{l.email || '—'}</span></td>
+                      <td style={{ padding: '9px 12px', fontSize: 12 }}>{l.lead_source}</td>
+                      <td style={{ padding: '9px 12px' }}>{l.owner}</td>
+                      <td style={{ padding: '9px 12px' }} onClick={e => e.stopPropagation()}>
+                        <InlineStageSelect lead={l} onUpdate={updateStage} />
+                      </td>
+                      <td style={{ padding: '9px 12px', fontSize: 12 }}>{l.last_contact_date || '—'}</td>
+                      <td style={{ padding: '9px 12px', fontSize: 11, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.next_action || '—'}</td>
+                      <td style={{ padding: '9px 12px', fontSize: 12 }}>{l.next_follow_up_date || '—'}</td>
+                    </tr>
+                  ))}
+                  {detailLeads.length === 0 && (
+                    <tr><td colSpan={13} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>해당하는 Lead 없음</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Lead 등록 모달 */}
+      {showRegister && (
+        <div className="modal-bg open">
+          <div className="modal" style={{ width: 640 }}>
+            <div className="modal-hdr">
+              <h3>+ Lead 등록</h3>
+              <button className="modal-close" onClick={() => { setShowRegister(false); resetForm() }}>✕</button>
+            </div>
+            <div className="form-row cols2">
+              <div><label style={{ marginTop: 0 }}>Company Name *</label><input value={form.company_name || ''} onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))} placeholder="회사명" /></div>
+              <div><label style={{ marginTop: 0 }}>Contact Person</label><input value={form.contact_person || ''} onChange={e => setForm(f => ({ ...f, contact_person: e.target.value }))} placeholder="담당자명" /></div>
+              <div><label style={{ marginTop: 0 }}>Phone</label><input value={form.phone || ''} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="전화번호" /></div>
+              <div><label style={{ marginTop: 0 }}>Email</label><input type="email" value={form.email || ''} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="이메일" /></div>
+              <div>
+                <label style={{ marginTop: 0 }}>Lead Source *</label>
+                <select value={form.lead_source || 'Expo'} onChange={e => setForm(f => ({ ...f, lead_source: e.target.value }))}>
+                  {settings.sources.map(s => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ marginTop: 0 }}>Event Name</label>
+                <input value={form.event_name || ''} onChange={e => setForm(f => ({ ...f, event_name: e.target.value }))} placeholder="행사명" />
+              </div>
+              <div>
+                <label style={{ marginTop: 0 }}>Owner</label>
+                <select value={form.owner || 'Andrew'} onChange={e => setForm(f => ({ ...f, owner: e.target.value }))}>
+                  {settings.owners.map(o => <option key={o}>{o}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ marginTop: 0 }}>Priority</label>
+                <select value={form.priority || 'Medium'} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
+                  {['High', 'Medium', 'Low'].map(p => <option key={p}>{p}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ marginTop: 0 }}>Corridor</label>
+                <select value={form.country_corridor || ''} onChange={e => setForm(f => ({ ...f, country_corridor: e.target.value }))}>
+                  {settings.corridors.map(c => <option key={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ marginTop: 0 }}>Business Type</label>
+                <select value={form.business_type || ''} onChange={e => setForm(f => ({ ...f, business_type: e.target.value }))}>
+                  {settings.businessTypes.map(b => <option key={b}>{b}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ marginTop: 0 }}>Expected Volume</label>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input type="number" value={form.expected_monthly_volume || ''} onChange={e => setForm(f => ({ ...f, expected_monthly_volume: parseInt(e.target.value) || null }))} placeholder="월 예상 금액" style={{ flex: 1 }} />
+                  <select value={form.volume_currency || 'USD'} onChange={e => setForm(f => ({ ...f, volume_currency: e.target.value }))} style={{ minWidth: 70 }}>
+                    <option>USD</option><option>KRW</option>
+                  </select>
+                </div>
+              </div>
+              <div><label style={{ marginTop: 0 }}>Address</label><input value={form.address || ''} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="주소" /></div>
+            </div>
+            <label>Remarks</label>
+            <textarea value={form.remarks || ''} rows={2} onChange={e => setForm(f => ({ ...f, remarks: e.target.value }))} style={{ resize: 'vertical', fontFamily: 'inherit' }} />
+            <div className="modal-footer">
+              <button className="btn btn-muted" onClick={() => { setShowRegister(false); resetForm() }}>취소</button>
+              <button className="btn btn-primary" onClick={register}>✅ 등록</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedLeadId && (
+        <LeadDetailPanel leadId={selectedLeadId} onClose={() => setSelectedLeadId(null)} onRefresh={load} />
+      )}
     </div>
   )
 }

@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { costColor, exhColor } from '../../lib/utils'
 import type { Exhibition, Payment } from '../../types/database'
 
 const CUR_SYM: Record<string, string> = { KRW: '₩', JPY: '¥', USD: '$', EUR: '€', SGD: 'S$' }
-const CURRENCIES = ['KRW', 'JPY', 'USD', 'EUR', 'SGD']
 
 function fmtPay(amt: number, cur: string): string {
   return (CUR_SYM[cur] || cur) + Math.round(amt).toLocaleString()
@@ -22,6 +21,18 @@ function sumByCur(pays: Payment[], fn: (p: Payment) => number): string {
     .map(([c, v]) => fmtPay(v, c)).join(' + ') || '0'
 }
 
+interface AddItemForm {
+  item: string; total: string; currency: string
+  depositAmt: string; depositDue: string
+  finalAmt: string; finalDue: string
+}
+
+const emptyForm = (): AddItemForm => ({
+  item: '', total: '', currency: 'KRW',
+  depositAmt: '', depositDue: '',
+  finalAmt: '', finalDue: '',
+})
+
 export default function Payments() {
   const location = useLocation()
   const initKey = (location.state as any)?.key || null
@@ -31,11 +42,17 @@ export default function Payments() {
   const [loading, setLoading] = useState(true)
   const [showInvoice, setShowInvoice] = useState(false)
   const [saving, setSaving] = useState<string | null>(null)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [addForm, setAddForm] = useState<AddItemForm>(emptyForm())
+  const [addError, setAddError] = useState('')
+  const [addLoading, setAddLoading] = useState(false)
+  const [toast, setToast] = useState('')
+  const itemInputRef = useRef<HTMLInputElement>(null)
 
   async function load() {
     const [{ data: exhData }, { data: payData }] = await Promise.all([
       supabase.from('exhibitions').select('*'),
-      supabase.from('payments').select('*').order('item'),
+      supabase.from('payments').select('*').order('created_at'),
     ])
     const exhMap: Record<string, Exhibition> = {}
     for (const e of (exhData || [])) exhMap[e.key] = e
@@ -48,11 +65,58 @@ export default function Payments() {
     setPayments(payMap)
     const keys = Object.keys(payMap)
     if (initKey && keys.includes(initKey)) setSelected(initKey)
-    else if (keys.length) setSelected(keys[0])
+    else if (keys.length) setSelected(prev => prev || keys[0])
     setLoading(false)
   }
 
   useEffect(() => { load() }, [])
+
+  function showToast(msg: string) {
+    setToast(msg)
+    setTimeout(() => setToast(''), 1800)
+  }
+
+  function openAddModal() {
+    setAddForm(emptyForm())
+    setAddError('')
+    setShowAddModal(true)
+    setTimeout(() => itemInputRef.current?.focus(), 50)
+  }
+
+  async function submitAdd() {
+    const itemName = addForm.item.trim()
+    if (!itemName) { setAddError('항목명을 입력하세요'); return }
+    const total = parseInt(addForm.total) || 0
+    if (!total) { setAddError('총 예산 금액을 입력하세요'); return }
+    const depAmt = parseInt(addForm.depositAmt) || 0
+    const finAmt = addForm.finalAmt !== '' ? (parseInt(addForm.finalAmt) || 0) : total - depAmt
+
+    setAddLoading(true)
+    const { error } = await supabase.from('payments').insert({
+      exhibition_key: selected!,
+      item: itemName,
+      total,
+      currency: addForm.currency,
+      deposit_amount: depAmt,
+      deposit_due: addForm.depositDue || null,
+      deposit_paid: false,
+      final_amount: finAmt,
+      final_due: addForm.finalDue || null,
+      final_paid: false,
+    } as any)
+    setAddLoading(false)
+    if (error) { setAddError('저장 실패: ' + error.message); return }
+    setShowAddModal(false)
+    showToast('💾 저장되었습니다.')
+    load()
+  }
+
+  async function deleteItem(payId: string) {
+    if (!confirm('이 항목을 삭제하시겠습니까?')) return
+    await supabase.from('payments').delete().eq('id', payId)
+    showToast('🗑️ 삭제되었습니다.')
+    load()
+  }
 
   async function togglePaid(payId: string, type: 'deposit' | 'final', current: boolean) {
     if (type === 'deposit') await supabase.from('payments').update({ deposit_paid: !current }).eq('id', payId)
@@ -74,6 +138,7 @@ export default function Payments() {
       final_amount: finalAmt, final_due: finalDue || null,
     }).eq('id', pay.id)
     setSaving(null)
+    showToast('💾 저장되었습니다.')
     load()
   }
 
@@ -109,8 +174,8 @@ export default function Payments() {
     <div className="view">
       <div className="sec-hdr">
         <div className="bar" />
-        <div className="txt">비용 결제 일정</div>
-        <div className="sub">계약금 / 잔금 관리</div>
+        <div className="txt">비용 결제 일정 관리</div>
+        <div className="sub">선금·잔금·납부일 관리</div>
       </div>
 
       <div className="pay-layout">
@@ -138,9 +203,14 @@ export default function Payments() {
               <div style={{ fontSize: 16, fontWeight: 700 }}>
                 {exhNameFromKey(selected)} 결제 일정
               </div>
-              <button className="btn btn-purple btn-sm" onClick={() => setShowInvoice(v => !v)}>
-                📄 인보이스 업로드
-              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-primary btn-sm" onClick={openAddModal}>
+                  + 항목 추가
+                </button>
+                <button className="btn btn-purple btn-sm" onClick={() => setShowInvoice(v => !v)}>
+                  📄 인보이스 업로드
+                </button>
+              </div>
             </div>
 
             {/* 인보이스 업로드 영역 */}
@@ -161,8 +231,8 @@ export default function Payments() {
             <div className="pay-summary">
               {[
                 { lbl: '총 예산', val: sumByCur(selPays, p => p.total), color: 'var(--text)' },
-                { lbl: '결제 완료', val: sumByCur(selPays, p => (p.deposit_paid ? p.deposit_amount : 0) + (p.final_paid ? p.final_amount : 0)), color: '#2E7D51' },
-                { lbl: '결제 대기', val: sumByCur(selPays, p => (!p.deposit_paid ? p.deposit_amount : 0) + (!p.final_paid ? p.final_amount : 0)), color: '#D63031' },
+                { lbl: '납부 완료', val: sumByCur(selPays, p => (p.deposit_paid ? p.deposit_amount : 0) + (p.final_paid ? p.final_amount : 0)), color: '#2E7D51' },
+                { lbl: '납부 예정', val: sumByCur(selPays, p => (!p.deposit_paid ? p.deposit_amount : 0) + (!p.final_paid ? p.final_amount : 0)), color: '#D63031' },
               ].map((m, i) => (
                 <div key={i} className="card-sm" style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 6 }}>{m.lbl}</div>
@@ -176,26 +246,158 @@ export default function Payments() {
               const color = exhColorFromKey(selected)
               const isSaving = saving === pay.id
               return (
-                <PayCard key={`${pay.id}-${pay.deposit_amount}-${pay.final_amount}-${pay.currency}-${pay.deposit_paid}-${pay.final_paid}`} pay={pay} color={color} isSaving={isSaving}
+                <PayCard
+                  key={`${pay.id}-${pay.deposit_amount}-${pay.final_amount}-${pay.currency}-${pay.deposit_paid}-${pay.final_paid}`}
+                  pay={pay} color={color} isSaving={isSaving}
                   onToggle={togglePaid}
                   onSaveCurrency={saveCurrency}
-                  onSaveAmounts={saveAmounts} />
+                  onSaveAmounts={saveAmounts}
+                  onDelete={deleteItem}
+                />
               )
             })}
+
+            {selPays.length === 0 && (
+              <div style={{ color: 'var(--muted)', fontSize: 14, padding: '24px 0', textAlign: 'center' }}>
+                항목이 없습니다. "+ 항목 추가" 버튼으로 추가하세요.
+              </div>
+            )}
           </div>
         ) : (
           <div style={{ color: 'var(--muted)', fontSize: 14, padding: 20 }}>왼쪽에서 박람회를 선택하세요</div>
         )}
       </div>
+
+      {/* 항목 추가 모달 */}
+      {showAddModal && (
+        <div
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,.5)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+          onClick={e => { if (e.target === e.currentTarget) setShowAddModal(false) }}>
+          <div style={{ background: 'white', borderRadius: 16, padding: 28, width: 480, maxWidth: '95vw', boxShadow: '0 20px 60px rgba(0,0,0,.25)' }}>
+            <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 20, color: 'var(--text)' }}>+ 결제 항목 추가</div>
+
+            <div style={{ display: 'grid', gap: 14 }}>
+              {/* 항목명 + 통화 */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'end' }}>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>항목명 *</label>
+                  <input
+                    ref={itemInputRef}
+                    value={addForm.item}
+                    onChange={e => setAddForm(f => ({ ...f, item: e.target.value }))}
+                    placeholder="예: Booth Fee, Flight, Design..."
+                    style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border2)', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}
+                    onKeyDown={e => e.key === 'Enter' && submitAdd()}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>통화</label>
+                  <select
+                    value={addForm.currency}
+                    onChange={e => setAddForm(f => ({ ...f, currency: e.target.value }))}
+                    style={{ padding: '9px 12px', border: '1px solid var(--border2)', borderRadius: 8, fontSize: 13, width: 80 }}>
+                    {['KRW', 'JPY', 'USD', 'EUR', 'SGD'].map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* 총 예산 */}
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>총 예산 금액 *</label>
+                <input
+                  type="number"
+                  value={addForm.total}
+                  onChange={e => setAddForm(f => ({ ...f, total: e.target.value }))}
+                  placeholder="0"
+                  style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border2)', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}
+                />
+              </div>
+
+              {/* 선금 */}
+              <div style={{ background: '#EEF4FF', borderRadius: 10, padding: '12px 14px' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#3A5FA0', marginBottom: 10 }}>선금 (선택)</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>금액</label>
+                    <input
+                      type="number"
+                      value={addForm.depositAmt}
+                      onChange={e => setAddForm(f => ({ ...f, depositAmt: e.target.value }))}
+                      placeholder="0"
+                      style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>납부일</label>
+                    <input
+                      type="date"
+                      value={addForm.depositDue}
+                      onChange={e => setAddForm(f => ({ ...f, depositDue: e.target.value }))}
+                      style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 잔금 */}
+              <div style={{ background: '#F0FFF4', borderRadius: 10, padding: '12px 14px' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#2E7D51', marginBottom: 10 }}>잔금 (선택)</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>금액</label>
+                    <input
+                      type="number"
+                      value={addForm.finalAmt}
+                      onChange={e => setAddForm(f => ({ ...f, finalAmt: e.target.value }))}
+                      placeholder="총액 - 선금으로 자동 계산"
+                      style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>납부일</label>
+                    <input
+                      type="date"
+                      value={addForm.finalDue}
+                      onChange={e => setAddForm(f => ({ ...f, finalDue: e.target.value }))}
+                      style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {addError && (
+              <div style={{ marginTop: 12, fontSize: 12, color: '#D63031', fontWeight: 600 }}>{addError}</div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
+              <button className="btn btn-muted btn-sm" onClick={() => setShowAddModal(false)} style={{ padding: '8px 20px' }}>
+                취소
+              </button>
+              <button className="btn btn-primary btn-sm" onClick={submitAdd} disabled={addLoading} style={{ padding: '8px 20px' }}>
+                {addLoading ? '추가 중...' : '+ 추가'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 토스트 */}
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 24, right: 24, background: '#1E3A5F', color: 'white', padding: '12px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 9999, animation: 'fadeIn .2s' }}>
+          {toast}
+        </div>
+      )}
     </div>
   )
 }
 
-function PayCard({ pay, color, isSaving, onToggle, onSaveCurrency, onSaveAmounts }: {
+function PayCard({ pay, color, isSaving, onToggle, onSaveCurrency, onSaveAmounts, onDelete }: {
   pay: Payment; color: string; isSaving: boolean
   onToggle: (id: string, type: 'deposit' | 'final', cur: boolean) => void
   onSaveCurrency: (id: string, cur: string) => void
   onSaveAmounts: (pay: Payment, da: number, dd: string, fa: number, fd: string) => void
+  onDelete: (id: string) => void
 }) {
   const [depositAmt, setDepositAmt] = useState(String(pay.deposit_amount))
   const [depositDue, setDepositDue] = useState(pay.deposit_due || '')
@@ -220,17 +422,24 @@ function PayCard({ pay, color, isSaving, onToggle, onSaveCurrency, onSaveAmounts
             {['KRW', 'JPY', 'USD', 'EUR', 'SGD'].map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
-        <button
-          className="btn btn-muted btn-sm"
-          style={{ flexShrink: 0 }}
-          disabled={isSaving}
-          onClick={() => onSaveAmounts(pay, parseFloat(depositAmt) || 0, depositDue, parseFloat(finalAmt) || 0, finalDue)}>
-          {isSaving ? '저장 중...' : '💾 저장'}
-        </button>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          <button
+            className="btn btn-muted btn-sm"
+            disabled={isSaving}
+            onClick={() => onSaveAmounts(pay, parseFloat(depositAmt) || 0, depositDue, parseFloat(finalAmt) || 0, finalDue)}>
+            {isSaving ? '저장 중...' : '💾 저장'}
+          </button>
+          <button
+            className="btn btn-sm"
+            style={{ background: '#FFF0F0', color: '#D63031', border: '1px solid #F5C6C6' }}
+            onClick={() => onDelete(pay.id)}>
+            🗑️
+          </button>
+        </div>
       </div>
       <div className="pic-body">
         <div className="pic-col" style={{ background: '#EEF4FF' }}>
-          <div className="pc-title">계약금 (Deposit)</div>
+          <div className="pc-title">선금 (Deposit)</div>
           <label>금액</label>
           <input type="number" value={depositAmt} onChange={e => setDepositAmt(e.target.value)} />
           <label>납부일</label>
@@ -238,7 +447,7 @@ function PayCard({ pay, color, isSaving, onToggle, onSaveCurrency, onSaveAmounts
           <div className="status-toggle" onClick={() => onToggle(pay.id, 'deposit', pay.deposit_paid)} style={{ cursor: 'pointer' }}>
             <div className={`toggle${pay.deposit_paid ? ' on' : ''}`} />
             <span style={{ fontSize: 13, fontWeight: 600, color: pay.deposit_paid ? 'var(--green)' : 'var(--muted)' }}>
-              {pay.deposit_paid ? '결제 완료 ✓' : '미결제'}
+              {pay.deposit_paid ? '납부 완료 ✓' : '미납부'}
             </span>
           </div>
         </div>
@@ -251,7 +460,7 @@ function PayCard({ pay, color, isSaving, onToggle, onSaveCurrency, onSaveAmounts
           <div className="status-toggle" onClick={() => onToggle(pay.id, 'final', pay.final_paid)} style={{ cursor: 'pointer' }}>
             <div className={`toggle${pay.final_paid ? ' on' : ''}`} />
             <span style={{ fontSize: 13, fontWeight: 600, color: pay.final_paid ? 'var(--green)' : 'var(--muted)' }}>
-              {pay.final_paid ? '결제 완료 ✓' : '미결제'}
+              {pay.final_paid ? '납부 완료 ✓' : '미납부'}
             </span>
           </div>
         </div>

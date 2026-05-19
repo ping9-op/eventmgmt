@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Chart, ArcElement, Tooltip } from 'chart.js'
-Chart.register(ArcElement, Tooltip)
+import { Chart, ArcElement, Tooltip, DoughnutController } from 'chart.js'
+Chart.register(ArcElement, Tooltip, DoughnutController)
 import { supabase } from '../../lib/supabase'
 import { krw, exhColor, costColor, formatEventDate, isPastEvent, daysUntil } from '../../lib/utils'
 import type { Exhibition, BudgetItem, ActualCost } from '../../types/database'
@@ -20,7 +20,7 @@ function budgetByCurStr(budget: BudgetItem[]): string {
 }
 
 interface ExhEntry {
-  key: string; name: string; year: number; date: string; venue: string
+  key: string; exhId: string; name: string; year: number; date: string; venue: string
   budget: BudgetItem[]; total: number; recurring: boolean
   proposal_date: string; author: string
 }
@@ -51,7 +51,7 @@ export default function ExpoOverview() {
         const exh = exhMap[p.exhibition_id]
         const budget = (p.budget as BudgetItem[]) || []
         return {
-          key: exh?.key || '', name: exh?.name || '', year: p.year,
+          key: exh?.key || '', exhId: exh?.id || '', name: exh?.name || '', year: p.year,
           date: p.date_of_event, venue: p.venue,
           budget, total: budget.reduce((s, b) => s + (b.curr || 0), 0),
           recurring: exh?.recurring || false,
@@ -159,7 +159,7 @@ export default function ExpoOverview() {
       <div className="sec-hdr">
         <div className="bar" />
         <div className="txt">다가오는 일정</div>
-        <div className="sub">앞으로 60일</div>
+        <div className="sub">오늘 기준 {new Date().toISOString().split('T')[0].replace(/-/g, '.')} · 향후 60일 / 최근 지연 포함</div>
       </div>
       {upcoming.length === 0 ? (
         <div className="card-sm" style={{ color: 'var(--muted)', textAlign: 'center', padding: 28 }}>향후 60일 내 일정 없음</div>
@@ -180,6 +180,7 @@ export default function ExpoOverview() {
                 <div className="uc-name">{u.name}</div>
                 <div className="uc-date">{u.date}</div>
                 {u.detail && <div className="uc-detail" style={{ color: u.color }}>{u.detail}</div>}
+                <div style={{ marginTop: 8, fontSize: 10, color: u.color, opacity: .7 }}>클릭하여 이동 →</div>
               </div>
             )
           })}
@@ -187,25 +188,25 @@ export default function ExpoOverview() {
       )}
 
       {/* 요약 */}
-      <div className="sec-hdr"><div className="bar" /><div className="txt">전체 요약</div></div>
+      <div className="sec-hdr"><div className="bar" /><div className="txt">요약</div></div>
       <div className="metrics-grid">
-        <div className="metric" onClick={() => navigate('/expo/exhibitions')}>
-          <div className="lbl">박람회 종류</div>
+        <div className="metric" onClick={() => navigate('/expo/exhibitions')} title="기존 박람회로 이동">
+          <div className="lbl">참가 박람회 수</div>
           <div className="val" style={{ color: 'var(--accent)' }}>{uniqueExhs}개</div>
-          <div className="sub">전체 {allE.length}회 참가</div>
+          <div className="sub">전체 {allE.length}건 이력</div>
         </div>
-        <div className="metric" onClick={() => navigate('/expo/payments')}>
-          <div className="lbl">{maxYear}년 예산</div>
+        <div className="metric" onClick={() => navigate('/expo/payments')} title="결제 일정으로 이동">
+          <div className="lbl">{maxYear} 총 승인 예산</div>
           <div className="val" style={{ color: 'var(--green)', fontSize: 18 }}>{krw(total2026)}</div>
-          <div className="sub">{yr2026.length}개 박람회</div>
+          <div className="sub">{yr2026.length}개 박람회 합산</div>
         </div>
-        <div className="metric" onClick={() => navigate('/expo/schedule')}>
-          <div className="lbl">평균 예산/건</div>
+        <div className="metric" onClick={() => navigate('/expo/schedule')} title="일정 관리로 이동">
+          <div className="lbl">박람회 평균 비용</div>
           <div className="val" style={{ color: 'var(--amber)', fontSize: 18 }}>{krw(avg)}</div>
           <div className="sub">전체 이력 기준</div>
         </div>
-        <div className="metric">
-          <div className="lbl">최고 예산</div>
+        <div className="metric" onClick={() => biggest && navigate(`/expo/event/${biggest.key}/${biggest.year || maxYear}`)} title="이벤트 상세로 이동" style={{ cursor: 'pointer' }}>
+          <div className="lbl">최고 비용 박람회</div>
           <div className="val" style={{ color: 'var(--danger)', fontSize: 15 }}>{biggest?.name} {biggest?.year}</div>
           <div className="sub">{krw(biggest?.total || 0)}</div>
         </div>
@@ -215,7 +216,7 @@ export default function ExpoOverview() {
       <YearDonutSection entries={allE} latestSorted={latestSorted} />
 
       {/* 박람회 참가 현황 카드 */}
-      <div className="sec-hdr"><div className="bar" /><div className="txt">박람회 참가 현황</div></div>
+      <div className="sec-hdr"><div className="bar" /><div className="txt">박람회 참가 현황</div><div className="sub">일정 순 · {new Date().toISOString().split('T')[0].replace(/-/g, '.')}</div></div>
       <div className="exh-grid">
         {latestSorted.map(e => {
           const past = isPastEvent(e.date, e.year)
@@ -246,7 +247,7 @@ export default function ExpoOverview() {
 
                 {/* 참가 이력 */}
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6, fontWeight: 500 }}>참가 이력 {hist.length}회</div>
-                <div style={{ height: 90, overflowY: 'auto', border: '0.5px solid var(--border)', borderRadius: 8, padding: '4px 10px', background: '#FDFBFB', marginBottom: 12 }}>
+                <div style={{ height: 110, overflowY: 'auto', border: '0.5px solid var(--border)', borderRadius: 8, padding: '4px 10px', background: '#FDFBFB', marginBottom: 12 }}>
                   {hist.slice().reverse().map((h, i) => (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '0.5px solid var(--border)' }}>
                       <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap', marginRight: 8 }}>{h.year} · {formatEventDate(h.date, h.year)}</span>
@@ -281,8 +282,14 @@ export default function ExpoOverview() {
                 </div>
 
                 <div style={{ display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 12 }}>
-                  <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={() => navigate('/expo/create')}>✏️ Proposal 작성</button>
-                  <button className="btn btn-muted btn-sm" style={{ flex: 1 }} onClick={() => navigate('/expo/report')}>📋 결과 보고서</button>
+                  <button className="btn btn-primary btn-sm" style={{ flex: 1 }}
+                    onClick={ev => { ev.stopPropagation(); navigate('/expo/create', { state: { exhId: e.exhId } }) }}>
+                    ✏️ Proposal 작성
+                  </button>
+                  <button className="btn btn-muted btn-sm" style={{ flex: 1 }}
+                    onClick={ev => { ev.stopPropagation(); navigate('/expo/report', { state: { key: `${e.key}_${e.year}` } }) }}>
+                    📋 결과 보고서
+                  </button>
                 </div>
               </div>
             </div>
@@ -291,10 +298,11 @@ export default function ExpoOverview() {
       </div>
 
       {/* 비용 구조 차트 */}
-      <div className="sec-hdr"><div className="bar" /><div className="txt">비용 구조 차트</div></div>
+      <div className="sec-hdr"><div className="bar" /><div className="txt">박람회별 예산 구조 비교</div></div>
       <div className="chart-card">
         {latestSorted.map(e => (
-          <div key={`${e.key}_${e.year}`} className="hbar-row">
+          <div key={`${e.key}_${e.year}`} className="hbar-row" style={{ cursor: 'pointer' }}
+            onClick={() => navigate(`/expo/event/${e.key}/${e.year}`)}>
             <span className="hbar-label" style={{ textAlign: 'right' }}>
               {(e.name + ' ' + e.year).length > 18 ? (e.name + ' ' + e.year).slice(0, 17) + '…' : e.name + ' ' + e.year}
             </span>
@@ -317,14 +325,15 @@ export default function ExpoOverview() {
       </div>
 
       {/* 순위 테이블 */}
-      <div className="sec-hdr"><div className="bar" /><div className="txt">예산 순위</div></div>
+      <div className="sec-hdr"><div className="bar" /><div className="txt">전체 이력 비용 순위</div></div>
       <table className="rank-table">
         <thead>
-          <tr><th>#</th><th>박람회명</th><th>연도</th><th>행사 기간</th><th>장소</th><th>총 예산</th><th>부스비</th></tr>
+          <tr><th>순위</th><th>박람회명</th><th>연도</th><th>행사 기간</th><th>장소</th><th>총 예산</th><th>부스 비용</th></tr>
         </thead>
         <tbody>
           {ranked.map((e, i) => (
-            <tr key={`${e.key}_${e.year}`} style={i === 0 ? { color: 'var(--accent)', fontWeight: 700 } : {}}>
+            <tr key={`${e.key}_${e.year}`} style={{ cursor: 'pointer', ...(i === 0 ? { color: 'var(--accent)', fontWeight: 700 } : {}) }}
+              onClick={() => navigate(`/expo/event/${e.key}/${e.year}`)}>
               <td>{i + 1}</td>
               <td>{e.name} {e.year}</td>
               <td>{e.year}</td>
@@ -385,6 +394,10 @@ function DonutChart({ data, colors, centerText }: { data: number[]; colors: stri
 }
 
 function YearDonutSection({ entries, latestSorted }: { entries: ExhEntry[]; latestSorted: ExhEntry[] }) {
+  const navigate = useNavigate()
+  const [offset, setOffset] = useState(0)
+  const MAX = 4
+
   const yearGroups: Record<number, ExhEntry[]> = {}
   for (const e of entries) {
     if (!yearGroups[e.year]) yearGroups[e.year] = []
@@ -393,33 +406,62 @@ function YearDonutSection({ entries, latestSorted }: { entries: ExhEntry[]; late
   const sortedYears = Object.keys(yearGroups).map(Number).sort((a, b) => b - a)
   if (!sortedYears.length) return null
 
+  const totalPages = Math.max(0, sortedYears.length - MAX)
+  const visibleYears = sortedYears.slice(offset, offset + MAX)
+  const cols = Math.min(visibleYears.length, MAX)
+  const canLeft = offset > 0
+  const canRight = offset < totalPages
+  const today = new Date()
+
   return (
     <>
       <div className="sec-hdr"><div className="bar" /><div className="txt">연도별 박람회 참가 현황</div></div>
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(sortedYears.length, 4)}, 1fr)`, gap: 12 }}>
-        {sortedYears.slice(0, 4).map(yr => {
-          const yEntries = yearGroups[yr]
-          return (
-            <div key={yr} className="donut-card">
-              <div className="dy">{yr}</div>
-              <div className="dc">{yEntries.length}개 박람회 참가</div>
-              <DonutChart
-                data={yEntries.map(() => 1)}
-                colors={yEntries.map(e => exhColor(e.name))}
-                centerText={yEntries.length + '개'}
-              />
-              <div className="donut-legend">
-                {yEntries.map((e, i) => (
-                  <div key={i} className="dl">
-                    <div className="dot" style={{ background: exhColor(e.name) }} />
-                    <span className="dn">{e.name} {e.year}</span>
-                    <span className="dv" style={{ color: exhColor(e.name) }}>1</span>
-                  </div>
-                ))}
+      <div className="donuts-wrapper" style={{ padding: '0 24px' }}>
+        {/* Left nav */}
+        <div className={`donuts-nav left${canLeft ? '' : ' disabled'}`}
+          onClick={canLeft ? () => setOffset(o => o - 1) : undefined}>
+          ‹
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 12 }}>
+          {visibleYears.map(yr => {
+            const yEntries = yearGroups[yr]
+            return (
+              <div key={yr} className="donut-card">
+                <div className="dy">{yr}</div>
+                <div className="dc">{yEntries.length}개 박람회 참가</div>
+                <DonutChart
+                  data={yEntries.map(() => 1)}
+                  colors={yEntries.map(e => exhColor(e.name))}
+                  centerText={yEntries.length + '개'}
+                />
+                <div className="donut-legend">
+                  {yEntries.map((e, i) => {
+                    const past = isPastEvent(e.date, e.year)
+                    const label = (e.name + ' ' + e.year)
+                    const displayLabel = label.length > 22 ? label.slice(0, 21) + '…' : label
+                    return (
+                      <div key={i} className="dl"
+                        onClick={() => navigate(`/expo/event/${e.key}/${e.year}`)}
+                        style={{ cursor: 'pointer', borderRadius: 6, padding: '3px 5px 3px 2px', transition: 'background .15s' }}
+                        onMouseOver={ev => { (ev.currentTarget as HTMLDivElement).style.background = '#FDF0F0' }}
+                        onMouseOut={ev => { (ev.currentTarget as HTMLDivElement).style.background = '' }}>
+                        <div className="dot" style={{ background: exhColor(e.name) }} />
+                        <span className="dn">{displayLabel}</span>
+                        <span className="ds" style={{ background: past ? 'var(--muted)' : 'var(--accent)' }}>{past ? '완료' : '예정'}</span>
+                        <span className="dv" style={{ color: exhColor(e.name) }}>1</span>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
+        {/* Right nav */}
+        <div className={`donuts-nav right${canRight ? '' : ' disabled'}`}
+          onClick={canRight ? () => setOffset(o => o + 1) : undefined}>
+          ›
+        </div>
       </div>
     </>
   )

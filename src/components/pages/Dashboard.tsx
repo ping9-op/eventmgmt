@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { exhColor, formatEventDate, isPastEvent, STAGE_ORDER, STAGE_COLORS } from '../../lib/utils'
 import type { Exhibition, Payment, SalesLead, SalesTask, BudgetItem } from '../../types/database'
+import LeadDetailPanel from './LeadDetailPanel'
 
 const CUR_SYM: Record<string, string> = { KRW: '₩', JPY: '¥', USD: '$', EUR: '€', SGD: 'S$' }
 
@@ -29,6 +30,7 @@ export default function Dashboard() {
   const [leads, setLeads] = useState<SalesLead[]>([])
   const [tasks, setTasks] = useState<SalesTask[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -224,12 +226,12 @@ export default function Dashboard() {
             {/* KPI 3칸 */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 14 }}>
               {[
-                { lbl: '전체 리드', val: total, col: '#1E3A5F', path: '/sales/funnel' },
-                { lbl: '진행 중', val: active, col: '#4F46E5', path: '/sales/funnel' },
-                { lbl: '전환율', val: convRate + '%', col: '#059669', path: null as string | null },
+                { lbl: '전체 리드', val: total, col: '#1E3A5F', fn: () => navigate('/sales/funnel', { state: { filter: null, view: 'table' } }) },
+                { lbl: '진행 중', val: active, col: '#4F46E5', fn: () => navigate('/sales/funnel', { state: { filter: '__active__', view: 'table' } }) },
+                { lbl: '전환율', val: convRate + '%', col: '#059669', fn: null as (() => void) | null },
               ].map((k, i) => (
-                <div key={i} onClick={k.path ? () => navigate(k.path!) : undefined}
-                  style={{ textAlign: 'center', padding: '10px 6px', background: '#F5F8FF', borderRadius: 10, cursor: k.path ? 'pointer' : 'default' }}>
+                <div key={i} onClick={k.fn || undefined}
+                  style={{ textAlign: 'center', padding: '10px 6px', background: '#F5F8FF', borderRadius: 10, cursor: k.fn ? 'pointer' : 'default' }}>
                   <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 3 }}>{k.lbl}</div>
                   <div style={{ fontSize: 20, fontWeight: 800, color: k.col }}>{k.val}</div>
                 </div>
@@ -237,11 +239,11 @@ export default function Dashboard() {
             </div>
             {/* 알림 */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
-              <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 12px', cursor: 'pointer' }} onClick={() => navigate('/sales/followup')}>
+              <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 12px', cursor: 'pointer' }} onClick={() => navigate('/sales/followup', { state: { filter: 'overdue' } })}>
                 <div style={{ fontSize: 10, color: '#DC2626', fontWeight: 600 }}>🔴 기한 초과</div>
                 <div style={{ fontSize: 22, fontWeight: 800, color: '#DC2626' }}>{overdue}</div>
               </div>
-              <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '10px 12px', cursor: 'pointer' }} onClick={() => navigate('/sales/followup')}>
+              <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '10px 12px', cursor: 'pointer' }} onClick={() => navigate('/sales/followup', { state: { filter: 'today' } })}>
                 <div style={{ fontSize: 10, color: '#D97706', fontWeight: 600 }}>📅 오늘 Tasks</div>
                 <div style={{ fontSize: 22, fontWeight: 800, color: '#D97706' }}>{todayTasks}</div>
               </div>
@@ -250,7 +252,7 @@ export default function Dashboard() {
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>🏆 Top Leads</div>
             {topLeads.length === 0 && <div style={{ fontSize: 13, color: 'var(--muted)' }}>리드 없음</div>}
             {topLeads.map((l, i) => (
-              <div key={l.id} onClick={() => navigate('/sales/leads')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '0.5px solid var(--border)', cursor: 'pointer' }}
+              <div key={l.id} onClick={() => setSelectedLeadId(l.id)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '0.5px solid var(--border)', cursor: 'pointer' }}
                 onMouseOver={ev => (ev.currentTarget as HTMLDivElement).style.opacity = '.7'}
                 onMouseOut={ev => (ev.currentTarget as HTMLDivElement).style.opacity = '1'}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
@@ -289,7 +291,7 @@ export default function Dashboard() {
             const passed = d < 0
             const bgCol = urgent ? '#FEF2F2' : passed ? '#F3F4F6' : '#EEF2FF'
             const txtCol = urgent ? '#DC2626' : passed ? '#9CA3AF' : '#4F46E5'
-            const dayLabel = passed ? '완료' : d === 0 ? '오늘' : d + '일'
+            const dayLabel = passed ? `D+${Math.abs(d)}` : d === 0 ? 'D-Day' : `D-${d}`
             return (
               <div key={idx} onClick={() => navigate(ev.path)} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 0', borderBottom: '0.5px solid var(--border)', cursor: 'pointer' }}
                 onMouseOver={ev2 => (ev2.currentTarget as HTMLDivElement).style.opacity = '.7'}
@@ -332,6 +334,16 @@ export default function Dashboard() {
           })}
         </div>
       </div>
+
+      {selectedLeadId && (
+        <LeadDetailPanel
+          leadId={selectedLeadId}
+          onClose={() => setSelectedLeadId(null)}
+          onRefresh={() => {
+            supabase.from('sales_leads').select('*').then(({ data }) => { if (data) setLeads(data as SalesLead[]) })
+          }}
+        />
+      )}
     </div>
   )
 }

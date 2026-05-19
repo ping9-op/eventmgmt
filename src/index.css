@@ -103,31 +103,42 @@ label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px;margin-t
 .ucard .uc-detail{font-size:12px;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* ── Donut / Chart ── */
+.donuts-wrapper{position:relative}
+.donuts-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:10;background:var(--card);border:1.5px solid var(--border2);border-radius:50%;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.donuts-nav:hover{background:var(--accent-light);border-color:var(--accent)}
+.donuts-nav.left{left:-18px}
+.donuts-nav.right{right:-18px}
+.donuts-nav.disabled{opacity:.3;cursor:default;pointer-events:none}
 .donuts-row{display:grid;gap:12px;overflow:visible}
-.donut-card{background:var(--card);border:0.5px solid var(--border2);border-radius:12px;padding:18px;text-align:center;cursor:pointer;transition:transform .15s,box-shadow .15s,border-color .15s}
-.donut-card:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.1);border-color:var(--accent)}
+.donut-card{background:var(--card);border:0.5px solid var(--border2);border-radius:12px;padding:18px;text-align:center;cursor:pointer;transition:transform .15s,box-shadow .15s,border-color .15s;position:relative;z-index:1}
+.donut-card:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.1);border-color:var(--accent);z-index:10}
 .donut-card .dy{font-size:15px;font-weight:800;color:var(--text)}
 .donut-card .dc{font-size:12px;color:var(--muted);margin:4px 0 12px}
 .donut-legend{margin-top:14px;text-align:left}
 .dl{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:13px}
 .dl .dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
 .dl .dn{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dl .ds{font-size:10px;padding:2px 7px;border-radius:99px;color:white;flex-shrink:0}
 .dl .dv{font-size:13px;font-weight:700;margin-left:4px;flex-shrink:0}
 
 /* ── Exhibition Cards ── */
-.exh-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
-.exh-card{background:var(--card);border:0.5px solid var(--border2);border-radius:12px;overflow:hidden;transition:transform .15s,box-shadow .15s}
-.exh-card:hover{transform:translateY(-3px);box-shadow:0 6px 20px rgba(0,0,0,.12)}
+.exh-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;overflow:visible}
+.exh-grid .exh-card{height:100%;display:flex;flex-direction:column}
+.exh-card{background:var(--card);border:0.5px solid var(--border2);border-radius:12px;overflow:hidden;transition:transform .15s,box-shadow .15s;position:relative;z-index:1}
+.exh-grid .exh-card:hover{transform:translateY(-3px);box-shadow:0 6px 20px rgba(0,0,0,.12);z-index:10}
 .exh-card .top-bar{height:6px}
 .exh-card .ec-body{padding:16px 18px}
 .exh-card .ec-hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px}
 .exh-card .ec-name{font-size:15px;font-weight:700}
+.exh-card .ec-badges{display:flex;flex-direction:column;gap:4px;align-items:flex-end}
 .exh-card .ec-meta{font-size:13px;color:var(--muted);margin-bottom:10px}
 .divider{border:none;border-top:0.5px solid var(--border);margin:10px 0}
 .bar-lbl{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:4px}
 .bar-track{height:10px;background:var(--light);border-radius:5px;overflow:hidden;margin-bottom:8px}
 .bar-fill{height:100%;border-radius:5px}
 .warn-box{background:#FFF8E6;border:0.5px solid #F0C050;border-radius:7px;padding:8px 12px;font-size:13px;color:#9A6A00;margin-top:8px;display:flex;align-items:center;gap:6px}
+.exh-items{margin-top:10px}
+.exh-item-row{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin:4px 0}
 
 /* ── Cost Chart ── */
 .chart-card{background:var(--card);border:0.5px solid var(--border2);border-radius:12px;padding:18px}
