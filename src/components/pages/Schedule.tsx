@@ -162,7 +162,7 @@ export default function Schedule() {
                   <th>{t('col_exh')}</th><th>{t('event_period')} <span style={{ opacity: .7, fontSize: 10 }}>✎</span></th>
                   <th>{t('venue')} <span style={{ opacity: .7, fontSize: 10 }}>✎</span></th>
                   <th>{t('col_type')}</th><th>{t('sched_col_status')}</th>
-                  <th style={{ textAlign: 'right' }}>{t('total_budget')} <span style={{ opacity: .7, fontSize: 10 }}>✎</span></th>
+                  <th style={{ textAlign: 'right' }}>{t('col_budget_short')} <span style={{ opacity: .7, fontSize: 10 }}>✎</span></th>
                   <th></th>
                 </tr>
               </thead>

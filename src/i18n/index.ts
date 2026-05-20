@@ -49,6 +49,7 @@ const translations: Record<Lang, Record<string, string>> = {
     no_history: '이력 없음',
     result_needed: '실제 지출 미입력 — 결과 보고서 작성 필요',
     // 단위 / 포맷
+    col_budget_short: '총 예산',
     unit_exh: '개 박람회',
     unit_items: '개',
     unit_scheduled: '개 예정',
@@ -565,6 +566,7 @@ const translations: Record<Lang, Record<string, string>> = {
     no_history: 'No history',
     result_needed: 'Actual cost not entered — Please write result report',
     // 단위 / 포맷
+    col_budget_short: 'Budget',
     unit_exh: ' exhibitions',
     unit_items: '',
     unit_scheduled: ' Scheduled',

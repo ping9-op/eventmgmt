@@ -13,11 +13,14 @@ const LangContext = createContext<LangContextType | null>(null)
 export function LangProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(() => {
     const saved = localStorage.getItem('gme_lang')
-    return (saved === 'en' || saved === 'ko') ? saved as Lang : 'ko'
+    const l: Lang = (saved === 'en' || saved === 'ko') ? saved as Lang : 'ko'
+    document.documentElement.lang = l === 'en' ? 'en' : 'ko'
+    return l
   })
 
   function setLang(l: Lang) {
     localStorage.setItem('gme_lang', l)
+    document.documentElement.lang = l === 'en' ? 'en' : 'ko'
     setLangState(l)
   }
 
