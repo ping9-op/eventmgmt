@@ -69,128 +69,185 @@ export default function Report() {
 
   async function exportPPT() {
     if (!r || !selected) return
+
+    // GME 템플릿 배경 이미지를 base64로 로드
+    async function imgToBase64(url: string): Promise<string> {
+      const res = await fetch(url)
+      const blob = await res.blob()
+      return new Promise(resolve => {
+        const reader = new FileReader()
+        reader.onloadend = () => resolve((reader.result as string).split(',')[1])
+        reader.readAsDataURL(blob)
+      })
+    }
+
+    const [coverB64, contentB64] = await Promise.all([
+      imgToBase64('/ppt-template/cover-bg.png'),
+      imgToBase64('/ppt-template/content-bg.png'),
+    ])
+
     const costs = r.actual_costs || []
     const totalB = costs.reduce((s, a) => s + (a.budgeted || 0), 0)
     const totalA = costs.reduce((s, a) => s + (a.actual || 0), 0)
+
     const pptx = new pptxgen()
     pptx.layout = 'LAYOUT_WIDE'
 
-    const RED = 'DD2430', WHITE = 'FFFFFF', LG = 'F4F5F9'
+    const RED = 'CC1F1F', WHITE = 'FFFFFF', DARK = '1A1A1A', GRAY = 'F2F2F2', LGRAY = 'E8E8E8'
 
+    // 콘텐츠 슬라이드 생성 헬퍼 (GME 콘텐츠 배경 + 섹션 번호 타이틀)
     const newSlide = (num: number, title: string) => {
       const sl = pptx.addSlide()
-      sl.addShape('rect' as any, { x: 0, y: 0, w: 13.33, h: 0.75, fill: { color: RED }, line: { color: RED, width: 0 } })
-      sl.addText(`${num}.  ${title}`, { x: 0.25, y: 0, w: 13, h: 0.75, fontSize: 24, color: WHITE, fontFace: 'Calibri', valign: 'middle' })
+      sl.addImage({ data: `image/png;base64,${contentB64}`, x: 0, y: 0, w: 13.33, h: 7.5 })
+      // 상단 빨간 아크 아래 제목 텍스트
+      sl.addText(`${num}.  ${title}`, {
+        x: 0.6, y: 0.15, w: 12, h: 0.6,
+        fontSize: 26, bold: true, color: WHITE, fontFace: 'Calibri', valign: 'middle'
+      })
       return sl
     }
 
-    // Cover
-    const cv = pptx.addSlide()
-    cv.addShape('rect' as any, { x: 0, y: 0, w: 13.33, h: 7.5, fill: { color: 'F6F4F4' }, line: { color: 'F6F4F4', width: 0 } })
-    cv.addShape('rect' as any, { x: 0, y: 0, w: 13.33, h: 1.2, fill: { color: RED }, line: { color: RED, width: 0 } })
-    cv.addText(r.cover_title || selected, { x: 1, y: 2, w: 11, h: 2, fontSize: 36, bold: false, color: '000000', fontFace: 'Calibri', valign: 'middle' })
-    cv.addText(`${r.cover_date || ''}   By ${r.cover_author || 'Andrew'}`, { x: 1, y: 4.2, w: 11, h: 0.5, fontSize: 18, color: '555555', fontFace: 'Calibri' })
-
-    // Section helper
-    const addBullets = (sl: ReturnType<typeof pptx.addSlide>, items: string[], x = 1, y = 0.9, w = 11.5, h = 5.6) => {
+    // 불릿 리스트 헬퍼
+    const addBullets = (sl: ReturnType<typeof pptx.addSlide>, items: string[], x = 0.7, y = 1.1, w = 11.8, h = 5.8) => {
       const valid = items.filter(s => s && s.trim())
       if (!valid.length) return
       const runs: any[] = []
       valid.forEach((s, i) => {
-        runs.push({ text: '• ', options: { bold: true, color: '000000', fontSize: 20 } })
-        runs.push({ text: s, options: { bold: false, color: '000000', fontSize: 20, breakLine: i < valid.length - 1 } })
+        runs.push({ text: '▶  ', options: { bold: true, color: RED, fontSize: 18 } })
+        runs.push({ text: s, options: { bold: false, color: DARK, fontSize: 18, breakLine: i < valid.length - 1 } })
       })
-      sl.addText(runs, { x, y, w, h, fontFace: 'Calibri', valign: 'top', paraSpaceAfter: 12, lineSpacingMultiple: 1.3 })
+      sl.addText(runs, { x, y, w, h, fontFace: 'Calibri', valign: 'top', paraSpaceAfter: 14, lineSpacingMultiple: 1.35 })
     }
 
-    // 1. Objective
+    // ── Cover Slide ──────────────────────────────────────
+    const cv = pptx.addSlide()
+    cv.addImage({ data: `image/png;base64,${coverB64}`, x: 0, y: 0, w: 13.33, h: 7.5 })
+    // 제목
+    cv.addText(r.cover_title || selected, {
+      x: 0.8, y: 2.6, w: 8, h: 1.8,
+      fontSize: 38, bold: true, color: DARK, fontFace: 'Calibri', valign: 'middle',
+      wrap: true,
+    })
+    // 날짜 & 작성자
+    cv.addText(`${r.cover_date || ''}   ·   By ${r.cover_author || 'Andrew'}`, {
+      x: 0.8, y: 4.6, w: 8, h: 0.5,
+      fontSize: 16, color: '555555', fontFace: 'Calibri'
+    })
+
+    // ── 1. Objective ──────────────────────────────────────
     if (r.objective) {
       const sl = newSlide(1, 'Objective')
-      sl.addText(r.objective, { x: 0.84, y: 0.9, w: 11.66, h: 6, fontSize: 24, bold: true, color: '000000', fontFace: 'Calibri', valign: 'middle' })
+      sl.addText(r.objective, {
+        x: 0.7, y: 1.1, w: 11.8, h: 5.8,
+        fontSize: 22, bold: false, color: DARK, fontFace: 'Calibri', valign: 'middle',
+        paraSpaceAfter: 8, lineSpacingMultiple: 1.5
+      })
     }
 
-    // 2. Event Overview
+    // ── 2. Event Overview ─────────────────────────────────
     if (r.event_date || r.event_venue) {
       const sl = newSlide(2, 'Event Overview')
-      const lines: any[] = [
-        { text: 'Date', options: { bold: true, color: '000000', fontSize: 28 } },
-        { text: ` : ${r.event_date || ''}`, options: { bold: false, color: '000000', fontSize: 28, breakLine: true } },
-        { text: 'Location', options: { bold: true, color: '000000', fontSize: 28 } },
-        { text: ` : ${r.event_venue || ''}`, options: { bold: false, color: '000000', fontSize: 28, breakLine: true } },
+      const rows: any[] = [
+        [
+          { text: 'Date', options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 14, align: 'center' as any } },
+          { text: r.event_date || '-', options: { color: DARK, fill: { color: GRAY }, fontSize: 14 } },
+        ],
+        [
+          { text: 'Location', options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 14, align: 'center' as any } },
+          { text: r.event_venue || '-', options: { color: DARK, fill: { color: GRAY }, fontSize: 14 } },
+        ],
       ]
       if (r.event_target) {
-        lines.push({ text: 'Target', options: { bold: true, color: '000000', fontSize: 28 } })
-        lines.push({ text: ` : ${r.event_target}`, options: { bold: false, color: '000000', fontSize: 28 } })
+        rows.push([
+          { text: 'Target', options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 14, align: 'center' as any } },
+          { text: r.event_target, options: { color: DARK, fill: { color: GRAY }, fontSize: 14 } },
+        ])
       }
-      sl.addText(lines, { x: 1, y: 0.9, w: 11, h: 5.5, fontFace: 'Calibri', valign: 'middle', paraSpaceAfter: 18, lineSpacingMultiple: 1.5 })
+      sl.addTable(rows, { x: 1.5, y: 2.0, w: 10.3, rowH: 0.9, colW: [2.5, 7.8], border: { pt: 1, color: 'DDDDDD' } })
     }
 
-    // 3. Cost
+    // ── 3. Cost — Budget vs Actual ────────────────────────
     if (costs.length) {
-      const sl = newSlide(3, 'Cost')
+      const sl = newSlide(3, 'Cost — Budget vs Actual')
       const hdr = [
-        { text: t('item_col'), options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13 } },
-        { text: t('budgeted'), options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'right' as any } },
-        { text: t('actual'), options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'right' as any } },
-        { text: t('diff'), options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'right' as any } },
+        { text: 'Item', options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'center' as any } },
+        { text: 'Approved Budget', options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'right' as any } },
+        { text: 'Actual Spend', options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'right' as any } },
+        { text: 'Difference', options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'right' as any } },
       ]
       const rows = costs.map((a, ri) => {
         const d = (a.actual || 0) - (a.budgeted || 0)
-        const bg = ri % 2 === 0 ? LG : WHITE
+        const bg = ri % 2 === 0 ? GRAY : WHITE
+        const cur = (a as any).currency || 'KRW'
+        const sym = cur === 'JPY' ? '¥' : '₩'
         return [
-          { text: a.item || '', options: { color: '000000', fill: { color: bg }, fontSize: 12 } },
-          { text: a.budgeted ? '₩' + a.budgeted.toLocaleString() : '-', options: { color: '595959', align: 'right' as any, fill: { color: bg }, fontSize: 12 } },
-          { text: a.actual ? '₩' + a.actual.toLocaleString() : '-', options: { color: '000000', align: 'right' as any, fill: { color: bg }, fontSize: 12 } },
-          { text: a.actual ? (d > 0 ? `▲ ₩${d.toLocaleString()}` : d < 0 ? `▼ ₩${Math.abs(d).toLocaleString()}` : '-') : '-', options: { color: d > 0 ? 'C00000' : d < 0 ? '375623' : '595959', align: 'right' as any, bold: !!a.actual, fill: { color: bg }, fontSize: 12 } },
+          { text: a.item || '', options: { color: DARK, fill: { color: bg }, fontSize: 12 } },
+          { text: a.budgeted ? sym + a.budgeted.toLocaleString() : '-', options: { color: '444444', align: 'right' as any, fill: { color: bg }, fontSize: 12 } },
+          { text: a.actual ? sym + a.actual.toLocaleString() : '-', options: { color: DARK, align: 'right' as any, fill: { color: bg }, fontSize: 12 } },
+          { text: a.actual ? (d > 0 ? `▲ ${sym}${d.toLocaleString()}` : d < 0 ? `▼ ${sym}${Math.abs(d).toLocaleString()}` : '—') : '-', options: { color: d > 0 ? 'C00000' : d < 0 ? '2E7D51' : '888888', align: 'right' as any, bold: !!a.actual, fill: { color: bg }, fontSize: 12 } },
         ]
       })
       const tD = totalA - totalB
       const totalRow = [
-        { text: t('total'), options: { bold: true, color: '000000', fill: { color: 'E0E0E0' }, fontSize: 13 } },
-        { text: '₩' + totalB.toLocaleString(), options: { bold: true, align: 'right' as any, fill: { color: 'E0E0E0' }, fontSize: 13, color: '000000' } },
-        { text: totalA ? '₩' + totalA.toLocaleString() : '-', options: { bold: true, align: 'right' as any, fill: { color: 'E0E0E0' }, fontSize: 13, color: '000000' } },
-        { text: totalA ? (tD > 0 ? `▲ ₩${tD.toLocaleString()} ${t('over_lbl')}` : tD < 0 ? `▼ ₩${Math.abs(tD).toLocaleString()} ${t('under_lbl')}` : t('same_lbl')) : '-', options: { bold: true, color: tD > 0 ? 'C00000' : tD < 0 ? '375623' : '000000', align: 'right' as any, fill: { color: 'E0E0E0' }, fontSize: 13 } },
+        { text: 'Total', options: { bold: true, color: DARK, fill: { color: LGRAY }, fontSize: 13 } },
+        { text: '₩' + totalB.toLocaleString(), options: { bold: true, align: 'right' as any, fill: { color: LGRAY }, fontSize: 13, color: DARK } },
+        { text: totalA ? '₩' + totalA.toLocaleString() : '-', options: { bold: true, align: 'right' as any, fill: { color: LGRAY }, fontSize: 13, color: DARK } },
+        { text: totalA ? (tD > 0 ? `▲ ₩${tD.toLocaleString()} over` : tD < 0 ? `▼ ₩${Math.abs(tD).toLocaleString()} saved` : 'same') : '-', options: { bold: true, color: tD > 0 ? 'C00000' : tD < 0 ? '2E7D51' : DARK, align: 'right' as any, fill: { color: LGRAY }, fontSize: 13 } },
       ]
-      sl.addTable([hdr, ...rows, totalRow], { x: 0.5, y: 0.9, w: 12.3, rowH: 0.50, colW: [3.5, 2.5, 2.5, 2.5], border: { pt: 0.5, color: 'CCCCCC' }, autoPage: false })
+      sl.addTable([hdr, ...rows, totalRow], { x: 0.4, y: 1.0, w: 12.5, rowH: 0.48, colW: [3.8, 2.8, 2.8, 2.8], border: { pt: 0.5, color: 'DDDDDD' }, autoPage: false })
     }
 
-    // 4. Marketing Activities
+    // ── 4. Marketing Activities ───────────────────────────
     if ((r.marketing_activities || []).length) {
       const sl = newSlide(4, 'Marketing Activities')
-      addBullets(sl, (r.marketing_activities as any[]).map(a => `[${(a as any).type || ''}] ${(a as any).description || ''} → ${(a as any).result || ''}`))
+      addBullets(sl, (r.marketing_activities as any[]).map((a: any) =>
+        `[${a.type || ''}]  ${a.description || ''}${a.result ? '  →  ' + a.result : ''}`
+      ))
     }
 
-    // 5. Registration Results
+    // ── 5. Registration Results ───────────────────────────
     const regR = r.reg_remittance || 0, regC = r.reg_card || 0, regB = r.reg_biz || 0, regO = r.reg_onboard || 0
     if (regR || regC || regB) {
       const sl = newSlide(5, 'Registration Results')
-      const lines: string[] = []
-      if (regR) lines.push(`${regR} Registration on Remittance`)
-      if (regC) lines.push(`${regC} Premium Card Issues`)
-      if (regB) lines.push(`${regB} Registered + ${regO} Onboarded on GME BIZ`)
-      addBullets(sl, lines, 1, 0.9, 11.5, 5)
+      const kpis = [
+        { lbl: 'Remittance', val: regR, col: RED },
+        { lbl: 'Premium Card', val: regC, col: '7B2D8B' },
+        { lbl: 'GME BIZ Reg.', val: regB, col: '2E7D51' },
+        { lbl: 'Onboarded', val: regO, col: 'C47D1A' },
+      ].filter(k => k.val > 0)
+      const gap = 0.3, cardW = (12.5 - gap * (kpis.length - 1)) / kpis.length
+      kpis.forEach((k, i) => {
+        const x = 0.4 + i * (cardW + gap)
+        sl.addShape('rect' as any, { x, y: 1.5, w: cardW, h: 3.5, fill: { color: 'FAFAFA' }, line: { color: 'DDDDDD', width: 1 } })
+        sl.addText(String(k.val), { x, y: 2.0, w: cardW, h: 1.8, fontSize: 64, bold: true, color: k.col, fontFace: 'Calibri', align: 'center' as any, valign: 'middle' })
+        sl.addText(k.lbl, { x, y: 4.0, w: cardW, h: 0.6, fontSize: 14, color: '555555', fontFace: 'Calibri', align: 'center' as any })
+      })
     }
 
-    // 6-9. Bullet sections
+    // ── 6–9. Bullet sections ──────────────────────────────
     const sections: [number, string, string[]][] = [
       [6, 'Shortcomings', r.shortcomings || []],
       [7, 'Improvements', r.improvements || []],
       [8, 'Recommendations & Follow-up', r.recommendations || []],
-      [9, 'Request', r.requests || []],
+      [9, 'Requests', r.requests || []],
     ]
     for (const [num, title, items] of sections) {
       if (items.length) { const sl = newSlide(num, title); addBullets(sl, items) }
     }
 
-    // 10. Conclusion
+    // ── 10. Conclusion ────────────────────────────────────
     if (r.conclusion) {
       const sl = newSlide(10, 'Conclusion')
-      sl.addText(r.conclusion, { x: 0.84, y: 0.9, w: 11.66, h: 6, fontSize: 20, color: '000000', fontFace: 'Calibri', valign: 'top', paraSpaceAfter: 10 })
+      sl.addText(r.conclusion, {
+        x: 0.7, y: 1.1, w: 11.8, h: 5.8,
+        fontSize: 18, color: DARK, fontFace: 'Calibri', valign: 'top',
+        paraSpaceAfter: 10, lineSpacingMultiple: 1.5
+      })
     }
 
     const fname = (r.cover_title || selected).replace(/[\s/\\]/g, '_') + '_Result_Report.pptx'
     await pptx.writeFile({ fileName: fname })
-    showToast('PPT가 다운로드되었습니다.')
+    showToast(t('saved_ok') + ' 📊')
   }
 
   function initReport(): Result {
