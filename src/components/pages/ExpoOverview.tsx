@@ -104,7 +104,7 @@ export default function ExpoOverview() {
       if (!d) continue
       const diff = Math.round((d.getTime() - today.getTime()) / 86400000)
       if (diff >= -7 && diff <= 60) {
-        items.push({ days: diff, kind: '박람회', name: e.name + ' ' + e.year, date: formatEventDate(e.date, e.year), color: exhColor(e.name), detail: e.venue, icon: '📅' })
+        items.push({ days: diff, kind: 'expo', name: e.name + ' ' + e.year, date: formatEventDate(e.date, e.year), color: exhColor(e.name), detail: e.venue, icon: '📅' })
       }
     }
     for (const [dbKey, pays] of Object.entries(payments)) {
@@ -113,8 +113,8 @@ export default function ExpoOverview() {
       const name = (exhEntry?.name || k) + ' ' + yr
       for (const p of pays) {
         for (const [type, due, amount, paid] of [
-          ['선금', p.deposit_due, p.deposit_amount, p.deposit_paid],
-          ['잔금', p.final_due, p.final_amount, p.final_paid],
+          ['deposit', p.deposit_due, p.deposit_amount, p.deposit_paid],
+          ['final', p.final_due, p.final_amount, p.final_paid],
         ] as [string, string | null, number, boolean][]) {
           if (paid || !due) continue
           const dueDate = new Date(due)
@@ -172,11 +172,11 @@ export default function ExpoOverview() {
             const dc = d < 0 ? 'var(--danger)' : d <= 7 ? 'var(--danger)' : d <= 14 ? 'var(--amber)' : 'var(--accent)'
             const bg = d < 0 ? '#FFF1F0' : d <= 7 ? '#FFF8E6' : 'white'
             const dt = d < 0 ? `D+${Math.abs(d)}` : d === 0 ? 'D-Day' : `D-${d}`
-            const isExh = u.kind === '박람회'
+            const isExh = u.kind === 'expo'
             return (
               <div key={i} className="ucard" style={{ borderColor: u.color, background: bg }} onClick={() => navigate(isExh ? '/expo/schedule' : '/expo/payments')}>
                 <div className="uc-top">
-                  <span className="uc-kind">{u.icon} {u.kind}</span>
+                  <span className="uc-kind">{u.icon} {u.kind === 'expo' ? t('kind_expo') : u.kind === 'deposit' ? t('deposit_pay') : u.kind === 'final' ? t('final_pay_short') : u.kind}</span>
                   <span className="uc-d" style={{ color: dc }}>{dt}</span>
                 </div>
                 <div className="uc-name">{u.name}</div>
@@ -230,7 +230,7 @@ export default function ExpoOverview() {
           const diff = hasActual ? actualTotal - e.total : 0
           const actW = hasActual ? Math.min(Math.round(actualTotal / e.total * 100), 150) + '%' : '0%'
           const actC = diff > 0 ? 'var(--danger)' : 'var(--green)'
-          const diffStr = diff > 0 ? `▲ ${krw(diff)} 초과` : diff < 0 ? `▼ ${krw(Math.abs(diff))} 절감` : ''
+          const diffStr = diff > 0 ? `▲ ${krw(diff)} ${t('over_lbl')}` : diff < 0 ? `▼ ${krw(Math.abs(diff))} ${t('under_lbl')}` : ''
           const hist = histByKey[e.key] || []
 
           return (
@@ -241,8 +241,8 @@ export default function ExpoOverview() {
                 <div className="ec-hdr">
                   <span className="ec-name" style={{ color: past ? '#5A6878' : 'var(--text)' }}>{e.name} {e.year}</span>
                   <div className="ec-badges" style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
-                    <span className="badge" style={{ background: past ? 'var(--muted)' : 'var(--green)' }}>{past ? '완료' : '예정'}</span>
-                    <span className="badge" style={{ background: e.recurring ? '#2E7D51' : 'var(--amber)' }}>{e.recurring ? '기존' : '신규'}</span>
+                    <span className="badge" style={{ background: past ? 'var(--muted)' : 'var(--green)' }}>{past ? t('badge_done') : t('badge_scheduled')}</span>
+                    <span className="badge" style={{ background: e.recurring ? '#2E7D51' : 'var(--amber)' }}>{e.recurring ? t('badge_existing') : t('badge_new')}</span>
                   </div>
                 </div>
                 <div className="ec-meta">📅 {formatEventDate(e.date, e.year)} &nbsp;📍 {e.venue}</div>
@@ -266,7 +266,7 @@ export default function ExpoOverview() {
                   <span style={hasActual ? { fontWeight: 700, color: actC } : {}}>
                     {hasActual ? (
                       <>{krw(actualTotal)}{diffStr && <small style={{ color: actC }}> {diffStr}</small>}</>
-                    ) : '미입력'}
+                    ) : t('no_items')}
                   </span>
                 </div>
                 <div className="bar-track"><div className="bar-fill" style={{ width: actW, background: hasActual ? actC : '#ddd' }} /></div>
@@ -286,11 +286,11 @@ export default function ExpoOverview() {
                 <div style={{ display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 12 }}>
                   <button className="btn btn-primary btn-sm" style={{ flex: 1 }}
                     onClick={ev => { ev.stopPropagation(); navigate('/expo/create', { state: { exhId: e.exhId } }) }}>
-                    ✏️ Proposal 작성
+                    ✏️ {t('btn_proposal')}
                   </button>
                   <button className="btn btn-muted btn-sm" style={{ flex: 1 }}
                     onClick={ev => { ev.stopPropagation(); navigate('/expo/report', { state: { key: `${e.key}_${e.year}` } }) }}>
-                    📋 결과 보고서
+                    📋 {t('btn_report')}
                   </button>
                 </div>
               </div>
@@ -431,11 +431,11 @@ function YearDonutSection({ entries, latestSorted }: { entries: ExhEntry[]; late
             return (
               <div key={yr} className="donut-card">
                 <div className="dy">{yr}</div>
-                <div className="dc">{yEntries.length}개 박람회 참가</div>
+                <div className="dc">{yEntries.length}{t('unit_exh')}</div>
                 <DonutChart
                   data={yEntries.map(() => 1)}
                   colors={yEntries.map(e => exhColor(e.name))}
-                  centerText={yEntries.length + '개'}
+                  centerText={String(yEntries.length)}
                 />
                 <div className="donut-legend">
                   {yEntries.map((e, i) => {
@@ -450,7 +450,7 @@ function YearDonutSection({ entries, latestSorted }: { entries: ExhEntry[]; late
                         onMouseOut={ev => { (ev.currentTarget as HTMLDivElement).style.background = '' }}>
                         <div className="dot" style={{ background: exhColor(e.name) }} />
                         <span className="dn">{displayLabel}</span>
-                        <span className="ds" style={{ background: past ? 'var(--muted)' : 'var(--accent)' }}>{past ? '완료' : '예정'}</span>
+                        <span className="ds" style={{ background: past ? 'var(--muted)' : 'var(--accent)' }}>{past ? t('badge_done') : t('badge_scheduled')}</span>
                         <span className="dv" style={{ color: exhColor(e.name) }}>1</span>
                       </div>
                     )

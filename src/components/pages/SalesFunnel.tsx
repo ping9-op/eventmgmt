@@ -12,17 +12,6 @@ type TabType = 'board' | 'table' | 'proposal'
 const CONTRACT_STATUSES = ['Not Sent', 'Sent', 'Under Review', 'Revision Requested', 'Signed', 'Rejected']
 const ONBOARD_STATUSES = ['Not Started', 'Waiting Docs', 'Under Review', 'Approved', 'Rejected', 'Completed']
 
-const KPI_CARDS = [
-  { lbl: 'Total', stage: null as string | null, col: 'var(--text)' },
-  { lbl: 'New Lead', stage: 'New Lead', col: '#6B7280' },
-  { lbl: 'Contacted', stage: 'Contacted', col: '#D97706' },
-  { lbl: 'Proposal', stage: 'Proposal Sent', col: '#4F46E5' },
-  { lbl: 'Onboarding', stage: 'Onboarding', col: '#059669' },
-  { lbl: 'Won ✅', stage: 'Onboarded / Won', col: '#065F46' },
-  { lbl: 'Lost', stage: 'Lost', col: '#DC2626' },
-  { lbl: '전환율', stage: '__conv__', col: '#7C3AED' },
-]
-
 function PriorityBadge({ p }: { p: string }) {
   const col = p === 'High' ? '#DC2626' : p === 'Medium' ? '#D97706' : '#6B7280'
   return <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 600, color: 'white', background: col }}>{p}</span>
@@ -32,6 +21,17 @@ export default function SalesFunnel() {
   const { t } = useLang()
   const location = useLocation()
   const { owners: OWNERS } = loadSalesSettings()
+
+  const KPI_CARDS = [
+    { lbl: t('total'), stage: null as string | null, col: 'var(--text)' },
+    { lbl: 'New Lead', stage: 'New Lead', col: '#6B7280' },
+    { lbl: 'Contacted', stage: 'Contacted', col: '#D97706' },
+    { lbl: 'Proposal', stage: 'Proposal Sent', col: '#4F46E5' },
+    { lbl: 'Onboarding', stage: 'Onboarding', col: '#059669' },
+    { lbl: 'Won ✅', stage: 'Onboarded / Won', col: '#065F46' },
+    { lbl: 'Lost', stage: 'Lost', col: '#DC2626' },
+    { lbl: t('conversion_rate'), stage: '__conv__', col: '#7C3AED' },
+  ]
   const [leads, setLeads] = useState<SalesLead[]>([])
   const [proposals, setProposals] = useState<SalesProposal[]>([])
   const [loading, setLoading] = useState(true)

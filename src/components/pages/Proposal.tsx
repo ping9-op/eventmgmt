@@ -235,13 +235,13 @@ export default function Proposal() {
       <div className="card" style={{ marginBottom: 20, border: '1.5px dashed var(--border2)', background: '#FDFBFB' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: showUpload ? 12 : 0 }}>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700 }}>📤 Proposal 파일 업로드</div>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>{t('prop_upload_title')}</div>
             <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 3 }}>
-              기존에 작성된 Proposal 문서(PDF, Word, 이미지)를 업로드하면 AI가 내용을 자동으로 분석해 등록합니다.
+              {t('prop_upload_desc')}
             </div>
           </div>
           <button className="btn btn-purple btn-sm" onClick={() => setShowUpload(v => !v)}>
-            {showUpload ? '✕ 닫기' : '📁 파일 선택하여 업로드'}
+            {showUpload ? `✕ ${t('close')}` : t('prop_upload_btn')}
           </button>
         </div>
         {showUpload && (
@@ -283,9 +283,9 @@ export default function Proposal() {
             if (e.target.value === '__new__') { setIsNewExh(true); setExhId('') }
             else { setIsNewExh(false); setExhId(e.target.value) }
           }}>
-            <option value="">-- 박람회를 선택하세요 --</option>
+            <option value="">{t('exh_select_placeholder')}</option>
             {exhibitions.map(e => <option key={e.id} value={e.id}>{e.key}: {e.name}</option>)}
-            <option value="__new__">+ 새 박람회 추가</option>
+            <option value="__new__">{t('add_new_exh')}</option>
           </select>
           {/* 새 박람회 입력 영역 */}
           {isNewExh && (
@@ -581,7 +581,7 @@ export default function Proposal() {
           <div className="sec-hdr" style={{ margin: 0 }}>
             <div className="bar" />
             <span className="txt">{t('saved_proposals')}</span>
-            <span className="sub">{t('total_items')} {savedList.length}개 &nbsp;·&nbsp; 클릭하여 편집</span>
+            <span className="sub">{t('total_items')} {savedList.length} &nbsp;·&nbsp; {t('click_to_edit')}</span>
           </div>
           {totalPages > 1 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -610,7 +610,7 @@ export default function Proposal() {
               <div className="pli-color" style={{ background: p.color }} />
               <div className="pli-body">
                 <div className="pli-name">{p.name} {p.year}</div>
-                <div className="pli-meta">{p.year} &nbsp;·&nbsp; {formatEventDate(p.date, p.year)} &nbsp;·&nbsp; 총 {krw(p.total)}</div>
+                <div className="pli-meta">{p.year} &nbsp;·&nbsp; {formatEventDate(p.date, p.year)} &nbsp;·&nbsp; {t('total')} {krw(p.total)}</div>
               </div>
               <div className="pli-actions">
                 <button className="btn btn-outline btn-sm" onClick={() => loadFromSaved(p)}>✏️ {t('edit')}</button>

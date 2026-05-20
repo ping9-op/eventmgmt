@@ -140,7 +140,7 @@ export default function Schedule() {
           <div className="txt">{t('sched_title')}</div>
           <div className="sub">{t('sched_sub')}</div>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={openNew}>+ 일정 추가</button>
+        <button className="btn btn-primary btn-sm" onClick={openNew}>{t('add_schedule')}</button>
       </div>
 
       {Object.entries(yearGroups).sort((a, b) => Number(b[0]) - Number(a[0])).map(([year, yEntries]) => {
@@ -152,9 +152,9 @@ export default function Schedule() {
             <div className="yr-header">
               <div className="yr-num">{year}</div>
               <span className="badge" style={{ background: doneCount === yEntries.length ? '#7B8AA0' : 'var(--accent)', fontSize: 12 }}>
-                {doneCount === yEntries.length ? t('badge_all_done') : `${t('badge_scheduled')} ${schedCount}개`}
+                {doneCount === yEntries.length ? t('badge_all_done') : `${schedCount}${t('unit_scheduled')}`}
               </span>
-              <div className="yr-meta">{yEntries.length}개 박람회 &nbsp;·&nbsp; {krw(yearTotal)}</div>
+              <div className="yr-meta">{yEntries.length}{t('unit_exh')} &nbsp;·&nbsp; {krw(yearTotal)}</div>
             </div>
             <table className="rank-table">
               <thead>

@@ -11,10 +11,21 @@ interface LangContextType {
 const LangContext = createContext<LangContextType | null>(null)
 
 export function LangProvider({ children }: { children: ReactNode }) {
-  const [lang, setLang] = useState<Lang>('ko')
+  const [lang, setLangState] = useState<Lang>(() => {
+    const saved = localStorage.getItem('gme_lang')
+    return (saved === 'en' || saved === 'ko') ? saved as Lang : 'ko'
+  })
+
+  function setLang(l: Lang) {
+    localStorage.setItem('gme_lang', l)
+    setLangState(l)
+  }
 
   function t(key: string): string {
-    return translations[lang][key] || translations['ko'][key] || key
+    const val = translations[lang][key]
+    if (val !== undefined) return val
+    const fallback = translations['ko'][key]
+    return fallback !== undefined ? fallback : key
   }
 
   return (

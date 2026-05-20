@@ -204,7 +204,7 @@ export default function SalesSettings() {
       <div className="sec-hdr">
         <div className="bar" />
         <div className="txt">{t('s_settings_title')}</div>
-        <div className="sub">Sales 모듈 마스터 데이터 관리 · 변경사항은 자동 저장됩니다</div>
+        <div className="sub">{t('s_settings_sub')}</div>
       </div>
 
       {/* 편집 가능 설정 */}

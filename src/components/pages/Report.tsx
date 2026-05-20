@@ -282,7 +282,7 @@ export default function Report() {
             </div>
 
             {/* Section 3: Cost */}
-            <SectionHeader num={3} title="Cost — 예산 vs 실제 지출" enabled={r.sections_enabled?.['3'] !== false} onToggle={v => updateField('sections_enabled', { ...r.sections_enabled, '3': v })} />
+            <SectionHeader num={3} title={t('cost_vs_budget')} enabled={r.sections_enabled?.['3'] !== false} onToggle={v => updateField('sections_enabled', { ...r.sections_enabled, '3': v })} />
 
             {/* Actual costs */}
             <table className="actual-table" style={{ marginBottom: 6 }}>
@@ -368,12 +368,12 @@ export default function Report() {
             <SectionHeader num={5} title="Registration Results" enabled={r.sections_enabled?.['5'] !== false} onToggle={v => updateField('sections_enabled', { ...r.sections_enabled, '5': v })} />
             <div className="perf-grid" style={{ marginBottom: 12 }}>
               {([
-                { lbl: 'Remittance 등록', field: 'reg_remittance', color: 'var(--accent)' },
-                { lbl: 'Premium Card 발급', field: 'reg_card', color: '#7B2D8B' },
-                { lbl: 'BIZ Merchant 등록', field: 'reg_biz', color: 'var(--green)' },
-                { lbl: 'Onboard 완료', field: 'reg_onboard', color: 'var(--amber)' },
-                { lbl: '방문객 수', field: 'visitors', color: '#3A5FA0' },
-                { lbl: '신규 머천트', field: 'new_merchants', color: '#C47D1A' },
+                { lbl: t('reg_remittance'), field: 'reg_remittance', color: 'var(--accent)' },
+                { lbl: t('reg_card'), field: 'reg_card', color: '#7B2D8B' },
+                { lbl: t('reg_biz'), field: 'reg_biz', color: 'var(--green)' },
+                { lbl: t('reg_onboard'), field: 'reg_onboard', color: 'var(--amber)' },
+                { lbl: t('visitors'), field: 'visitors', color: '#3A5FA0' },
+                { lbl: t('new_merchants_lbl'), field: 'new_merchants', color: '#C47D1A' },
               ] as { lbl: string; field: keyof Result; color: string }[]).map(m => (
                 <div key={m.field} className="perf-card">
                   <div className="pl">{m.lbl}</div>
@@ -442,17 +442,17 @@ export default function Report() {
 
             {/* Bullet sections */}
             {([
-              [6, 'Shortcomings', 'shortcomings', '미흡한 점'],
-              [7, 'Improvements', 'improvements', '개선 사항'],
-              [8, 'Recommendations & Follow-up', 'recommendations', '제언'],
-              [9, 'Request', 'requests', '요청 사항'],
-            ] as [number, string, 'shortcomings' | 'improvements' | 'recommendations' | 'requests', string][]).map(([num, title, field, label]) => (
+              [6, t('shortcomings'), 'shortcomings'],
+              [7, t('improvements'), 'improvements'],
+              [8, t('recommendations'), 'recommendations'],
+              [9, t('requests'), 'requests'],
+            ] as [number, string, 'shortcomings' | 'improvements' | 'recommendations' | 'requests'][]).map(([num, title, field]) => (
               <div key={field}>
                 <SectionHeader num={num} title={title} enabled={r.sections_enabled?.[String(num)] !== false} onToggle={v => updateField('sections_enabled', { ...r.sections_enabled, [String(num)]: v })} />
                 <div className="card" style={{ marginBottom: 16 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <h4 style={{ fontSize: 15, fontWeight: 700 }}>{label}</h4>
-                    <button className="btn btn-muted btn-sm" onClick={() => addBullet(field)}>+ 추가</button>
+                    <h4 style={{ fontSize: 15, fontWeight: 700 }}>{title}</h4>
+                    <button className="btn btn-muted btn-sm" onClick={() => addBullet(field)}>{t('add_marketing')}</button>
                   </div>
                   {((r[field] as string[]) || []).map((item, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>

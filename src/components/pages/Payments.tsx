@@ -165,9 +165,9 @@ export default function Payments() {
   function payStatus(pays: Payment[]): { label: string; color: string } {
     const allPaid = pays.every(p => p.deposit_paid && p.final_paid)
     const somePaid = pays.some(p => p.deposit_paid || p.final_paid)
-    if (allPaid) return { label: '✓ 완납', color: '#2E7D51' }
-    if (somePaid) return { label: '일부 완료', color: '#C47D1A' }
-    return { label: '미결제', color: '#D63031' }
+    if (allPaid) return { label: '✓ ' + t('paid_done'), color: '#2E7D51' }
+    if (somePaid) return { label: t('partially_paid'), color: '#C47D1A' }
+    return { label: t('unpaid_label'), color: '#D63031' }
   }
 
   if (loading) return <div className="view"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
@@ -191,7 +191,7 @@ export default function Payments() {
                 <div style={{ fontWeight: 700 }}>{exhNameFromKey(k)}</div>
                 <div className="sub" style={{ marginTop: 4 }}>
                   <span style={{ color: selected === k ? '#FFCCCC' : st.color, fontSize: 11, fontWeight: 600 }}>{st.label}</span>
-                  {' · '}{pays.length}개 항목
+                  {' · '}{pays.length} {t('item_col')}
                 </div>
               </div>
             )
@@ -203,14 +203,14 @@ export default function Payments() {
           <div style={{ overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <div style={{ fontSize: 16, fontWeight: 700 }}>
-                {exhNameFromKey(selected)} 결제 일정
+                {exhNameFromKey(selected)} {t('payment_schedule_lbl')}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn btn-primary btn-sm" onClick={openAddModal}>
                   {t('add_pay_item')}
                 </button>
                 <button className="btn btn-purple btn-sm" onClick={() => setShowInvoice(v => !v)}>
-                  📄 인보이스 업로드
+                  {t('invoice_upload')}
                 </button>
               </div>
             </div>
@@ -351,7 +351,7 @@ export default function Payments() {
                       type="number"
                       value={addForm.finalAmt}
                       onChange={e => setAddForm(f => ({ ...f, finalAmt: e.target.value }))}
-                      placeholder="총액 - 선금으로 자동 계산"
+                      placeholder={t('total') + ' - ' + t('deposit_pay')}
                       style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, boxSizing: 'border-box' }}
                     />
                   </div>
@@ -414,7 +414,7 @@ function PayCard({ pay, color, isSaving, onToggle, onSaveCurrency, onSaveAmounts
           <div style={{ width: 5, height: 22, background: costColor(pay.item), borderRadius: 3, flexShrink: 0 }} />
           <span style={{ fontWeight: 700, fontSize: 15, whiteSpace: 'nowrap' }}>{pay.item}</span>
           <span style={{ fontSize: 13, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-            총액: <strong style={{ color: 'var(--accent)' }}>
+            {t('total')}: <strong style={{ color: 'var(--accent)' }}>
               {(CUR_SYM[pay.currency] || pay.currency)}{pay.total.toLocaleString()}
             </strong>
           </span>

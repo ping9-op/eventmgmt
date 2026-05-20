@@ -107,7 +107,7 @@ export default function SalesDashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20, marginBottom: 28 }}>
         {/* Funnel Stage Bar */}
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px' }}>
-          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 16 }}>Funnel 단계별 현황</div>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 16 }}>{t('funnel_stage_status')}</div>
           {STAGE_ORDER.map(s => {
             const c = STAGE_COLORS[s] || { bg: '#6B7280' }
             const cnt = byStage(s)

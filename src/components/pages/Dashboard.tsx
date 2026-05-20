@@ -8,9 +8,9 @@ import { useLang } from '../../contexts/LangContext'
 
 const CUR_SYM: Record<string, string> = { KRW: '₩', JPY: '¥', USD: '$', EUR: '€', SGD: 'S$' }
 
-function fmtCur(amt: number, cur: string): string {
+function fmtCur(amt: number, cur: string, lang: string): string {
   const sym = CUR_SYM[cur] || cur
-  if (cur === 'KRW') return sym + Math.round(amt / 10000).toLocaleString() + '만'
+  if (cur === 'KRW' && lang === 'ko') return sym + Math.round(amt / 10000).toLocaleString() + '만'
   return sym + Math.round(amt).toLocaleString()
 }
 
@@ -26,7 +26,7 @@ interface UpcomingItem {
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const { t } = useLang()
+  const { t, lang } = useLang()
   const [entries, setEntries] = useState<ExhEntry[]>([])
   const [payments, setPayments] = useState<Record<string, Payment[]>>({})
   const [leads, setLeads] = useState<SalesLead[]>([])
@@ -153,7 +153,7 @@ export default function Dashboard() {
   const recentExhBudgetStr = (e: ExhEntry) => {
     const bc: Record<string, number> = {}
     for (const b of e.budget) { const c = (b as any).currency || 'KRW'; bc[c] = (bc[c] || 0) + b.curr }
-    return Object.entries(bc).sort(([a], [b]) => a === 'KRW' ? -1 : 1).map(([c, v]) => fmtCur(v, c)).join(' + ')
+    return Object.entries(bc).sort(([a], [b]) => a === 'KRW' ? -1 : 1).map(([c, v]) => fmtCur(v, c, lang)).join(' + ')
   }
 
   return (
@@ -187,7 +187,7 @@ export default function Dashboard() {
                   {budgetEntries.map(([cur, amt]) => (
                     <span key={cur} style={{ display: 'inline-block', marginRight: 4, whiteSpace: 'nowrap' }}>
                       <span style={{ fontSize: 10, color: 'var(--muted)' }}>{cur}</span>&nbsp;
-                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)' }}>{fmtCur(amt, cur)}</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)' }}>{fmtCur(amt, cur, lang)}</span>
                     </span>
                   ))}
                 </div>

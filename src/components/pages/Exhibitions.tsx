@@ -193,15 +193,15 @@ export default function Exhibitions() {
           <div className="sub">{t('exh_sub')}</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowAddModal(true)}>+ 과거 Proposal 등록</button>
-          <button className="btn btn-outline btn-sm" onClick={() => { setLoading(true); load() }}>🔄 새로고침</button>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowAddModal(true)}>{t('add_past')}</button>
+          <button className="btn btn-outline btn-sm" onClick={() => { setLoading(true); load() }}>{t('refresh')}</button>
         </div>
       </div>
 
       {data.length === 0 && !loading && (
         <div style={{ textAlign: 'center', color: 'var(--muted)', padding: 60, fontSize: 14 }}>
-          등록된 박람회가 없습니다.<br />
-          <button className="btn btn-primary btn-sm" style={{ marginTop: 16 }} onClick={() => setShowAddModal(true)}>+ 과거 Proposal 등록</button>
+          {t('no_items')}<br />
+          <button className="btn btn-primary btn-sm" style={{ marginTop: 16 }} onClick={() => setShowAddModal(true)}>{t('add_past')}</button>
         </div>
       )}
 
@@ -231,7 +231,7 @@ export default function Exhibitions() {
                     </span>
                     <button onClick={() => setDeleteConfirm(exh.id)}
                       style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 5, color: 'var(--muted)', cursor: 'pointer', fontSize: 11, padding: '2px 8px' }}>
-                      🗑 삭제
+                      {t('btn_delete')}
                     </button>
                   </div>
                 </div>
