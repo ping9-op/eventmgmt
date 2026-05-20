@@ -97,7 +97,7 @@ export default function Dashboard() {
       const eventDate = new Date(yr, months[m[1]], day)
       const diff = Math.round((eventDate.getTime() - today.getTime()) / 86400000)
       if (diff >= -7 && diff <= 60) {
-        items.push({ days: diff, kind: '박람회', name: e.name + ' ' + e.year, date: formatEventDate(e.date, e.year), color: exhColor(e.name), detail: e.venue, icon: '📅', path: '/expo/schedule' })
+        items.push({ days: diff, kind: 'expo', name: e.name + ' ' + e.year, date: formatEventDate(e.date, e.year), color: exhColor(e.name), detail: e.venue, icon: '📅', path: '/expo/schedule' })
       }
     }
     for (const [dbKey, pays] of Object.entries(payments)) {
@@ -106,8 +106,8 @@ export default function Dashboard() {
       const name = (exhEntry?.name || k) + ' ' + yr
       for (const p of pays) {
         for (const [type, due, amount, paid] of [
-          ['선금', p.deposit_due, p.deposit_amount, p.deposit_paid] as [string, string | null, number, boolean],
-          ['잔금', p.final_due, p.final_amount, p.final_paid] as [string, string | null, number, boolean],
+          ['deposit', p.deposit_due, p.deposit_amount, p.deposit_paid] as [string, string | null, number, boolean],
+          ['final', p.final_due, p.final_amount, p.final_paid] as [string, string | null, number, boolean],
         ]) {
           if (paid || !due) continue
           const dueDate = new Date(due)
@@ -135,7 +135,7 @@ export default function Dashboard() {
   }
   const budgetEntries = Object.entries(budgetByCur).sort(([a], [b]) => a === 'KRW' ? -1 : b === 'KRW' ? 1 : a.localeCompare(b))
   const recentExh = [...entries].sort((a, b) => b.year - a.year).slice(0, 4)
-  const nextExpo = upcoming.find(u => u.kind === '박람회')
+  const nextExpo = upcoming.find(u => u.kind === 'expo')
 
   // Sales stats
   const total = leads.length
@@ -161,7 +161,7 @@ export default function Dashboard() {
       <div className="sec-hdr">
         <div className="bar" />
         <div className="txt">{t('dashboard')}</div>
-        <div className="sub">박람회 · Sales 통합 현황</div>
+        <div className="sub">{t('dashboard_sub')}</div>
       </div>
 
       {/* TOP ROW */}
@@ -171,18 +171,18 @@ export default function Dashboard() {
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 14, overflow: 'hidden' }}>
           <div style={{ background: 'var(--accent)', padding: '13px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 16 }}>🏛</span>
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'white' }}>박람회 현황</span>
-            <button onClick={() => navigate('/expo/overview')} style={{ marginLeft: 'auto', background: 'rgba(255,255,255,.2)', border: 'none', color: 'white', padding: '4px 12px', borderRadius: 6, fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>상세 보기 →</button>
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'white' }}>{t('exh_status_card')}</span>
+            <button onClick={() => navigate('/expo/overview')} style={{ marginLeft: 'auto', background: 'rgba(255,255,255,.2)', border: 'none', color: 'white', padding: '4px 12px', borderRadius: 6, fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>{t('view_detail')}</button>
           </div>
           <div style={{ padding: '14px 20px' }}>
             {/* 요약 3칸 */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10, marginBottom: 14 }}>
               <div style={{ textAlign: 'center', padding: '10px 6px', background: '#F9F5F5', borderRadius: 10 }}>
-                <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 3 }}>총 참가 이력</div>
+                <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 3 }}>{t('total_hist_label')}</div>
                 <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--accent)' }}>{exhCount}</div>
               </div>
               <div style={{ textAlign: 'center', padding: '10px 6px', background: '#F9F5F5', borderRadius: 10 }}>
-                <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 4 }}>총 승인 예산</div>
+                <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 4 }}>{t('budget_lbl')}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 4 }}>
                   {budgetEntries.map(([cur, amt]) => (
                     <span key={cur} style={{ display: 'inline-block', marginRight: 4, whiteSpace: 'nowrap' }}>
@@ -196,13 +196,13 @@ export default function Dashboard() {
             {/* 다음 박람회 */}
             {nextExpo && (
               <div style={{ background: '#FFF8F0', border: '1px solid #FDE68A', borderRadius: 8, padding: '11px 14px', cursor: 'pointer', marginBottom: 12 }} onClick={() => navigate('/expo/schedule')}>
-                <div style={{ fontSize: 10, color: '#D97706', fontWeight: 600, marginBottom: 3 }}>📅 다음 박람회 일정</div>
+                <div style={{ fontSize: 10, color: '#D97706', fontWeight: 600, marginBottom: 3 }}>{t('next_expo_label')}</div>
                 <div style={{ fontSize: 13, fontWeight: 700 }}>{nextExpo.name}</div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{nextExpo.date}{nextExpo.detail ? ' · ' + nextExpo.detail : ''}</div>
               </div>
             )}
             {/* 최근 박람회 */}
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>최근 참가 박람회</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>{t('recent_exh')}</div>
             {recentExh.map((e, i) => (
               <div key={i} onClick={() => navigate('/expo/overview')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '0.5px solid var(--border)', cursor: 'pointer' }}
                 onMouseOver={ev => (ev.currentTarget as HTMLDivElement).style.opacity = '.7'}
@@ -221,16 +221,16 @@ export default function Dashboard() {
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 14, overflow: 'hidden' }}>
           <div style={{ background: '#1E3A5F', padding: '13px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 16 }}>💼</span>
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'white' }}>Sales 현황</span>
-            <button onClick={() => navigate('/sales/dashboard')} style={{ marginLeft: 'auto', background: 'rgba(255,255,255,.2)', border: 'none', color: 'white', padding: '4px 12px', borderRadius: 6, fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>상세 보기 →</button>
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'white' }}>{t('sales_status_card')}</span>
+            <button onClick={() => navigate('/sales/dashboard')} style={{ marginLeft: 'auto', background: 'rgba(255,255,255,.2)', border: 'none', color: 'white', padding: '4px 12px', borderRadius: 6, fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>{t('view_detail')}</button>
           </div>
           <div style={{ padding: '14px 20px' }}>
             {/* KPI 3칸 */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 14 }}>
               {[
-                { lbl: '전체 리드', val: total, col: '#1E3A5F', fn: () => navigate('/sales/funnel', { state: { filter: null, view: 'table' } }) },
-                { lbl: '진행 중', val: active, col: '#4F46E5', fn: () => navigate('/sales/funnel', { state: { filter: '__active__', view: 'table' } }) },
-                { lbl: '전환율', val: convRate + '%', col: '#059669', fn: null as (() => void) | null },
+                { lbl: t('all_leads_lbl'), val: total, col: '#1E3A5F', fn: () => navigate('/sales/funnel', { state: { filter: null, view: 'table' } }) },
+                { lbl: t('in_progress_lbl'), val: active, col: '#4F46E5', fn: () => navigate('/sales/funnel', { state: { filter: '__active__', view: 'table' } }) },
+                { lbl: t('s_conv'), val: convRate + '%', col: '#059669', fn: null as (() => void) | null },
               ].map((k, i) => (
                 <div key={i} onClick={k.fn || undefined}
                   style={{ textAlign: 'center', padding: '10px 6px', background: '#F5F8FF', borderRadius: 10, cursor: k.fn ? 'pointer' : 'default' }}>
@@ -242,17 +242,17 @@ export default function Dashboard() {
             {/* 알림 */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
               <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 12px', cursor: 'pointer' }} onClick={() => navigate('/sales/followup', { state: { filter: 'overdue' } })}>
-                <div style={{ fontSize: 10, color: '#DC2626', fontWeight: 600 }}>🔴 기한 초과</div>
+                <div style={{ fontSize: 10, color: '#DC2626', fontWeight: 600 }}>{t('overdue_short')}</div>
                 <div style={{ fontSize: 22, fontWeight: 800, color: '#DC2626' }}>{overdue}</div>
               </div>
               <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '10px 12px', cursor: 'pointer' }} onClick={() => navigate('/sales/followup', { state: { filter: 'today' } })}>
-                <div style={{ fontSize: 10, color: '#D97706', fontWeight: 600 }}>📅 오늘 Tasks</div>
+                <div style={{ fontSize: 10, color: '#D97706', fontWeight: 600 }}>{t('today_tasks_short')}</div>
                 <div style={{ fontSize: 22, fontWeight: 800, color: '#D97706' }}>{todayTasks}</div>
               </div>
             </div>
             {/* Top Leads */}
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>🏆 Top Leads</div>
-            {topLeads.length === 0 && <div style={{ fontSize: 13, color: 'var(--muted)' }}>리드 없음</div>}
+            {topLeads.length === 0 && <div style={{ fontSize: 13, color: 'var(--muted)' }}>{t('no_leads_short')}</div>}
             {topLeads.map((l, i) => (
               <div key={l.id} onClick={() => setSelectedLeadId(l.id)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '0.5px solid var(--border)', cursor: 'pointer' }}
                 onMouseOver={ev => (ev.currentTarget as HTMLDivElement).style.opacity = '.7'}
@@ -283,7 +283,7 @@ export default function Dashboard() {
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 14, padding: '18px 22px' }}>
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>📅 {t('upcoming')}</span>
-            <button onClick={() => navigate('/expo/schedule')} style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }}>전체 보기</button>
+            <button onClick={() => navigate('/expo/schedule')} style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }}>{t('view_all')}</button>
           </div>
           {upcoming.length === 0 ? (
             <div style={{ textAlign: 'center', color: 'var(--muted)', padding: 30, fontSize: 13 }}>{t('no_upcoming')}</div>
@@ -305,7 +305,11 @@ export default function Dashboard() {
                   <div style={{ fontSize: 13, fontWeight: 600 }}>{ev.name}</div>
                   <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{ev.date}</div>
                   {ev.detail && <div style={{ fontSize: 11, color: 'var(--muted)' }}>{ev.detail}</div>}
-                  {ev.kind !== '박람회' && <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)' }}>{ev.kind}</div>}
+                  {ev.kind !== 'expo' && (
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)' }}>
+                      {ev.kind === 'deposit' ? t('deposit_pay') : ev.kind === 'final' ? t('final_pay_short') : ev.kind}
+                    </div>
+                  )}
                 </div>
               </div>
             )
@@ -315,8 +319,8 @@ export default function Dashboard() {
         {/* Sales Funnel 현황 */}
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 14, padding: '18px 22px' }}>
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>🔀 Sales Funnel 현황</span>
-            <button onClick={() => navigate('/sales/funnel')} style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }}>전체 보기</button>
+            <span>{t('sales_funnel_card')}</span>
+            <button onClick={() => navigate('/sales/funnel')} style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }}>{t('view_all')}</button>
           </div>
           {STAGE_ORDER.map(s => {
             const c = STAGE_COLORS[s] || { bg: '#6B7280' }
