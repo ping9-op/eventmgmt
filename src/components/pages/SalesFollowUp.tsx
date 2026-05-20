@@ -56,11 +56,13 @@ export default function SalesFollowUp() {
       supabase.from('sales_leads').select('*'),
     ])
     const rawTasks = (taskData || []) as SalesTask[]
-    // Mark overdue
-    const processedTasks = rawTasks.map(t => ({
-      ...t,
-      status: t.status !== 'Done' && t.due_date < today ? 'Overdue' : t.status,
-    }))
+    // Mark overdue: due_date < today (오늘 기한인 태스크는 overdue 아님)
+    const processedTasks = rawTasks.map(t => {
+      if (t.status === 'Done') return t
+      if (t.due_date < today) return { ...t, status: 'Overdue' }
+      if (t.status === 'Overdue') return { ...t, status: 'Pending' }  // DB 오류 보정
+      return t
+    })
     setTasks(processedTasks)
     setLeads((leadData || []) as SalesLead[])
     setLoading(false)
