@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../contexts/ToastContext'
+import { useLang } from '../contexts/LangContext'
 
 const CURRENCIES = ['KRW', 'JPY', 'USD', 'EUR', 'SGD']
 const COST_ITEMS = ['Booth Fee', 'Design', 'Gift', 'Part Timer', 'Flight', 'Accommodation', 'Meal', 'Item Delivery']
@@ -22,6 +23,7 @@ interface Props {
 
 export default function ProposalEditModal({ propId, exhName, year, initialDate, initialVenue, initialObjective, initialBudget, onClose, onSaved, onDeleted }: Props) {
   const { showToast } = useToast()
+  const { t } = useLang()
   const [date, setDate] = useState(initialDate)
   const [venue, setVenue] = useState(initialVenue)
   const [obj, setObj] = useState(initialObjective)
@@ -41,14 +43,14 @@ export default function ProposalEditModal({ propId, exhName, year, initialDate, 
       budget: budget as unknown as never,
     }).eq('id', propId)
     setSaving(false)
-    showToast('저장되었습니다.')
+    showToast(t('saved_ok'))
     onSaved()
   }
 
   async function deleteProp() {
-    if (!confirm(`${exhName} ${year} Proposal을 삭제하시겠습니까?`)) return
+    if (!confirm(`${exhName} ${year} Proposal${t('confirm_delete')}`)) return
     await supabase.from('proposals').delete().eq('id', propId)
-    showToast('삭제되었습니다.')
+    showToast(t('saved_ok'))
     onDeleted()
   }
 
@@ -56,21 +58,21 @@ export default function ProposalEditModal({ propId, exhName, year, initialDate, 
     <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="modal" style={{ width: 660 }}>
         <div className="modal-hdr">
-          <h3>{exhName} {year} Proposal 편집</h3>
+          <h3>{exhName} {year} {t('edit_proposal_title')}</h3>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
 
         <div className="form-row cols2">
-          <div><label>행사 기간</label><input value={date} onChange={e => setDate(e.target.value)} placeholder="2026 Jun 23-25" /></div>
-          <div><label>장소</label><input value={venue} onChange={e => setVenue(e.target.value)} placeholder="COEX Hall B" /></div>
+          <div><label>{t('event_period')}</label><input value={date} onChange={e => setDate(e.target.value)} placeholder="2026 Jun 23-25" /></div>
+          <div><label>{t('venue')}</label><input value={venue} onChange={e => setVenue(e.target.value)} placeholder="COEX Hall B" /></div>
         </div>
-        <label>참가 목적</label>
+        <label>{t('objective')}</label>
         <textarea value={obj} onChange={e => setObj(e.target.value)} rows={2} placeholder="To promote GME BIZ..." />
 
-        <label style={{ marginTop: 16 }}>예산 항목</label>
+        <label style={{ marginTop: 16 }}>{t('budget_items')}</label>
         <table className="budget-table" style={{ marginBottom: 8 }}>
           <thead>
-            <tr><th>항목</th><th>금액</th><th>통화</th><th>비고</th><th></th></tr>
+            <tr><th>{t('item_col')}</th><th>{t('amount_col')}</th><th>{t('currency_col')}</th><th>{t('note_col')}</th><th></th></tr>
           </thead>
           <tbody>
             {budget.map((b, i) => (
@@ -97,20 +99,20 @@ export default function ProposalEditModal({ propId, exhName, year, initialDate, 
           </tbody>
         </table>
         <button className="btn btn-muted btn-sm" onClick={() => setBudget(p => [...p, { item: '', curr: 0, prev: 0, currency: 'KRW', note: '' }])}>
-          + 항목 추가
+          {t('add_item')}
         </button>
 
         <div style={{ marginTop: 16, padding: '12px 14px', background: '#FFF0F0', borderRadius: 8, border: '1px solid #F5C6C6' }}>
-          <div style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 8 }}>⚠ 이 Proposal 이력을 삭제합니다.</div>
+          <div style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 8 }}>⚠ {t('delete_proposal_warn')}</div>
           <button className="btn btn-sm" style={{ background: '#D63031', color: 'white', border: 'none' }} onClick={deleteProp}>
-            🗑 이 Proposal 삭제
+            {t('delete_proposal_btn')}
           </button>
         </div>
 
         <div className="modal-footer">
-          <button className="btn btn-muted" onClick={onClose}>취소</button>
+          <button className="btn btn-muted" onClick={onClose}>{t('cancel')}</button>
           <button className="btn btn-primary" onClick={save} disabled={saving}>
-            {saving ? '저장 중...' : '저장'}
+            {saving ? t('saving') : t('save')}
           </button>
         </div>
       </div>
