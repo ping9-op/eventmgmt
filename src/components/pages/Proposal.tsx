@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { krw, exhColor, formatEventDate } from '../../lib/utils'
 import type { Exhibition, Proposal as ProposalType, BudgetItem, ProductTarget } from '../../types/database'
+import { useLang } from '../../contexts/LangContext'
 
 const CURRENCIES = ['KRW', 'JPY', 'USD', 'EUR', 'SGD']
 const COST_ITEMS = ['Booth Fee', 'Design', 'Gift', 'Part Timer', 'Flight', 'Accommodation', 'Meal', 'Item Delivery']
@@ -47,6 +48,7 @@ interface SavedProposal {
 export default function Proposal() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { t } = useLang()
   const initExhId = (location.state as any)?.exhId || null
 
   const [step, setStep] = useState(1)
@@ -216,7 +218,7 @@ export default function Proposal() {
   const totalBudget = budget.reduce((s, b) => s + (b.curr || 0), 0)
   const changedItems = budget.filter(r => (r.prev && r.curr !== r.prev) || (!r.prev && r.curr > 0))
 
-  const STEPS = ['기본 정보', '제품 & 효과', '예산', 'AI 생성 & 저장']
+  const STEPS = [t('step1'), t('step2'), t('step3'), t('step4')]
 
   const PER_PAGE = 10
   const totalPages = Math.ceil(savedList.length / PER_PAGE)
@@ -226,7 +228,7 @@ export default function Proposal() {
     <div className="view">
       <div className="sec-hdr">
         <div className="bar" />
-        <div className="txt">새 Proposal 작성</div>
+        <div className="txt">{t('create_title')}</div>
       </div>
 
       {/* 파일 업로드 섹션 */}
@@ -259,7 +261,7 @@ export default function Proposal() {
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
         <div style={{ flex: 1, borderTop: '1px solid var(--border)' }} />
-        <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>또는 직접 입력</div>
+        <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>{t('or_direct')}</div>
         <div style={{ flex: 1, borderTop: '1px solid var(--border)' }} />
       </div>
 
@@ -276,7 +278,7 @@ export default function Proposal() {
       {/* Step 1: 기본 정보 */}
       {step === 1 && (
         <div className="card">
-          <label style={{ marginTop: 0 }}>박람회 선택</label>
+          <label style={{ marginTop: 0 }}>{t('exh_select')}</label>
           <select value={isNewExh ? '__new__' : exhId} onChange={e => {
             if (e.target.value === '__new__') { setIsNewExh(true); setExhId('') }
             else { setIsNewExh(false); setExhId(e.target.value) }
@@ -330,23 +332,23 @@ export default function Proposal() {
               />
             </div>
             <div>
-              <label style={{ marginTop: 0 }}>연도</label>
+              <label style={{ marginTop: 0 }}>{t('year_label')}</label>
               <input type="number" value={year} onChange={e => setYear(parseInt(e.target.value) || year)} />
             </div>
           </div>
           <div className="form-row cols2" style={{ marginTop: 14 }}>
             <div>
-              <label style={{ marginTop: 0 }}>작성자</label>
+              <label style={{ marginTop: 0 }}>{t('author_label')}</label>
               <input value={author} onChange={e => setAuthor(e.target.value)} placeholder="Andrew" />
             </div>
             <div>
-              <label style={{ marginTop: 0 }}>작성일</label>
+              <label style={{ marginTop: 0 }}>{t('write_date')}</label>
               <input type="date" value={propDate} onChange={e => setPropDate(e.target.value)} />
             </div>
           </div>
           <div className="form-row cols2" style={{ marginTop: 14 }}>
             <div>
-              <label style={{ marginTop: 0 }}>행사 기간</label>
+              <label style={{ marginTop: 0 }}>{t('event_period')}</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input
                   type="date"
@@ -382,15 +384,15 @@ export default function Proposal() {
               )}
             </div>
             <div>
-              <label style={{ marginTop: 0 }}>장소</label>
-              <input value={venue} onChange={e => setVenue(e.target.value)} placeholder="COEX Hall B" />
+              <label style={{ marginTop: 0 }}>{t('venue')}</label>
+              <input value={venue} onChange={e => setVenue(e.target.value)} placeholder={t('venue_placeholder')} />
             </div>
           </div>
-          <label>참가 목적</label>
+          <label>{t('objective')}</label>
           <textarea value={objective} onChange={e => setObjective(e.target.value)} rows={2}
-            placeholder="To promote GME BIZ to potential Korean Merchants..." />
+            placeholder={t('objective_placeholder')} />
           <div style={{ marginTop: 18, textAlign: 'right' }}>
-            <button className="btn btn-primary" onClick={() => { setStep(2); window.scrollTo(0,0) }}>다음 →</button>
+            <button className="btn btn-primary" onClick={() => { setStep(2); window.scrollTo(0,0) }}>{t('next')}</button>
           </div>
         </div>
       )}
@@ -398,12 +400,12 @@ export default function Proposal() {
       {/* Step 2: 제품 & 효과 */}
       {step === 2 && (
         <div className="card">
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>홍보 제품</div>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>{t('product_lbl')}</div>
           <div id="products-area">
             {products.map((p, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <input style={{ flex: 1 }} value={p.product} onChange={e => setProducts(arr => arr.map((x, j) => j === i ? { ...x, product: e.target.value } : x))} placeholder="제품명" />
-                <input style={{ flex: 1 }} value={p.target} onChange={e => setProducts(arr => arr.map((x, j) => j === i ? { ...x, target: e.target.value } : x))} placeholder="타겟" />
+                <input style={{ flex: 1 }} value={p.product} onChange={e => setProducts(arr => arr.map((x, j) => j === i ? { ...x, product: e.target.value } : x))} placeholder={t('product_name')} />
+                <input style={{ flex: 1 }} value={p.target} onChange={e => setProducts(arr => arr.map((x, j) => j === i ? { ...x, target: e.target.value } : x))} placeholder={t('target_lbl')} />
                 <button onClick={() => setProducts(arr => arr.filter((_, j) => j !== i))}
                   style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 4px', flexShrink: 0 }}>✕</button>
               </div>
@@ -411,9 +413,9 @@ export default function Proposal() {
           </div>
           <button className="btn btn-muted btn-sm" style={{ marginBottom: 20 }}
             onClick={() => setProducts(p => [...p, { product: '', target: '' }])}>
-            + 제품 추가
+            {t('add_product')}
           </button>
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>기대 효과</div>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>{t('result_lbl')}</div>
           <div id="results-area">
             {expectedResults.map((r, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -426,11 +428,11 @@ export default function Proposal() {
           </div>
           <button className="btn btn-muted btn-sm" style={{ marginBottom: 20 }}
             onClick={() => setExpectedResults(r => [...r, ''])}>
-            + 효과 추가
+            {t('add_result')}
           </button>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
-            <button className="btn btn-muted" onClick={() => setStep(1)}>← 이전</button>
-            <button className="btn btn-primary" onClick={() => { setStep(3); window.scrollTo(0,0) }}>다음 →</button>
+            <button className="btn btn-muted" onClick={() => setStep(1)}>{t('prev')}</button>
+            <button className="btn btn-primary" onClick={() => { setStep(3); window.scrollTo(0,0) }}>{t('next')}</button>
           </div>
         </div>
       )}
@@ -439,7 +441,7 @@ export default function Proposal() {
       {step === 3 && (
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
-            <div style={{ fontSize: 15, fontWeight: 700 }}>예산 입력</div>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>{t('budget_title')}</div>
             <button className="btn btn-purple btn-sm"
               onClick={() => {
                 setBudget(b => [...b, { item: 'Part Timer', curr: 500000, prev: 0, note: '추가 인력', currency: 'KRW' }])
@@ -450,12 +452,12 @@ export default function Proposal() {
           </div>
           {Object.keys(prevBudgetMap).length > 0 && (
             <div style={{ fontSize: 13, color: 'var(--muted)', background: 'var(--light)', padding: '10px 14px', borderRadius: 8, marginBottom: 14 }}>
-              전년도 데이터를 불러왔습니다. 올해 금액을 수정해 주세요.
+              {t('prev_loaded')}
             </div>
           )}
           <table className="budget-table">
             <thead>
-              <tr><th>항목</th><th>전년도</th><th>올해 금액</th><th>통화</th><th>증감</th><th>비고</th><th></th></tr>
+              <tr><th>{t('item_col')}</th><th>{t('prev_yr')}</th><th>{t('this_yr')}</th><th>{t('currency_col')}</th><th>{t('diff_lbl')}</th><th>{t('note_col')}</th><th></th></tr>
             </thead>
             <tbody>
               {budget.map((b, i) => {
@@ -501,13 +503,13 @@ export default function Proposal() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
             <button className="btn btn-muted btn-sm"
               onClick={() => setBudget(b => [...b, { item: 'Booth Fee', curr: 0, prev: 0, note: '', currency: 'KRW' }])}>
-              + 항목 추가
+              {t('add_item')}
             </button>
-            <strong style={{ fontSize: 15, color: 'var(--accent)' }}>합계: {krw(totalBudget)}</strong>
+            <strong style={{ fontSize: 15, color: 'var(--accent)' }}>{t('budget_total')}: {krw(totalBudget)}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 18 }}>
-            <button className="btn btn-muted" onClick={() => { setStep(2); window.scrollTo(0,0) }}>← 이전</button>
-            <button className="btn btn-primary" onClick={() => { setStep(4); window.scrollTo(0,0) }}>다음 →</button>
+            <button className="btn btn-muted" onClick={() => { setStep(2); window.scrollTo(0,0) }}>{t('prev')}</button>
+            <button className="btn btn-primary" onClick={() => { setStep(4); window.scrollTo(0,0) }}>{t('next')}</button>
           </div>
         </div>
       )}
@@ -515,7 +517,7 @@ export default function Proposal() {
       {/* Step 4: AI 생성 & 저장 */}
       {step === 4 && (
         <div className="card">
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>변동 사유 메모 (AI 참고용)</div>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>{t('memo_title')}</div>
           <div id="memo-area">
             {changedItems.map(r => {
               const dir = r.curr > (r.prev || 0) ? '▲ 증가' : !r.prev ? '신규' : '▼ 감소'
@@ -537,14 +539,14 @@ export default function Proposal() {
           </div>
           <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
             <button className="btn btn-purple" onClick={runAI} disabled={aiLoading}>
-              🤖 AI 변동 사유 생성
+              {t('ai_btn')}
             </button>
-            <button className="btn btn-muted" onClick={() => { setStep(3); window.scrollTo(0,0) }}>← 이전</button>
+            <button className="btn btn-muted" onClick={() => { setStep(3); window.scrollTo(0,0) }}>{t('prev')}</button>
           </div>
           <div className="ai-box" id="ai-output" style={{ whiteSpace: 'pre-wrap' }}>{aiOutput}</div>
           <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
             <button className="btn btn-green" onClick={save} disabled={saving || saved}>
-              📋 {saving ? '저장 중...' : saved ? '✓ 저장 완료' : '이력에 저장'}
+              📋 {saving ? t('saving') : saved ? '✓ ' + t('save') : t('save_history').replace('📋 ', '')}
             </button>
             <button className="btn btn-primary" onClick={() => {
               const exhName = isNewExh ? newExhName : (exhibitions.find(e => e.id === exhId)?.name || '박람회')
@@ -567,7 +569,7 @@ export default function Proposal() {
           </div>
           {saved && (
             <div style={{ background: '#E5F5EC', border: '1px solid #A0D8B0', borderRadius: 8, padding: 14, marginTop: 16, color: '#2E7D51', fontWeight: 700 }}>
-              ✅ 저장 완료! 아래 목록에서 확인하세요.
+              {t('save_complete')}
             </div>
           )}
         </div>
@@ -578,12 +580,12 @@ export default function Proposal() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <div className="sec-hdr" style={{ margin: 0 }}>
             <div className="bar" />
-            <span className="txt">저장된 Proposal 목록</span>
-            <span className="sub">총 {savedList.length}개 &nbsp;·&nbsp; 클릭하여 편집</span>
+            <span className="txt">{t('saved_proposals')}</span>
+            <span className="sub">{t('total_items')} {savedList.length}개 &nbsp;·&nbsp; 클릭하여 편집</span>
           </div>
           {totalPages > 1 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 13, color: 'var(--muted)' }}>{proposalPage + 1} / {totalPages} 페이지</span>
+              <span style={{ fontSize: 13, color: 'var(--muted)' }}>{proposalPage + 1} / {totalPages} {t('page_label')}</span>
               <button onClick={() => setProposalPage(p => Math.max(0, p - 1))} disabled={proposalPage === 0}
                 style={{ width: 32, height: 32, borderRadius: 8, border: '1.5px solid var(--border2)', background: 'white', cursor: 'pointer', fontSize: 15 }}>‹</button>
               <button onClick={() => setProposalPage(p => Math.min(totalPages - 1, p + 1))} disabled={proposalPage === totalPages - 1}
@@ -611,8 +613,8 @@ export default function Proposal() {
                 <div className="pli-meta">{p.year} &nbsp;·&nbsp; {formatEventDate(p.date, p.year)} &nbsp;·&nbsp; 총 {krw(p.total)}</div>
               </div>
               <div className="pli-actions">
-                <button className="btn btn-outline btn-sm" onClick={() => loadFromSaved(p)}>✏️ 편집</button>
-                <button className="btn btn-muted btn-sm" onClick={() => { loadFromSaved(p); setYear(p.year + 1) }}>복사 작성</button>
+                <button className="btn btn-outline btn-sm" onClick={() => loadFromSaved(p)}>✏️ {t('edit')}</button>
+                <button className="btn btn-muted btn-sm" onClick={() => { loadFromSaved(p); setYear(p.year + 1) }}>{t('copy_create')}</button>
               </div>
             </div>
           ))

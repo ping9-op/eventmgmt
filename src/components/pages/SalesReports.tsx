@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { STAGE_ORDER, STAGE_COLORS } from '../../lib/utils'
 import type { SalesLead } from '../../types/database'
+import { useLang } from '../../contexts/LangContext'
 
 export default function SalesReports() {
+  const { t } = useLang()
   const navigate = useNavigate()
   const [leads, setLeads] = useState<SalesLead[]>([])
   const [loading, setLoading] = useState(true)
@@ -40,11 +42,11 @@ export default function SalesReports() {
   lostLeads.forEach(l => { if (l.lost_reason) lostCounts[l.lost_reason] = (lostCounts[l.lost_reason] || 0) + 1 })
 
   const kpiCards = [
-    { lbl: 'Total', val: total, col: 'var(--text)', f: {} as Record<string, string> | null },
+    { lbl: t('total_leads_lbl'), val: total, col: 'var(--text)', f: {} as Record<string, string> | null },
     { lbl: 'Contacted', val: leads.filter(l => l.first_contact_done).length, col: '#D97706', f: { stage: 'Contacted' } },
     { lbl: 'Proposal Sent', val: leads.filter(l => STAGE_ORDER.indexOf(l.current_stage) >= 3).length, col: '#4F46E5', f: { stage: 'Proposal Sent' } },
-    { lbl: 'Onboarded/Won', val: won, col: '#065F46', f: { stage: 'Onboarded / Won' } },
-    { lbl: '전환율', val: conv + '%', col: '#7C3AED', f: null },
+    { lbl: t('won_leads_lbl'), val: won, col: '#065F46', f: { stage: 'Onboarded / Won' } },
+    { lbl: t('conversion_rate'), val: conv + '%', col: '#7C3AED', f: null },
   ]
 
   return (
@@ -52,8 +54,8 @@ export default function SalesReports() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div className="sec-hdr" style={{ margin: 0 }}>
           <div className="bar" />
-          <div className="txt">Sales 리포트</div>
-          <div className="sub">영업 성과 분석 · 클릭하면 해당 리드 목록으로 이동</div>
+          <div className="txt">{t('s_reports_title')}</div>
+          <div className="sub">{t('s_reports_sub')}</div>
         </div>
         <button className="btn btn-outline btn-sm">⬇️ Excel</button>
       </div>
@@ -77,7 +79,7 @@ export default function SalesReports() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
         {/* Funnel 전환율 */}
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px' }}>
-          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>Funnel 전환율</div>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>{t('s_funnel_report')}</div>
           <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
             <tbody>
               {funnelRows.map(r => (
@@ -105,7 +107,7 @@ export default function SalesReports() {
 
         {/* 행사별 성과 */}
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px' }}>
-          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>행사별 성과</div>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>{t('s_event_report')}</div>
           <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
@@ -134,15 +136,18 @@ export default function SalesReports() {
                   </tr>
                 )
               })}
+              {events.length === 0 && (
+                <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>{t('no_report_data')}</td></tr>
+              )}
             </tbody>
           </table>
         </div>
 
         {/* Lost Reason 분석 */}
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px' }}>
-          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>Lost Reason 분석</div>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>{t('s_lost_report')}</div>
           {Object.keys(lostCounts).length === 0
-            ? <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: 20 }}>Lost 리드 없음</div>
+            ? <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: 20 }}>{t('no_report_data')}</div>
             : Object.entries(lostCounts).map(([r, c]) => (
               <div key={r}
                 onClick={() => goToLeads({ stage: 'Lost', lostReason: r })}
@@ -162,7 +167,7 @@ export default function SalesReports() {
         {/* 담당자별 성과 */}
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px' }}>
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>
-            담당자별 성과
+            {t('s_owner_report')}
             <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--muted)', marginLeft: 8 }}>이름 클릭 → 해당 리드 목록</span>
           </div>
           <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
@@ -193,6 +198,9 @@ export default function SalesReports() {
                   </tr>
                 )
               })}
+              {owners.length === 0 && (
+                <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>{t('no_report_data')}</td></tr>
+              )}
             </tbody>
           </table>
         </div>

@@ -6,6 +6,7 @@ import type { SalesTask, SalesLead } from '../../types/database'
 import { loadSalesSettings } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
 import LeadDetailPanel from './LeadDetailPanel'
+import { useLang } from '../../contexts/LangContext'
 
 const TASK_TYPES = ['Email', 'Call', 'SMS', 'Meeting', 'Send Proposal', 'Request Docs', 'Other']
 const PRIORITIES = ['High', 'Medium', 'Low']
@@ -24,6 +25,7 @@ function StatusBadge({ s }: { s: string }) {
 }
 
 export default function SalesFollowUp() {
+  const { t } = useLang()
   const location = useLocation()
   const { showToast } = useToast()
   const settings = loadSalesSettings()
@@ -104,10 +106,10 @@ export default function SalesFollowUp() {
   const doneTodayCnt = tasks.filter(t => t.status === 'Done' && t.completed_at === today).length
 
   const filterCards = [
-    { lbl: '오늘 Tasks', val: todayCnt, col: '#D97706', bg: '#FFFBEB', filter: 'today' as TaskFilter },
-    { lbl: '이번 주', val: weekCnt, col: '#4F46E5', bg: '#EEF2FF', filter: 'week' as TaskFilter },
-    { lbl: '기한 초과 🔴', val: overdueCnt, col: '#DC2626', bg: '#FEF2F2', filter: 'overdue' as TaskFilter },
-    { lbl: '오늘 완료', val: doneTodayCnt, col: '#059669', bg: '#ECFDF5', filter: 'done' as TaskFilter },
+    { lbl: t('s_today'), val: todayCnt, col: '#D97706', bg: '#FFFBEB', filter: 'today' as TaskFilter },
+    { lbl: t('s_this_week'), val: weekCnt, col: '#4F46E5', bg: '#EEF2FF', filter: 'week' as TaskFilter },
+    { lbl: t('s_overdue_card'), val: overdueCnt, col: '#DC2626', bg: '#FEF2F2', filter: 'overdue' as TaskFilter },
+    { lbl: t('s_done_today'), val: doneTodayCnt, col: '#059669', bg: '#ECFDF5', filter: 'done' as TaskFilter },
   ]
 
   let shown = tasks
@@ -126,10 +128,10 @@ export default function SalesFollowUp() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div className="sec-hdr" style={{ margin: 0 }}>
           <div className="bar" />
-          <div className="txt">Follow-up 관리</div>
-          <div className="sub">오늘·이번 주 후속 조치 관리</div>
+          <div className="txt">{t('s_followup_title')}</div>
+          <div className="sub">{t('s_followup_sub')}</div>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={() => setShowAddTask(true)}>+ Task 추가</button>
+        <button className="btn btn-primary btn-sm" onClick={() => setShowAddTask(true)}>{t('add_task_title')}</button>
       </div>
 
       {/* 필터 카드 4개 */}
@@ -184,18 +186,18 @@ export default function SalesFollowUp() {
               </tr>
             </thead>
             <tbody>
-              {shown.sort((a, b) => a.due_date.localeCompare(b.due_date)).map(t => {
-                const lead = leadMap[t.lead_id]
-                const isOv = t.status === 'Overdue'
+              {shown.sort((a, b) => a.due_date.localeCompare(b.due_date)).map(task => {
+                const lead = leadMap[task.lead_id]
+                const isOv = task.status === 'Overdue'
                 const stageBg = STAGE_COLORS[lead?.current_stage || '']?.bg
                 return (
-                  <tr key={t.id} style={{ borderBottom: '0.5px solid var(--border)', background: isOv ? '#FEF2F230' : '' }}
+                  <tr key={task.id} style={{ borderBottom: '0.5px solid var(--border)', background: isOv ? '#FEF2F230' : '' }}
                     onMouseOver={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = '#FDF5F5'))}
                     onMouseOut={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = isOv ? '#FEF2F230' : ''))}>
-                    <td style={{ padding: '9px 10px', textAlign: 'center' }} onClick={() => toggleCheck(t.id)}>
-                      <input type="checkbox" checked={checked.has(t.id)} onChange={() => toggleCheck(t.id)} style={{ width: 15, height: 15, accentColor: 'var(--accent)', cursor: 'pointer' }} />
+                    <td style={{ padding: '9px 10px', textAlign: 'center' }} onClick={() => toggleCheck(task.id)}>
+                      <input type="checkbox" checked={checked.has(task.id)} onChange={() => toggleCheck(task.id)} style={{ width: 15, height: 15, accentColor: 'var(--accent)', cursor: 'pointer' }} />
                     </td>
-                    <td style={{ padding: '9px 14px', fontWeight: 600, color: isOv ? '#DC2626' : 'var(--text)' }}>{t.due_date}</td>
+                    <td style={{ padding: '9px 14px', fontWeight: 600, color: isOv ? '#DC2626' : 'var(--text)' }}>{task.due_date}</td>
                     <td style={{ padding: '9px 14px', fontWeight: 700, color: 'var(--accent)', cursor: 'pointer' }}
                       onClick={() => lead && setSelectedLeadId(lead.id)}>
                       {lead?.company_name || '—'}
@@ -206,16 +208,16 @@ export default function SalesFollowUp() {
                         ? <span style={{ display: 'inline-block', padding: '3px 9px', borderRadius: 99, fontSize: 11, fontWeight: 700, color: 'white', background: stageBg }}>{lead.current_stage}</span>
                         : '—'}
                     </td>
-                    <td style={{ padding: '9px 14px', fontSize: 12 }}>{t.task_type}</td>
-                    <td style={{ padding: '9px 14px', fontSize: 12, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.note || '—'}</td>
-                    <td style={{ padding: '9px 14px' }}>{t.owner}</td>
-                    <td style={{ padding: '9px 14px' }}><PriorityBadge p={t.priority} /></td>
-                    <td style={{ padding: '9px 14px' }}><StatusBadge s={t.status} /></td>
+                    <td style={{ padding: '9px 14px', fontSize: 12 }}>{task.task_type}</td>
+                    <td style={{ padding: '9px 14px', fontSize: 12, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.note || '—'}</td>
+                    <td style={{ padding: '9px 14px' }}>{task.owner}</td>
+                    <td style={{ padding: '9px 14px' }}><PriorityBadge p={task.priority} /></td>
+                    <td style={{ padding: '9px 14px' }}><StatusBadge s={task.status} /></td>
                     <td style={{ padding: '9px 14px' }}>
-                      {t.status !== 'Done' && (
-                        <button onClick={() => markDone(t.id)}
+                      {task.status !== 'Done' && (
+                        <button onClick={() => markDone(task.id)}
                           style={{ padding: '4px 10px', borderRadius: 6, background: '#059669', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
-                          ✓ Done
+                          {t('mark_done')}
                         </button>
                       )}
                     </td>
@@ -223,7 +225,7 @@ export default function SalesFollowUp() {
                 )
               })}
               {shown.length === 0 && (
-                <tr><td colSpan={11} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>Task 없음</td></tr>
+                <tr><td colSpan={11} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>{t('no_tasks')}</td></tr>
               )}
             </tbody>
           </table>
@@ -235,7 +237,7 @@ export default function SalesFollowUp() {
         <div className="modal-bg open">
           <div className="modal" style={{ maxWidth: 520 }}>
             <div className="modal-hdr">
-              <h3>+ Task 추가</h3>
+              <h3>{t('add_task_title')}</h3>
               <button className="modal-close" onClick={() => setShowAddTask(false)}>✕</button>
             </div>
             <label style={{ marginTop: 0 }}>Lead 선택</label>
@@ -245,21 +247,21 @@ export default function SalesFollowUp() {
                 <option key={l.id} value={l.id}>{l.company_name} ({l.contact_person})</option>
               ))}
             </select>
-            <label>Task 제목</label>
+            <label>{t('task_title_lbl')}</label>
             <input value={form.task_title} onChange={e => setForm(f => ({ ...f, task_title: e.target.value }))} />
             <div className="form-row cols3" style={{ marginTop: 14 }}>
               <div>
-                <label style={{ marginTop: 0 }}>유형</label>
+                <label style={{ marginTop: 0 }}>{t('task_type_lbl')}</label>
                 <select value={form.task_type} onChange={e => setForm(f => ({ ...f, task_type: e.target.value }))}>
-                  {TASK_TYPES.map(t => <option key={t}>{t}</option>)}
+                  {TASK_TYPES.map(tp => <option key={tp}>{tp}</option>)}
                 </select>
               </div>
               <div>
-                <label style={{ marginTop: 0 }}>마감일</label>
+                <label style={{ marginTop: 0 }}>{t('task_due_lbl')}</label>
                 <input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} />
               </div>
               <div>
-                <label style={{ marginTop: 0 }}>우선순위</label>
+                <label style={{ marginTop: 0 }}>{t('task_priority_lbl')}</label>
                 <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
                   {PRIORITIES.map(p => <option key={p}>{p}</option>)}
                 </select>
@@ -279,11 +281,11 @@ export default function SalesFollowUp() {
                 </select>
               </div>
             </div>
-            <label>메모</label>
+            <label>{t('task_note_lbl')}</label>
             <textarea value={form.note} rows={2} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} style={{ resize: 'vertical', fontFamily: 'inherit' }} />
             <div className="modal-footer">
-              <button className="btn btn-muted" onClick={() => setShowAddTask(false)}>취소</button>
-              <button className="btn btn-primary" onClick={addTask}>+ 추가</button>
+              <button className="btn btn-muted" onClick={() => setShowAddTask(false)}>{t('cancel')}</button>
+              <button className="btn btn-primary" onClick={addTask}>+ {t('add')}</button>
             </div>
           </div>
         </div>

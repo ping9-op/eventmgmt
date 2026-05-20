@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { STAGE_ORDER, STAGE_COLORS } from '../../lib/utils'
 import type { SalesLead, SalesTask } from '../../types/database'
 import LeadDetailPanel from './LeadDetailPanel'
+import { useLang } from '../../contexts/LangContext'
 
 function krwusd(vol: number | null, cur: string): string {
   if (!vol) return '-'
@@ -20,6 +21,7 @@ function StageBadge({ stage }: { stage: string }) {
 }
 
 export default function SalesDashboard() {
+  const { t } = useLang()
   const navigate = useNavigate()
   const [leads, setLeads] = useState<SalesLead[]>([])
   const [tasks, setTasks] = useState<SalesTask[]>([])
@@ -67,19 +69,19 @@ export default function SalesDashboard() {
   }))
 
   const kpiCards = [
-    { lbl: '전체 리드 수', val: total, col: 'var(--accent)', fn: () => navigate('/sales/funnel', { state: { filter: null, view: 'table' } }) },
-    { lbl: '진행 중인 영업 건', val: active, col: '#4F46E5', fn: () => navigate('/sales/funnel', { state: { filter: '__active__', view: 'table' } }) },
-    { lbl: '온보딩 완료', val: won, col: '#065F46', fn: () => navigate('/sales/funnel', { state: { filter: 'Onboarded / Won', view: 'board' } }) },
-    { lbl: '실패', val: byStage('Lost'), col: '#DC2626', fn: () => navigate('/sales/funnel', { state: { filter: 'Lost', view: 'board' } }) },
-    { lbl: '전환율', val: convRate + '%', col: '#059669', fn: null },
+    { lbl: t('s_total'), val: total, col: 'var(--accent)', fn: () => navigate('/sales/funnel', { state: { filter: null, view: 'table' } }) },
+    { lbl: t('s_active'), val: active, col: '#4F46E5', fn: () => navigate('/sales/funnel', { state: { filter: '__active__', view: 'table' } }) },
+    { lbl: t('s_won'), val: won, col: '#065F46', fn: () => navigate('/sales/funnel', { state: { filter: 'Onboarded / Won', view: 'board' } }) },
+    { lbl: t('s_lost'), val: byStage('Lost'), col: '#DC2626', fn: () => navigate('/sales/funnel', { state: { filter: 'Lost', view: 'board' } }) },
+    { lbl: t('s_conv'), val: convRate + '%', col: '#059669', fn: null },
   ]
 
   return (
     <div className="view wide">
       <div className="sec-hdr">
         <div className="bar" />
-        <div className="txt">Sales 대시보드</div>
-        <div className="sub">전체 영업 현황 요약</div>
+        <div className="txt">{t('s_dashboard_title')}</div>
+        <div className="sub">{t('s_dashboard_sub')}</div>
       </div>
 
       {/* KPI 카드 5개 */}
@@ -131,19 +133,19 @@ export default function SalesDashboard() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 12, padding: '18px 20px', cursor: 'pointer' }}
             onClick={() => navigate('/sales/followup', { state: { filter: 'overdue' } })}>
-            <div style={{ fontSize: 12, color: '#DC2626', fontWeight: 600, marginBottom: 4 }}>🔴 기한 초과 업무</div>
+            <div style={{ fontSize: 12, color: '#DC2626', fontWeight: 600, marginBottom: 4 }}>{t('overdue_tasks_lbl')}</div>
             <div style={{ fontSize: 32, fontWeight: 800, color: '#DC2626' }}>{overdueCount}</div>
             <div style={{ fontSize: 12, color: '#DC2626', marginTop: 4 }}>즉시 처리 필요</div>
           </div>
           <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 12, padding: '18px 20px', cursor: 'pointer' }}
             onClick={() => navigate('/sales/followup', { state: { filter: 'today' } })}>
-            <div style={{ fontSize: 12, color: '#D97706', fontWeight: 600, marginBottom: 4 }}>📅 오늘 Tasks</div>
+            <div style={{ fontSize: 12, color: '#D97706', fontWeight: 600, marginBottom: 4 }}>{t('today_tasks_lbl')}</div>
             <div style={{ fontSize: 32, fontWeight: 800, color: '#D97706' }}>{todayTaskCount}</div>
             <div style={{ fontSize: 12, color: '#D97706', marginTop: 4 }}>오늘 처리 예정</div>
           </div>
           <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 12, padding: '18px 20px', cursor: 'pointer' }}
             onClick={() => navigate('/sales/funnel', { state: { filter: 'Onboarding', view: 'board' } })}>
-            <div style={{ fontSize: 12, color: '#059669', fontWeight: 600, marginBottom: 4 }}>✅ 온보딩 진행 중</div>
+            <div style={{ fontSize: 12, color: '#059669', fontWeight: 600, marginBottom: 4 }}>{t('onboarding_lbl')}</div>
             <div style={{ fontSize: 32, fontWeight: 800, color: '#059669' }}>{onboardingCount}</div>
             <div style={{ fontSize: 12, color: '#059669', marginTop: 4 }}>완료 단계 진행 중</div>
           </div>
@@ -154,7 +156,7 @@ export default function SalesDashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
         {/* Top Leads */}
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px' }}>
-          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>🏆 Top Leads (예상 거래량)</div>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>🏆 {t('s_top_leads')}</div>
           <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
             <tbody>
               {topLeads.map((l, i) => (
@@ -184,14 +186,14 @@ export default function SalesDashboard() {
 
         {/* 담당자별 현황 */}
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px' }}>
-          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>👤 담당자별 현황</div>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>👤 {t('s_owner_perf')}</div>
           <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--accent)' }}>
-                <th style={{ padding: '8px', textAlign: 'left', fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>담당자</th>
-                <th style={{ padding: '8px', textAlign: 'center', fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>총계</th>
-                <th style={{ padding: '8px', textAlign: 'center', fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>활성</th>
-                <th style={{ padding: '8px', textAlign: 'center', fontSize: 12, color: '#065F46', fontWeight: 600 }}>완료</th>
+                <th style={{ padding: '8px', textAlign: 'left', fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>{t('s_owner_col')}</th>
+                <th style={{ padding: '8px', textAlign: 'center', fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>{t('s_total_col')}</th>
+                <th style={{ padding: '8px', textAlign: 'center', fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>{t('s_active_col')}</th>
+                <th style={{ padding: '8px', textAlign: 'center', fontSize: 12, color: '#065F46', fontWeight: 600 }}>{t('s_won_col')}</th>
               </tr>
             </thead>
             <tbody>

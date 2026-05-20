@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { exhColor, formatEventDate, isPastEvent, STAGE_ORDER, STAGE_COLORS } from '../../lib/utils'
 import type { Exhibition, Payment, SalesLead, SalesTask, BudgetItem } from '../../types/database'
 import LeadDetailPanel from './LeadDetailPanel'
+import { useLang } from '../../contexts/LangContext'
 
 const CUR_SYM: Record<string, string> = { KRW: '₩', JPY: '¥', USD: '$', EUR: '€', SGD: 'S$' }
 
@@ -25,6 +26,7 @@ interface UpcomingItem {
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const { t } = useLang()
   const [entries, setEntries] = useState<ExhEntry[]>([])
   const [payments, setPayments] = useState<Record<string, Payment[]>>({})
   const [leads, setLeads] = useState<SalesLead[]>([])
@@ -119,7 +121,7 @@ export default function Dashboard() {
     return items.sort((a, b) => a.days - b.days).slice(0, 5)
   }
 
-  if (loading) return <div className="view"><div style={{ color: 'var(--muted)', padding: 40 }}>로딩 중...</div></div>
+  if (loading) return <div className="view"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
 
   const upcoming = getUpcoming()
   const latest = getLatestSorted()
@@ -158,7 +160,7 @@ export default function Dashboard() {
     <div className="view wide">
       <div className="sec-hdr">
         <div className="bar" />
-        <div className="txt">대시보드</div>
+        <div className="txt">{t('dashboard')}</div>
         <div className="sub">박람회 · Sales 통합 현황</div>
       </div>
 
@@ -280,11 +282,11 @@ export default function Dashboard() {
         {/* 다가오는 일정 */}
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 14, padding: '18px 22px' }}>
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>📅 다가오는 일정</span>
+            <span>📅 {t('upcoming')}</span>
             <button onClick={() => navigate('/expo/schedule')} style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }}>전체 보기</button>
           </div>
           {upcoming.length === 0 ? (
-            <div style={{ textAlign: 'center', color: 'var(--muted)', padding: 30, fontSize: 13 }}>향후 60일 이내 예정된 일정 없음</div>
+            <div style={{ textAlign: 'center', color: 'var(--muted)', padding: 30, fontSize: 13 }}>{t('no_upcoming')}</div>
           ) : upcoming.map((ev, idx) => {
             const d = ev.days
             const urgent = d >= 0 && d <= 7

@@ -6,6 +6,7 @@ import type { SalesLead } from '../../types/database'
 import { loadAllSettings, type SalesSettingsData } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
 import LeadDetailPanel from './LeadDetailPanel'
+import { useLang } from '../../contexts/LangContext'
 
 type GroupBy = 'event' | 'date' | 'source'
 type ViewMode = 'group' | 'detail'
@@ -27,6 +28,7 @@ function InlineStageSelect({ lead, onUpdate }: { lead: SalesLead; onUpdate: (id:
 }
 
 export default function SalesLeads() {
+  const { t } = useLang()
   const location = useLocation()
   const { showToast } = useToast()
   const [settings, setSettings] = useState<SalesSettingsData | null>(null)
@@ -199,23 +201,23 @@ export default function SalesLeads() {
         <>
           <div className="sec-hdr">
             <div className="bar" />
-            <div className="txt">Lead 관리</div>
-            <div className="sub">리드 등록 및 행사별·일자별 관리</div>
+            <div className="txt">{t('s_leads_title')}</div>
+            <div className="sub">{t('s_leads_sub')}</div>
           </div>
 
           {/* 액션 버튼 */}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-            <button className="btn btn-primary" onClick={() => setShowRegister(true)}>+ Manual Lead Register</button>
+            <button className="btn btn-primary" onClick={() => setShowRegister(true)}>{t('s_register')}</button>
             <button className="btn btn-outline btn-sm" onClick={() => alert('PDF 첨부 — 추후 연결')}>📎 PDF</button>
             <button className="btn btn-outline btn-sm" onClick={() => alert('Excel Upload — 추후 연결')}>📤 Excel Upload</button>
             <button className="btn btn-outline btn-sm" onClick={() => alert('Template 다운로드')}>📋 Template</button>
-            <button className="btn btn-outline btn-sm" onClick={() => exportCSV([])}>⬇️ Excel Download</button>
+            <button className="btn btn-outline btn-sm" onClick={() => exportCSV([])}>{t('export_excel')}</button>
           </div>
 
           {/* 그룹 + 검색 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-            <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 500 }}>그룹:</span>
-            {([['event', '행사명'], ['date', '일자'], ['source', 'Source']] as const).map(([k, lbl]) => (
+            <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 500 }}>{t('s_group_by')}</span>
+            {([['event', t('s_event')], ['date', t('s_date')], ['source', 'Source']] as const).map(([k, lbl]) => (
               <button key={k} onClick={() => setGroupBy(k)}
                 style={{ padding: '5px 12px', borderRadius: 7, fontSize: 13, cursor: 'pointer', fontWeight: 600, background: groupBy === k ? 'var(--accent)' : 'white', color: groupBy === k ? 'white' : 'var(--muted)', border: `1.5px solid ${groupBy === k ? 'var(--accent)' : 'var(--border2)'}` }}>
                 {lbl}
@@ -267,7 +269,7 @@ export default function SalesLeads() {
                     </tr>
                   ))}
                   {Object.keys(groupSearchFiltered).length === 0 && (
-                    <tr><td colSpan={2 + STAGE_ORDER.length} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>해당하는 리드 없음</td></tr>
+                    <tr><td colSpan={2 + STAGE_ORDER.length} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>{t('no_leads')}</td></tr>
                   )}
                 </tbody>
               </table>
@@ -318,7 +320,7 @@ export default function SalesLeads() {
             <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700, minWidth: 70 }}>{checked.size > 0 ? `${checked.size}개 선택됨` : ''}</span>
             <div style={{ marginLeft: 'auto' }}>
               <button onClick={() => exportCSV()} style={{ padding: '6px 14px', borderRadius: 7, background: 'white', border: '1.5px solid #059669', color: '#059669', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                ⬇️ Excel 내보내기
+                {t('export_excel')}
               </button>
             </div>
           </div>
@@ -369,7 +371,7 @@ export default function SalesLeads() {
                     </tr>
                   ))}
                   {detailLeads.length === 0 && (
-                    <tr><td colSpan={13} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>해당하는 Lead 없음</td></tr>
+                    <tr><td colSpan={13} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>{t('no_leads')}</td></tr>
                   )}
                 </tbody>
               </table>
@@ -383,53 +385,53 @@ export default function SalesLeads() {
         <div className="modal-bg open">
           <div className="modal" style={{ width: 640 }}>
             <div className="modal-hdr">
-              <h3>+ Lead 등록</h3>
+              <h3>{t('register_lead_title')}</h3>
               <button className="modal-close" onClick={() => { setShowRegister(false); resetForm() }}>✕</button>
             </div>
             <div className="form-row cols2">
-              <div><label style={{ marginTop: 0 }}>Company Name *</label><input value={form.company_name || ''} onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))} placeholder="회사명" /></div>
-              <div><label style={{ marginTop: 0 }}>Contact Person</label><input value={form.contact_person || ''} onChange={e => setForm(f => ({ ...f, contact_person: e.target.value }))} placeholder="담당자명" /></div>
-              <div><label style={{ marginTop: 0 }}>Phone</label><input value={form.phone || ''} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="전화번호" /></div>
-              <div><label style={{ marginTop: 0 }}>Email</label><input type="email" value={form.email || ''} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="이메일" /></div>
+              <div><label style={{ marginTop: 0 }}>{t('company_name_lbl')}</label><input value={form.company_name || ''} onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))} placeholder="회사명" /></div>
+              <div><label style={{ marginTop: 0 }}>{t('contact_person_lbl')}</label><input value={form.contact_person || ''} onChange={e => setForm(f => ({ ...f, contact_person: e.target.value }))} placeholder="담당자명" /></div>
+              <div><label style={{ marginTop: 0 }}>{t('phone_lbl')}</label><input value={form.phone || ''} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="전화번호" /></div>
+              <div><label style={{ marginTop: 0 }}>{t('email_lbl')}</label><input type="email" value={form.email || ''} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="이메일" /></div>
               <div>
-                <label style={{ marginTop: 0 }}>Lead Source *</label>
+                <label style={{ marginTop: 0 }}>{t('lead_source_lbl')}</label>
                 <select value={form.lead_source || 'Expo'} onChange={e => setForm(f => ({ ...f, lead_source: e.target.value }))}>
                   {(settings?.sources || []).map(s => <option key={s}>{s}</option>)}
                 </select>
               </div>
               <div>
-                <label style={{ marginTop: 0 }}>Event Name</label>
+                <label style={{ marginTop: 0 }}>{t('event_name_lbl')}</label>
                 <select value={form.event_name || ''} onChange={e => setForm(f => ({ ...f, event_name: e.target.value }))}>
                   <option value="">— 행사 선택 —</option>
                   {(settings?.event_names || []).map(ev => <option key={ev}>{ev}</option>)}
                 </select>
               </div>
               <div>
-                <label style={{ marginTop: 0 }}>Owner</label>
+                <label style={{ marginTop: 0 }}>{t('owner_lbl')}</label>
                 <select value={form.owner || 'Andrew'} onChange={e => setForm(f => ({ ...f, owner: e.target.value }))}>
                   {(settings?.owners || []).map(o => <option key={o}>{o}</option>)}
                 </select>
               </div>
               <div>
-                <label style={{ marginTop: 0 }}>Priority</label>
+                <label style={{ marginTop: 0 }}>{t('priority_lbl')}</label>
                 <select value={form.priority || 'Medium'} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
                   {['High', 'Medium', 'Low'].map(p => <option key={p}>{p}</option>)}
                 </select>
               </div>
               <div>
-                <label style={{ marginTop: 0 }}>Corridor</label>
+                <label style={{ marginTop: 0 }}>{t('corridor_lbl')}</label>
                 <select value={form.country_corridor || ''} onChange={e => setForm(f => ({ ...f, country_corridor: e.target.value }))}>
                   {(settings?.corridors || []).map(c => <option key={c}>{c}</option>)}
                 </select>
               </div>
               <div>
-                <label style={{ marginTop: 0 }}>Business Type</label>
+                <label style={{ marginTop: 0 }}>{t('biz_type_lbl')}</label>
                 <select value={form.business_type || ''} onChange={e => setForm(f => ({ ...f, business_type: e.target.value }))}>
                   {(settings?.business_types || []).map(b => <option key={b}>{b}</option>)}
                 </select>
               </div>
               <div>
-                <label style={{ marginTop: 0 }}>Expected Volume</label>
+                <label style={{ marginTop: 0 }}>{t('expected_vol_lbl')}</label>
                 <div style={{ display: 'flex', gap: 6 }}>
                   <input type="number" value={form.expected_monthly_volume || ''} onChange={e => setForm(f => ({ ...f, expected_monthly_volume: parseInt(e.target.value) || null }))} placeholder="월 예상 금액" style={{ flex: 1 }} />
                   <select value={form.volume_currency || 'USD'} onChange={e => setForm(f => ({ ...f, volume_currency: e.target.value }))} style={{ minWidth: 70 }}>
@@ -437,13 +439,13 @@ export default function SalesLeads() {
                   </select>
                 </div>
               </div>
-              <div><label style={{ marginTop: 0 }}>Address</label><input value={form.address || ''} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="주소" /></div>
+              <div><label style={{ marginTop: 0 }}>{t('address_lbl')}</label><input value={form.address || ''} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="주소" /></div>
             </div>
-            <label>Remarks</label>
+            <label>{t('remarks_lbl')}</label>
             <textarea value={form.remarks || ''} rows={2} onChange={e => setForm(f => ({ ...f, remarks: e.target.value }))} style={{ resize: 'vertical', fontFamily: 'inherit' }} />
             <div className="modal-footer">
-              <button className="btn btn-muted" onClick={() => { setShowRegister(false); resetForm() }}>취소</button>
-              <button className="btn btn-primary" onClick={register}>✅ 등록</button>
+              <button className="btn btn-muted" onClick={() => { setShowRegister(false); resetForm() }}>{t('cancel')}</button>
+              <button className="btn btn-primary" onClick={register}>{t('register_btn')}</button>
             </div>
           </div>
         </div>

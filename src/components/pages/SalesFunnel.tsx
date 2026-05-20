@@ -5,6 +5,7 @@ import { STAGE_ORDER, STAGE_COLORS, priorityColor } from '../../lib/utils'
 import type { SalesLead, SalesProposal } from '../../types/database'
 import { loadSalesSettings } from '../../lib/settings'
 import LeadDetailPanel from './LeadDetailPanel'
+import { useLang } from '../../contexts/LangContext'
 
 type TabType = 'board' | 'table' | 'proposal'
 
@@ -28,6 +29,7 @@ function PriorityBadge({ p }: { p: string }) {
 }
 
 export default function SalesFunnel() {
+  const { t } = useLang()
   const location = useLocation()
   const { owners: OWNERS } = loadSalesSettings()
   const [leads, setLeads] = useState<SalesLead[]>([])
@@ -110,9 +112,9 @@ export default function SalesFunnel() {
   const allIds = filtered.map(l => l.id)
 
   const tabs: { id: TabType; label: string }[] = [
-    { id: 'board', label: '📋 Board View' },
-    { id: 'table', label: '📊 Table View' },
-    { id: 'proposal', label: '📄 Proposal & Contract' },
+    { id: 'board', label: t('s_board_view') },
+    { id: 'table', label: t('s_table_view') },
+    { id: 'proposal', label: t('s_proposal_tab') },
   ]
 
   return (
@@ -120,11 +122,11 @@ export default function SalesFunnel() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div className="sec-hdr" style={{ margin: 0 }}>
           <div className="bar" />
-          <div className="txt">Sales Funnel</div>
-          <div className="sub">Lead 영업 단계 관리</div>
+          <div className="txt">{t('s_funnel_title')}</div>
+          <div className="sub">{t('s_funnel_sub')}</div>
         </div>
         <select value={filterOwner} onChange={e => setFilterOwner(e.target.value)} style={{ width: 130 }}>
-          <option value="">전체 담당자</option>
+          <option value="">{t('all_owners')}</option>
           {OWNERS.map(o => <option key={o}>{o}</option>)}
         </select>
       </div>
@@ -252,14 +254,14 @@ export default function SalesFunnel() {
                 <thead>
                   <tr style={{ background: 'var(--accent)', color: 'white' }}>
                     <th style={{ padding: '9px 10px', width: 38 }}><input type="checkbox" style={{ width: 15, height: 15, cursor: 'pointer' }} /></th>
-                    <th style={{ padding: '9px 12px', textAlign: 'left' }}>Company</th>
+                    <th style={{ padding: '9px 12px', textAlign: 'left' }}>{t('col_company')}</th>
                     <th style={{ padding: '9px 12px' }}>Event</th>
-                    <th style={{ padding: '9px 12px' }}>Owner</th>
+                    <th style={{ padding: '9px 12px' }}>{t('col_owner')}</th>
                     <th style={{ padding: '9px 12px' }}>1st</th>
-                    <th style={{ padding: '9px 12px' }}>Stage</th>
-                    <th style={{ padding: '9px 12px' }}>Last Contact</th>
+                    <th style={{ padding: '9px 12px' }}>{t('col_stage')}</th>
+                    <th style={{ padding: '9px 12px' }}>{t('col_last_contact')}</th>
                     <th style={{ padding: '9px 12px' }}>Follow-up</th>
-                    <th style={{ padding: '9px 12px', textAlign: 'right' }}>Volume</th>
+                    <th style={{ padding: '9px 12px', textAlign: 'right' }}>{t('col_vol')}</th>
                     <th style={{ padding: '9px 12px' }}>Priority</th>
                     <th style={{ padding: '9px 12px' }}>Lost Reason</th>
                   </tr>
@@ -317,6 +319,7 @@ function ProposalContractView({ leads, proposals, onUpdate, onOpenLead }: {
   onUpdate: (id: string, field: string, value: string) => void
   onOpenLead: (id: string) => void
 }) {
+  const { t } = useLang()
   const propLeads = leads.filter(l => ['Proposal Sent', 'Negotiation', 'Onboarding', 'Onboarded / Won', 'Lost'].includes(l.current_stage))
   const propMap: Record<string, SalesProposal> = {}
   for (const p of proposals) propMap[p.lead_id] = p
@@ -351,14 +354,14 @@ function ProposalContractView({ leads, proposals, onUpdate, onOpenLead }: {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 950 }}>
             <thead>
               <tr style={{ background: 'var(--accent)', color: 'white' }}>
-                <th style={{ padding: '9px 14px', textAlign: 'left' }}>Company</th>
-                <th style={{ padding: '9px 14px' }}>Stage</th>
-                <th style={{ padding: '9px 14px' }}>날짜</th>
-                <th style={{ padding: '9px 14px', textAlign: 'right' }}>Fee</th>
-                <th style={{ padding: '9px 14px', textAlign: 'right' }}>Volume</th>
-                <th style={{ padding: '9px 14px' }}>Contract Status</th>
-                <th style={{ padding: '9px 14px' }}>Onboarding</th>
-                <th style={{ padding: '9px 14px' }}>Owner</th>
+                <th style={{ padding: '9px 14px', textAlign: 'left' }}>{t('col_company')}</th>
+                <th style={{ padding: '9px 14px' }}>{t('col_stage')}</th>
+                <th style={{ padding: '9px 14px' }}>{t('proposal_date')}</th>
+                <th style={{ padding: '9px 14px', textAlign: 'right' }}>{t('fee_rate')}</th>
+                <th style={{ padding: '9px 14px', textAlign: 'right' }}>{t('monthly_vol')}</th>
+                <th style={{ padding: '9px 14px' }}>{t('col_contract')}</th>
+                <th style={{ padding: '9px 14px' }}>{t('col_onboard')}</th>
+                <th style={{ padding: '9px 14px' }}>{t('col_owner')}</th>
                 <th style={{ padding: '9px 14px' }}>Remarks</th>
               </tr>
             </thead>

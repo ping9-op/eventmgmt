@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { costColor, exhColor } from '../../lib/utils'
 import type { Exhibition, Payment } from '../../types/database'
+import { useLang } from '../../contexts/LangContext'
 
 const CUR_SYM: Record<string, string> = { KRW: '₩', JPY: '¥', USD: '$', EUR: '€', SGD: 'S$' }
 
@@ -35,6 +36,7 @@ const emptyForm = (): AddItemForm => ({
 
 export default function Payments() {
   const location = useLocation()
+  const { t } = useLang()
   const initKey = (location.state as any)?.key || null
   const [payments, setPayments] = useState<Record<string, Payment[]>>({})
   const [exhibitions, setExhibitions] = useState<Record<string, Exhibition>>({})
@@ -168,14 +170,14 @@ export default function Payments() {
     return { label: '미결제', color: '#D63031' }
   }
 
-  if (loading) return <div className="view"><div style={{ color: 'var(--muted)', padding: 40 }}>로딩 중...</div></div>
+  if (loading) return <div className="view"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
 
   return (
     <div className="view">
       <div className="sec-hdr">
         <div className="bar" />
-        <div className="txt">비용 결제 일정 관리</div>
-        <div className="sub">선금·잔금·납부일 관리</div>
+        <div className="txt">{t('pay_title')}</div>
+        <div className="sub">{t('pay_sub')}</div>
       </div>
 
       <div className="pay-layout">
@@ -205,7 +207,7 @@ export default function Payments() {
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn btn-primary btn-sm" onClick={openAddModal}>
-                  + 항목 추가
+                  {t('add_pay_item')}
                 </button>
                 <button className="btn btn-purple btn-sm" onClick={() => setShowInvoice(v => !v)}>
                   📄 인보이스 업로드
@@ -230,9 +232,9 @@ export default function Payments() {
             {/* 요약 3칸 */}
             <div className="pay-summary">
               {[
-                { lbl: '총 예산', val: sumByCur(selPays, p => p.total), color: 'var(--text)' },
-                { lbl: '납부 완료', val: sumByCur(selPays, p => (p.deposit_paid ? p.deposit_amount : 0) + (p.final_paid ? p.final_amount : 0)), color: '#2E7D51' },
-                { lbl: '납부 예정', val: sumByCur(selPays, p => (!p.deposit_paid ? p.deposit_amount : 0) + (!p.final_paid ? p.final_amount : 0)), color: '#D63031' },
+                { lbl: t('total_budget'), val: sumByCur(selPays, p => p.total), color: 'var(--text)' },
+                { lbl: t('paid_done'), val: sumByCur(selPays, p => (p.deposit_paid ? p.deposit_amount : 0) + (p.final_paid ? p.final_amount : 0)), color: '#2E7D51' },
+                { lbl: t('paid_pending'), val: sumByCur(selPays, p => (!p.deposit_paid ? p.deposit_amount : 0) + (!p.final_paid ? p.final_amount : 0)), color: '#D63031' },
               ].map((m, i) => (
                 <div key={i} className="card-sm" style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 6 }}>{m.lbl}</div>
@@ -264,7 +266,7 @@ export default function Payments() {
             )}
           </div>
         ) : (
-          <div style={{ color: 'var(--muted)', fontSize: 14, padding: 20 }}>왼쪽에서 박람회를 선택하세요</div>
+          <div style={{ color: 'var(--muted)', fontSize: 14, padding: 20 }}>{t('select_exh')}</div>
         )}
       </div>
 
@@ -274,7 +276,7 @@ export default function Payments() {
           style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,.5)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center' }}
           onClick={e => { if (e.target === e.currentTarget) setShowAddModal(false) }}>
           <div style={{ background: 'white', borderRadius: 16, padding: 28, width: 480, maxWidth: '95vw', boxShadow: '0 20px 60px rgba(0,0,0,.25)' }}>
-            <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 20, color: 'var(--text)' }}>+ 결제 항목 추가</div>
+            <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 20, color: 'var(--text)' }}>{t('add_pay_title')}</div>
 
             <div style={{ display: 'grid', gap: 14 }}>
               {/* 항목명 + 통화 */}
@@ -291,7 +293,7 @@ export default function Payments() {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>통화</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>{t('currency_col')}</label>
                   <select
                     value={addForm.currency}
                     onChange={e => setAddForm(f => ({ ...f, currency: e.target.value }))}
@@ -315,10 +317,10 @@ export default function Payments() {
 
               {/* 선금 */}
               <div style={{ background: '#EEF4FF', borderRadius: 10, padding: '12px 14px' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#3A5FA0', marginBottom: 10 }}>선금 (선택)</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#3A5FA0', marginBottom: 10 }}>{t('deposit_label')}</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   <div>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>금액</label>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>{t('amount_col')}</label>
                     <input
                       type="number"
                       value={addForm.depositAmt}
@@ -328,7 +330,7 @@ export default function Payments() {
                     />
                   </div>
                   <div>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>납부일</label>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>{t('pay_date')}</label>
                     <input
                       type="date"
                       value={addForm.depositDue}
@@ -341,10 +343,10 @@ export default function Payments() {
 
               {/* 잔금 */}
               <div style={{ background: '#F0FFF4', borderRadius: 10, padding: '12px 14px' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#2E7D51', marginBottom: 10 }}>잔금 (선택)</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#2E7D51', marginBottom: 10 }}>{t('final_pay')}</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   <div>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>금액</label>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>{t('amount_col')}</label>
                     <input
                       type="number"
                       value={addForm.finalAmt}
@@ -354,7 +356,7 @@ export default function Payments() {
                     />
                   </div>
                   <div>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>납부일</label>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>{t('pay_date')}</label>
                     <input
                       type="date"
                       value={addForm.finalDue}
@@ -372,7 +374,7 @@ export default function Payments() {
 
             <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
               <button className="btn btn-muted btn-sm" onClick={() => setShowAddModal(false)} style={{ padding: '8px 20px' }}>
-                취소
+                {t('cancel')}
               </button>
               <button className="btn btn-primary btn-sm" onClick={submitAdd} disabled={addLoading} style={{ padding: '8px 20px' }}>
                 {addLoading ? '추가 중...' : '+ 추가'}
@@ -399,6 +401,7 @@ function PayCard({ pay, color, isSaving, onToggle, onSaveCurrency, onSaveAmounts
   onSaveAmounts: (pay: Payment, da: number, dd: string, fa: number, fd: string) => void
   onDelete: (id: string) => void
 }) {
+  const { t } = useLang()
   const [depositAmt, setDepositAmt] = useState(String(pay.deposit_amount))
   const [depositDue, setDepositDue] = useState(pay.deposit_due || '')
   const [finalAmt, setFinalAmt] = useState(String(pay.final_amount))
@@ -427,7 +430,7 @@ function PayCard({ pay, color, isSaving, onToggle, onSaveCurrency, onSaveAmounts
             className="btn btn-muted btn-sm"
             disabled={isSaving}
             onClick={() => onSaveAmounts(pay, parseFloat(depositAmt) || 0, depositDue, parseFloat(finalAmt) || 0, finalDue)}>
-            {isSaving ? '저장 중...' : '💾 저장'}
+            {isSaving ? t('saving') : t('save_pay')}
           </button>
           <button
             className="btn btn-sm"
@@ -439,28 +442,28 @@ function PayCard({ pay, color, isSaving, onToggle, onSaveCurrency, onSaveAmounts
       </div>
       <div className="pic-body">
         <div className="pic-col" style={{ background: '#EEF4FF' }}>
-          <div className="pc-title">선금 (Deposit)</div>
-          <label>금액</label>
+          <div className="pc-title">{t('deposit_label')}</div>
+          <label>{t('amount_col')}</label>
           <input type="number" value={depositAmt} onChange={e => setDepositAmt(e.target.value)} />
-          <label>납부일</label>
+          <label>{t('pay_date')}</label>
           <input type="date" value={depositDue} onChange={e => setDepositDue(e.target.value)} />
           <div className="status-toggle" onClick={() => onToggle(pay.id, 'deposit', pay.deposit_paid)} style={{ cursor: 'pointer' }}>
             <div className={`toggle${pay.deposit_paid ? ' on' : ''}`} />
             <span style={{ fontSize: 13, fontWeight: 600, color: pay.deposit_paid ? 'var(--green)' : 'var(--muted)' }}>
-              {pay.deposit_paid ? '납부 완료 ✓' : '미납부'}
+              {pay.deposit_paid ? t('paid_ok') + ' ✓' : t('not_paid')}
             </span>
           </div>
         </div>
         <div className="pic-col" style={{ background: '#F0FFF4' }}>
-          <div className="pc-title">잔금 (Final)</div>
-          <label>금액</label>
+          <div className="pc-title">{t('final_pay')}</div>
+          <label>{t('amount_col')}</label>
           <input type="number" value={finalAmt} onChange={e => setFinalAmt(e.target.value)} />
-          <label>납부일</label>
+          <label>{t('pay_date')}</label>
           <input type="date" value={finalDue} onChange={e => setFinalDue(e.target.value)} />
           <div className="status-toggle" onClick={() => onToggle(pay.id, 'final', pay.final_paid)} style={{ cursor: 'pointer' }}>
             <div className={`toggle${pay.final_paid ? ' on' : ''}`} />
             <span style={{ fontSize: 13, fontWeight: 600, color: pay.final_paid ? 'var(--green)' : 'var(--muted)' }}>
-              {pay.final_paid ? '납부 완료 ✓' : '미납부'}
+              {pay.final_paid ? t('paid_ok') + ' ✓' : t('not_paid')}
             </span>
           </div>
         </div>

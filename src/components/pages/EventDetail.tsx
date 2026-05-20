@@ -5,6 +5,7 @@ import { exhColor, formatEventDate, costColor } from '../../lib/utils'
 import { useToast } from '../../contexts/ToastContext'
 import type { Payment } from '../../types/database'
 import ProposalEditModal from '../ProposalEditModal'
+import { useLang } from '../../contexts/LangContext'
 
 type TabId = 'overview' | 'budget' | 'checklist' | 'design' | 'gifts' | 'equipment' | 'itinerary'
 
@@ -103,6 +104,7 @@ export default function EventDetail() {
   const { key, year } = useParams<{ key: string; year: string }>()
   const navigate = useNavigate()
   const { showToast } = useToast()
+  const { t } = useLang()
   const [tab, setTab] = useState<TabId>('checklist')
   const [saving, setSaving] = useState(false)
   const [exhName, setExhName] = useState('')
@@ -217,13 +219,13 @@ export default function EventDetail() {
   }
 
   const TABS: { id: TabId; label: string }[] = [
-    { id: 'overview', label: '📋 개요' },
-    { id: 'budget', label: '💰 예산' },
-    { id: 'checklist', label: '✅ 준비 체크리스트' },
-    { id: 'design', label: '🎨 디자인' },
-    { id: 'gifts', label: '🎁 선물 목록' },
-    { id: 'equipment', label: '📦 부스 장비' },
-    { id: 'itinerary', label: '✈️ 현지 일정' },
+    { id: 'overview', label: t('tab_overview') },
+    { id: 'budget', label: t('tab_budget') },
+    { id: 'checklist', label: t('tab_checklist') },
+    { id: 'design', label: t('tab_design') },
+    { id: 'gifts', label: t('tab_gifts') },
+    { id: 'equipment', label: t('tab_equipment') },
+    { id: 'itinerary', label: t('tab_itinerary') },
   ]
 
   const doneCount = checklist.filter(c => c.status === 'Done').length
@@ -233,7 +235,7 @@ export default function EventDetail() {
   return (
     <div className="ev-wrap">
       <div className="ev-topbar">
-        <button className="back" onClick={() => navigate(-1)}>← 돌아가기</button>
+        <button className="back" onClick={() => navigate(-1)}>{t('ev_back')}</button>
         <div style={{ width: 5, height: 22, background: color, borderRadius: 3 }} />
         <div>
           <div className="ev-name">{exhName} {year}</div>
@@ -243,7 +245,7 @@ export default function EventDetail() {
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
           <button className="btn btn-primary" style={{ fontSize: 13 }} onClick={save} disabled={saving}>
-            {saving ? '저장 중...' : '💾 저장'}
+            {saving ? t('saving') : t('ev_save')}
           </button>
           <button style={{ fontSize: 13, padding: '9px 18px', borderRadius: 8, fontWeight: 600, cursor: 'pointer', background: 'rgba(255,255,255,.15)', color: 'white', border: '1.5px solid rgba(255,255,255,.4)' }}
             onClick={() => navigate('/expo/create', { state: { exhId: overview?.exhibition_id } })}>
@@ -273,16 +275,16 @@ export default function EventDetail() {
                     <span style={{ fontSize: 14, fontWeight: 700, color: 'white' }}>📋 박람회 기본 정보</span>
                     <button onClick={() => setShowEpModal(true)}
                       style={{ marginLeft: 'auto', background: 'rgba(255,255,255,.2)', border: 'none', color: 'white', padding: '4px 12px', borderRadius: 6, fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
-                      ✏️ Proposal 수정
+                      {t('proposal_edit')}
                     </button>
                   </div>
                   <div style={{ padding: '18px 24px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
                     {[
-                      ['박람회명', exhName],
-                      ['연도', year],
-                      ['날짜', formatEventDate(overview.date_of_event, yearNum)],
-                      ['장소', overview.venue || '-'],
-                      ['작성자', overview.author || '-'],
+                      [t('col_exh'), exhName],
+                      [t('year_label'), year],
+                      [t('col_date'), formatEventDate(overview.date_of_event, yearNum)],
+                      [t('venue'), overview.venue || '-'],
+                      [t('author_label'), overview.author || '-'],
                       ['Proposal 날짜', overview.proposal_date || '-'],
                     ].map(([k, v]) => (
                       <div key={k} style={{ padding: '10px 14px', background: '#F9F5F5', borderRadius: 8 }}>
@@ -296,11 +298,11 @@ export default function EventDetail() {
                 {/* 목표 & 기대 효과 */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                   <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '18px 22px' }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: 'var(--accent)' }}>🎯 박람회 목표</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: 'var(--accent)' }}>{t('overview_goal')}</div>
                     <div style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--text)' }}>{overview.objective || '목표 미입력'}</div>
                     {(overview.products || []).length > 0 && (
                       <div style={{ marginTop: 14, padding: '10px 14px', background: '#FFF8F0', borderRadius: 8, border: '1px solid #FDE68A' }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: '#D97706', marginBottom: 6 }}>📦 홍보 제품</div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#D97706', marginBottom: 6 }}>{t('overview_products')}</div>
                         {overview.products.map((p: any, i: number) => (
                           <div key={i} style={{ fontSize: 12, marginBottom: 4 }}>
                             <strong>{p.product}</strong>{p.target ? ` — ${p.target}` : ''}
@@ -310,7 +312,7 @@ export default function EventDetail() {
                     )}
                   </div>
                   <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '18px 22px' }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: '#059669' }}>✨ 기대 효과</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: '#059669' }}>{t('overview_results')}</div>
                     {(overview.expected_results || []).length > 0
                       ? <ul style={{ margin: 0, paddingLeft: 18 }}>
                           {overview.expected_results.map((r: string, i: number) => (
@@ -339,7 +341,7 @@ export default function EventDetail() {
               </>
             ) : (
               <div style={{ color: 'var(--muted)', padding: 40, textAlign: 'center' }}>
-                Proposal 데이터가 없습니다. 먼저 Proposal을 작성해주세요.
+                {t('no_proposal')}
               </div>
             )}
           </div>
@@ -364,7 +366,7 @@ export default function EventDetail() {
           <div style={{ padding: '20px 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <div>
-                <div style={{ fontSize: 16, fontWeight: 700 }}>준비 체크리스트</div>
+                <div style={{ fontSize: 16, fontWeight: 700 }}>{t('checklist_title')}</div>
                 <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
                   완료 <strong style={{ color: 'var(--green)' }}>{doneCount}</strong> / 전체 {totalCount}
                   &nbsp;·&nbsp; 진행 <strong style={{ color: 'var(--amber)' }}>{checklist.filter(c => c.status === 'Progress').length}</strong>
@@ -393,7 +395,7 @@ export default function EventDetail() {
         {tab === 'design' && (
           <div style={{ padding: '20px 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div style={{ fontSize: 15, fontWeight: 700 }}>디자인 항목 관리</div>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>{t('design_title')}</div>
               <button className="btn btn-primary btn-sm"
                 onClick={() => setDesign(p => [...p, { sn: p.length + 1, category: '', item: '', size: '', qty: '', spec: '', deadline: '', status: 'Plan', note: '' }])}>
                 + 항목 추가
@@ -402,10 +404,10 @@ export default function EventDetail() {
             <table className="cl-table">
               <thead>
                 <tr>
-                  <th style={{ width: 36 }}>No</th><th style={{ width: 80 }}>카테고리</th><th>항목</th>
-                  <th style={{ width: 110 }}>사이즈</th><th style={{ width: 80 }}>수량</th>
-                  <th>사양/내용</th><th style={{ width: 120 }}>마감일</th>
-                  <th style={{ width: 100 }}>현황</th><th>비고</th><th style={{ width: 36 }}></th>
+                  <th style={{ width: 36 }}>{t('col_no')}</th><th style={{ width: 80 }}>{t('col_category')}</th><th>{t('col_item')}</th>
+                  <th style={{ width: 110 }}>{t('col_size')}</th><th style={{ width: 80 }}>{t('col_qty')}</th>
+                  <th>{t('col_spec')}</th><th style={{ width: 120 }}>{t('col_deadline')}</th>
+                  <th style={{ width: 100 }}>{t('col_status')}</th><th>{t('col_remarks')}</th><th style={{ width: 36 }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -439,9 +441,9 @@ export default function EventDetail() {
         {/* ── 선물 탭 (통합) ── */}
         {tab === 'gifts' && (
           <div style={{ padding: '20px 24px' }}>
-            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>선물 목록</div>
-            <GiftSection title="🎁 온보딩 고객 선물" data={giftsOnboard} setData={setGiftsOnboard} />
-            <GiftSection title="🎊 이벤트 경품" data={giftsEvent} setData={setGiftsEvent} />
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>{t('gifts_title')}</div>
+            <GiftSection title={t('onboard_gifts')} data={giftsOnboard} setData={setGiftsOnboard} />
+            <GiftSection title={t('event_prizes')} data={giftsEvent} setData={setGiftsEvent} />
           </div>
         )}
 
@@ -450,7 +452,7 @@ export default function EventDetail() {
           <div style={{ padding: '20px 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 700 }}>부스 장비 체크리스트</div>
+                <div style={{ fontSize: 15, fontWeight: 700 }}>{t('equipment_title')}</div>
                 <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
                   확인 완료 <strong style={{ color: 'var(--green)' }}>{equipment.filter(e => e.done).length}</strong> / 전체 {equipment.length}
                 </div>
@@ -464,7 +466,7 @@ export default function EventDetail() {
             </div>
             <table className="cl-table">
               <thead>
-                <tr><th style={{ width: 36 }}>No</th><th>품목</th><th style={{ width: 80 }}>수량</th><th>비고</th><th style={{ width: 90 }}>확인</th><th style={{ width: 36 }}></th></tr>
+                <tr><th style={{ width: 36 }}>{t('col_no')}</th><th>{t('col_item')}</th><th style={{ width: 80 }}>{t('col_qty')}</th><th>{t('col_note')}</th><th style={{ width: 90 }}>{t('col_confirm')}</th><th style={{ width: 36 }}></th></tr>
               </thead>
               <tbody>
                 {equipment.map((row, i) => (
@@ -478,7 +480,7 @@ export default function EventDetail() {
                         <input type="checkbox" checked={row.done} onChange={e => setEquipment(p => p.map((r, j) => j === i ? { ...r, done: e.target.checked } : r))}
                           style={{ width: 18, height: 18, cursor: 'pointer', accentColor: 'var(--green)' }} />
                         <span style={{ fontSize: 12, color: row.done ? 'var(--green)' : 'var(--muted)', fontWeight: row.done ? 700 : 400 }}>
-                          {row.done ? '완료' : '미확인'}
+                          {row.done ? t('confirmed') : t('unconfirmed')}
                         </span>
                       </label>
                     </td>
@@ -497,7 +499,7 @@ export default function EventDetail() {
         {tab === 'itinerary' && (
           <div style={{ padding: '20px 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div style={{ fontSize: 15, fontWeight: 700 }}>현지 일정</div>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>{t('itinerary_title')}</div>
               <button className="btn btn-primary btn-sm" onClick={() => setItinerary(p => [...p, { sn: p.length + 1, date: '', day: '', time: '', activity: '', location: '', assignee: 'All', note: '' }])}>
                 + 일정 추가
               </button>
@@ -505,10 +507,10 @@ export default function EventDetail() {
             <table className="cl-table">
               <thead>
                 <tr>
-                  <th style={{ width: 110 }}>날짜</th><th style={{ width: 50 }}>요일</th>
-                  <th style={{ width: 70 }}>시간</th><th>활동 내용</th>
-                  <th>장소</th><th style={{ width: 90 }}>담당자</th>
-                  <th>비고</th><th style={{ width: 36 }}></th>
+                  <th style={{ width: 110 }}>{t('col_date')}</th><th style={{ width: 50 }}>{t('col_day')}</th>
+                  <th style={{ width: 70 }}>{t('col_time')}</th><th>{t('col_activity')}</th>
+                  <th>{t('col_location')}</th><th style={{ width: 90 }}>{t('col_assignee')}</th>
+                  <th>{t('col_note')}</th><th style={{ width: 36 }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -562,6 +564,7 @@ export default function EventDetail() {
 
 // ── 개요 탭 예산 테이블 ──────────────────────────────
 function OverviewBudgetTable({ budget, prevBudget, prevYear }: { budget: any[]; prevBudget?: any[]; prevYear?: number }) {
+  const { t } = useLang()
   const byCur: Record<string, number> = {}
   for (const b of (budget || [])) {
     const c = b.currency || 'KRW'
@@ -582,12 +585,12 @@ function OverviewBudgetTable({ budget, prevBudget, prevYear }: { budget: any[]; 
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: '2px solid var(--border)' }}>
-              <th style={{ padding: '11px 12px', textAlign: 'left', color: 'var(--muted)', fontSize: 12 }}>항목</th>
-              <th style={{ padding: '11px 12px', textAlign: 'center', color: 'var(--muted)', fontSize: 12 }}>통화</th>
-              <th style={{ padding: '11px 12px', textAlign: 'right', color: 'var(--muted)', fontSize: 12 }}>금액</th>
-              {prevBudget && <th style={{ padding: '11px 12px', textAlign: 'right', color: 'var(--muted)', fontSize: 12 }}>전년({prevYear})</th>}
-              {prevBudget && <th style={{ padding: '11px 12px', textAlign: 'center', color: 'var(--muted)', fontSize: 12 }}>증감</th>}
-              <th style={{ padding: '11px 12px', textAlign: 'left', color: 'var(--muted)', fontSize: 12 }}>비고</th>
+              <th style={{ padding: '11px 12px', textAlign: 'left', color: 'var(--muted)', fontSize: 12 }}>{t('item_col')}</th>
+              <th style={{ padding: '11px 12px', textAlign: 'center', color: 'var(--muted)', fontSize: 12 }}>{t('currency_col')}</th>
+              <th style={{ padding: '11px 12px', textAlign: 'right', color: 'var(--muted)', fontSize: 12 }}>{t('amount_col')}</th>
+              {prevBudget && <th style={{ padding: '11px 12px', textAlign: 'right', color: 'var(--muted)', fontSize: 12 }}>{t('prev_yr')}({prevYear})</th>}
+              {prevBudget && <th style={{ padding: '11px 12px', textAlign: 'center', color: 'var(--muted)', fontSize: 12 }}>{t('diff_lbl')}</th>}
+              <th style={{ padding: '11px 12px', textAlign: 'left', color: 'var(--muted)', fontSize: 12 }}>{t('note_col')}</th>
             </tr>
           </thead>
           <tbody>
@@ -624,7 +627,7 @@ function OverviewBudgetTable({ budget, prevBudget, prevYear }: { budget: any[]; 
           <tfoot>
             {Object.entries(byCur).sort(([a], [b]) => a === 'KRW' ? -1 : 1).map(([c, total]) => (
               <tr key={c} style={{ borderTop: '2px solid var(--border)', background: '#F9F5F5' }}>
-                <td style={{ padding: '10px 12px', fontWeight: 700 }} colSpan={2}>합계 ({c})</td>
+                <td style={{ padding: '10px 12px', fontWeight: 700 }} colSpan={2}>{t('budget_total')} ({c})</td>
                 <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: 'var(--accent)' }}>
                   {fmtAmt(total, c)}
                 </td>
@@ -650,6 +653,7 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
   onDeletePayRow: (id: string) => void
   onEditProposal?: () => void
 }) {
+  const { t } = useLang()
   const [editAmts, setEditAmts] = useState<Record<string, { dep?: number; fin?: number; depDue?: string; finDue?: string }>>({})
 
   const budget = overview?.budget || []
@@ -678,9 +682,9 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
       {/* 요약 카드 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 }}>
         {[
-          { lbl: '총 승인 예산', val: sumStr(byCur), col: '#1E3A5F', bg: '#EFF6FF' },
-          { lbl: '납부 완료', val: sumStr(paidByCur) || '0', col: '#059669', bg: '#ECFDF5' },
-          { lbl: '미납 잔액', val: sumStr(pendByCur) || '0', col: '#DC2626', bg: '#FEF2F2' },
+          { lbl: t('approved_budget'), val: sumStr(byCur), col: '#1E3A5F', bg: '#EFF6FF' },
+          { lbl: t('paid_done'), val: sumStr(paidByCur) || '0', col: '#059669', bg: '#ECFDF5' },
+          { lbl: t('not_paid'), val: sumStr(pendByCur) || '0', col: '#DC2626', bg: '#FEF2F2' },
         ].map(k => (
           <div key={k.lbl} style={{ background: k.bg, borderRadius: 12, padding: '16px 20px', textAlign: 'center' }}>
             <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6, fontWeight: 600 }}>{k.lbl}</div>
@@ -697,18 +701,18 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
             {onEditProposal && (
               <button onClick={onEditProposal}
                 style={{ background: 'rgba(255,255,255,.2)', border: 'none', color: 'white', padding: '4px 12px', borderRadius: 6, fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
-                ✏️ 예산 수정
+                {t('budget_edit')}
               </button>
             )}
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                <th style={{ padding: '10px 16px', textAlign: 'left', color: 'var(--muted)', fontSize: 12 }}>항목</th>
-                <th style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--muted)', fontSize: 12 }}>통화</th>
-                <th style={{ padding: '10px 16px', textAlign: 'right', color: 'var(--muted)', fontSize: 12 }}>승인 예산</th>
-                <th style={{ padding: '10px 16px', textAlign: 'right', color: 'var(--muted)', fontSize: 12 }}>결제 등록</th>
-                <th style={{ padding: '10px 16px', textAlign: 'left', color: 'var(--muted)', fontSize: 12 }}>비고</th>
+                <th style={{ padding: '10px 16px', textAlign: 'left', color: 'var(--muted)', fontSize: 12 }}>{t('item_col')}</th>
+                <th style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--muted)', fontSize: 12 }}>{t('currency_col')}</th>
+                <th style={{ padding: '10px 16px', textAlign: 'right', color: 'var(--muted)', fontSize: 12 }}>{t('approved_budget')}</th>
+                <th style={{ padding: '10px 16px', textAlign: 'right', color: 'var(--muted)', fontSize: 12 }}>{t('payment_registered')}</th>
+                <th style={{ padding: '10px 16px', textAlign: 'left', color: 'var(--muted)', fontSize: 12 }}>{t('note_col')}</th>
               </tr>
             </thead>
             <tbody>
@@ -735,16 +739,16 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
       {/* 결제 일정 */}
       <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, overflow: 'hidden' }}>
         <div style={{ background: 'var(--accent)', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: 'white' }}>📅 결제 일정</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: 'white' }}>{t('payment_schedule')}</span>
           <span style={{ fontSize: 12, color: 'rgba(255,255,255,.8)' }}>
-            납부 완료: {sumStr(paidByCur) || '0'} · 미납: {sumStr(pendByCur) || '0'}
+            {t('paid_done')}: {sumStr(paidByCur) || '0'} · {t('not_paid')}: {sumStr(pendByCur) || '0'}
           </span>
         </div>
         {payments.length === 0 ? (
           <div style={{ padding: 30, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
             결제 일정이 없습니다.
             <button onClick={onAddPayRow} style={{ marginLeft: 10, padding: '4px 12px', borderRadius: 6, background: 'var(--accent)', color: 'white', border: 'none', fontSize: 12, cursor: 'pointer' }}>
-              + 항목 추가
+              {t('add_item')}
             </button>
           </div>
         ) : (
@@ -775,9 +779,9 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
                       final_due: (ed.finDue ?? p.final_due) as string | null,
                       total: (ed.dep ?? p.deposit_amount) + (ed.fin ?? p.final_amount),
                     })} style={{ padding: '4px 10px', borderRadius: 6, background: 'var(--accent)', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
-                      💾 저장
+                      {t('save_pay')}
                     </button>
-                    <button onClick={() => { if (confirm('이 결제 항목을 삭제하시겠습니까?')) onDeletePayRow(p.id) }}
+                    <button onClick={() => { if (confirm(t('confirm_delete'))) onDeletePayRow(p.id) }}
                       style={{ padding: '4px 8px', borderRadius: 6, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', fontSize: 11, cursor: 'pointer' }}>
                       ✕
                     </button>
@@ -787,7 +791,7 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
                       const isPaid = type === 'deposit' ? p.deposit_paid : p.final_paid
                       const amt = type === 'deposit' ? p.deposit_amount : p.final_amount
                       const due = type === 'deposit' ? p.deposit_due : p.final_due
-                      const label = type === 'deposit' ? '선금' : '잔금'
+                      const label = type === 'deposit' ? t('deposit_pay') : t('final_pay_short')
                       const bg = type === 'deposit' ? '#EEF4FF' : '#F0FFF4'
                       const borderCol = isPaid ? '#A7F3D0' : 'var(--border2)'
                       return (
@@ -799,19 +803,19 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
                                 <div style={{ position: 'absolute', top: 3, left: isPaid ? 18 : 3, width: 14, height: 14, background: 'white', borderRadius: '50%', transition: 'left .2s' }} />
                               </div>
                               <span style={{ fontSize: 12, fontWeight: 600, color: isPaid ? '#059669' : 'var(--muted)' }}>
-                                {isPaid ? '납부완료' : '미납'}
+                                {isPaid ? t('paid_ok') : t('not_paid')}
                               </span>
                             </div>
                           </div>
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                             <div>
-                              <label style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3, display: 'block' }}>금액</label>
+                              <label style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3, display: 'block' }}>{t('amount_col')}</label>
                               <input type="number" defaultValue={amt || 0}
                                 onChange={e => setEdit(p.id, type === 'deposit' ? { dep: parseInt(e.target.value) || 0 } : { fin: parseInt(e.target.value) || 0 })}
                                 style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
                             </div>
                             <div>
-                              <label style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3, display: 'block' }}>납부일</label>
+                              <label style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3, display: 'block' }}>{t('pay_date')}</label>
                               <input type="date" defaultValue={due || ''}
                                 onChange={e => setEdit(p.id, type === 'deposit' ? { depDue: e.target.value } : { finDue: e.target.value })}
                                 style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
@@ -842,6 +846,7 @@ function ChecklistCard({ row, idx, onUpdate, onDelete }: {
   onUpdate: (r: ChecklistItem) => void
   onDelete: () => void
 }) {
+  const { t } = useLang()
   const subs = row.subitems || []
   const sc = STATUS_COLORS[row.status] || '#ccc'
 
@@ -864,30 +869,30 @@ function ChecklistCard({ row, idx, onUpdate, onDelete }: {
           {idx + 1}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.04em' }}>항목</div>
+          <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.04em' }}>{t('col_item')}</div>
           <input value={row.item} style={{ fontSize: 14, fontWeight: 700, border: 'none', outline: 'none', background: 'transparent', color: 'var(--text)', fontFamily: 'inherit', flex: 1, width: '100%' }}
             onChange={e => onUpdate({ ...row, item: e.target.value })} />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           <div>
-            <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase' }}>담당자</div>
+            <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase' }}>{t('col_pic')}</div>
             <input value={row.pic || ''} onChange={e => onUpdate({ ...row, pic: e.target.value })}
               style={{ width: 90, fontSize: 13, border: '1px solid var(--border2)', borderRadius: 6, padding: '6px 9px' }} />
           </div>
           <div>
-            <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase' }}>마감일</div>
+            <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase' }}>{t('col_deadline')}</div>
             <input type="date" value={row.deadline || ''} onChange={e => onUpdate({ ...row, deadline: e.target.value })}
               style={{ fontSize: 13, border: '1px solid var(--border2)', borderRadius: 6, padding: '6px 9px' }} />
           </div>
           <div>
-            <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase' }}>현황</div>
+            <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase' }}>{t('col_status')}</div>
             <select value={row.status} onChange={e => onUpdate({ ...row, status: e.target.value })}
               style={{ background: sc, color: 'white', fontWeight: 700, border: 'none', borderRadius: 7, padding: '6px 10px', fontSize: 12, cursor: 'pointer' }}>
               {STATUS_OPTS.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
           <div>
-            <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase' }}>비고</div>
+            <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase' }}>{t('col_remarks')}</div>
             <input value={row.remarks || ''} onChange={e => onUpdate({ ...row, remarks: e.target.value })}
               style={{ width: 140, fontSize: 13, border: '1px solid var(--border2)', borderRadius: 6, padding: '6px 9px' }} />
           </div>
@@ -912,7 +917,7 @@ function ChecklistCard({ row, idx, onUpdate, onDelete }: {
         ))}
         <button onClick={() => onUpdate({ ...row, subitems: [...subs, { text: '', status: 'Plan' }] })}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, padding: '6px 14px', border: '1.5px dashed var(--border2)', borderRadius: 7, fontSize: 12, color: 'var(--muted)', cursor: 'pointer', background: 'none', transition: 'all .15s' }}>
-          + 세부 항목 추가
+          {t('add_sub')}
         </button>
       </div>
     </div>
@@ -921,13 +926,14 @@ function ChecklistCard({ row, idx, onUpdate, onDelete }: {
 
 // ── 선물 섹션 ──────────────────────────────────────
 function GiftSection({ title, data, setData }: { title: string; data: any[]; setData: React.Dispatch<React.SetStateAction<any[]>> }) {
+  const { t } = useLang()
   const total = data.reduce((s: number, r: any) => s + (r.qty || 0) * (r.price || 0), 0)
   return (
     <>
       <div className="section-badge">{title}</div>
       <table className="cl-table" style={{ marginBottom: 20 }}>
         <thead>
-          <tr><th>No</th><th>종류</th><th style={{ minWidth: 160 }}>품목</th><th>수량</th><th>단가 (₩)</th><th>소계</th><th style={{ minWidth: 120 }}>비고</th><th /></tr>
+          <tr><th>{t('col_no')}</th><th>{t('col_prize')}</th><th style={{ minWidth: 160 }}>{t('col_item')}</th><th>{t('col_qty')}</th><th>{t('col_unit_price')}</th><th>{t('col_subtotal')}</th><th style={{ minWidth: 120 }}>{t('col_note')}</th><th /></tr>
         </thead>
         <tbody>
           {data.map((r, i) => (
@@ -945,14 +951,14 @@ function GiftSection({ title, data, setData }: { title: string; data: any[]; set
             </tr>
           ))}
           <tr style={{ background: '#FDF9F9' }}>
-            <td colSpan={5} style={{ textAlign: 'right', fontWeight: 700, padding: '10px 14px' }}>합계</td>
+            <td colSpan={5} style={{ textAlign: 'right', fontWeight: 700, padding: '10px 14px' }}>{t('budget_total')}</td>
             <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--accent)', padding: '10px 14px' }}>₩{total.toLocaleString()}</td>
             <td colSpan={2} />
           </tr>
         </tbody>
       </table>
       <button className="add-row-btn" onClick={() => setData(p => [...p, { sn: p.length + 1, prize: '', item: '', qty: 0, price: 0, currency: 'KRW', note: '' }])}>
-        + 항목 추가
+        {t('add_item')}
       </button>
     </>
   )

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { krw, exhColor, formatEventDate, isPastEvent } from '../../lib/utils'
 import type { Exhibition, Proposal, BudgetItem } from '../../types/database'
+import { useLang } from '../../contexts/LangContext'
 
 interface ExhEntry {
   key: string; name: string; year: number
@@ -18,6 +19,7 @@ interface ModalState {
 
 export default function Schedule() {
   const navigate = useNavigate()
+  const { t } = useLang()
   const [entries, setEntries] = useState<ExhEntry[]>([])
   const [exhMap, setExhMap] = useState<Record<string, Exhibition>>({})
   const [loading, setLoading] = useState(true)
@@ -128,15 +130,15 @@ export default function Schedule() {
     yearGroups[e.year].push(e)
   }
 
-  if (loading) return <div className="view"><div style={{ color: 'var(--muted)', padding: 40 }}>로딩 중...</div></div>
+  if (loading) return <div className="view"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
 
   return (
     <div className="view">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div className="sec-hdr" style={{ margin: 0 }}>
           <div className="bar" />
-          <div className="txt">박람회 일정 관리</div>
-          <div className="sub">연도별 전체 일정</div>
+          <div className="txt">{t('sched_title')}</div>
+          <div className="sub">{t('sched_sub')}</div>
         </div>
         <button className="btn btn-primary btn-sm" onClick={openNew}>+ 일정 추가</button>
       </div>
@@ -150,17 +152,17 @@ export default function Schedule() {
             <div className="yr-header">
               <div className="yr-num">{year}</div>
               <span className="badge" style={{ background: doneCount === yEntries.length ? '#7B8AA0' : 'var(--accent)', fontSize: 12 }}>
-                {doneCount === yEntries.length ? '전체 완료' : `예정 ${schedCount}개`}
+                {doneCount === yEntries.length ? t('badge_all_done') : `${t('badge_scheduled')} ${schedCount}개`}
               </span>
               <div className="yr-meta">{yEntries.length}개 박람회 &nbsp;·&nbsp; {krw(yearTotal)}</div>
             </div>
             <table className="rank-table">
               <thead>
                 <tr>
-                  <th>박람회명</th><th>행사 기간 <span style={{ opacity: .7, fontSize: 10 }}>✎</span></th>
-                  <th>장소 <span style={{ opacity: .7, fontSize: 10 }}>✎</span></th>
-                  <th>구분</th><th>상태</th>
-                  <th style={{ textAlign: 'right' }}>총 예산 <span style={{ opacity: .7, fontSize: 10 }}>✎</span></th>
+                  <th>{t('col_exh')}</th><th>{t('event_period')} <span style={{ opacity: .7, fontSize: 10 }}>✎</span></th>
+                  <th>{t('venue')} <span style={{ opacity: .7, fontSize: 10 }}>✎</span></th>
+                  <th>{t('col_type')}</th><th>{t('sched_col_status')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('total_budget')} <span style={{ opacity: .7, fontSize: 10 }}>✎</span></th>
                   <th></th>
                 </tr>
               </thead>
@@ -184,17 +186,17 @@ export default function Schedule() {
                       <td style={{ color: 'var(--muted)', fontSize: 13, cursor: 'pointer' }} onClick={() => openEdit(e)}>{e.venue}</td>
                       <td>
                         <span className="badge" style={{ background: e.recurring ? '#2E7D51' : 'var(--amber)' }}>
-                          {e.recurring ? '기존' : '신규'}
+                          {e.recurring ? t('badge_existing') : t('badge_new')}
                         </span>
                       </td>
                       <td>
                         <span className="badge" style={{ background: past ? '#7B8AA0' : 'var(--accent)' }}>
-                          {past ? '완료' : '예정'}
+                          {past ? t('badge_done') : t('badge_scheduled')}
                         </span>
                       </td>
                       <td style={{ textAlign: 'right', fontWeight: 700, color, cursor: 'pointer' }} onClick={() => openEdit(e)}>{krw(e.total)}</td>
                       <td>
-                        <button className="btn btn-outline btn-sm" onClick={() => openEdit(e)}>편집</button>
+                        <button className="btn btn-outline btn-sm" onClick={() => openEdit(e)}>{t('edit')}</button>
                       </td>
                     </tr>
                   )
@@ -209,18 +211,18 @@ export default function Schedule() {
         <div className="modal-bg open">
           <div className="modal" style={{ maxWidth: 500 }}>
             <div className="modal-hdr">
-              <h3>{modal.isNew ? '일정 추가' : '일정 편집'}</h3>
+              <h3>{modal.isNew ? t('sched_add_title') : t('sched_edit_title')}</h3>
               <button className="modal-close" onClick={() => setModal({ open: false, isNew: false })}>✕</button>
             </div>
             <label>박람회 이름</label>
             <input value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Korea Import Fair (KIF)" />
             <div className="form-row cols3" style={{ marginTop: 14 }}>
               <div>
-                <label style={{ marginTop: 0 }}>연도</label>
+                <label style={{ marginTop: 0 }}>{t('year_label')}</label>
                 <input type="number" value={form.year || ''} onChange={e => setForm(f => ({ ...f, year: parseInt(e.target.value) }))} />
               </div>
               <div>
-                <label style={{ marginTop: 0 }}>작성자</label>
+                <label style={{ marginTop: 0 }}>{t('author_label')}</label>
                 <input value={form.author || ''} onChange={e => setForm(f => ({ ...f, author: e.target.value }))} />
               </div>
               <div>
@@ -230,35 +232,35 @@ export default function Schedule() {
             </div>
             <div className="form-row cols2" style={{ marginTop: 14 }}>
               <div>
-                <label style={{ marginTop: 0 }}>행사 기간</label>
+                <label style={{ marginTop: 0 }}>{t('event_period')}</label>
                 <input value={form.date || ''} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} placeholder="2027 Jun 23-25" />
               </div>
               <div>
-                <label style={{ marginTop: 0 }}>장소</label>
-                <input value={form.venue || ''} onChange={e => setForm(f => ({ ...f, venue: e.target.value }))} placeholder="COEX Hall B" />
+                <label style={{ marginTop: 0 }}>{t('venue')}</label>
+                <input value={form.venue || ''} onChange={e => setForm(f => ({ ...f, venue: e.target.value }))} placeholder={t('venue_placeholder')} />
               </div>
             </div>
             <label style={{ marginTop: 14 }}>구분</label>
             <select value={form.recurring ? '1' : '0'} onChange={e => setForm(f => ({ ...f, recurring: e.target.value === '1' }))}>
-              <option value="1">기존 박람회</option>
-              <option value="0">신규 박람회</option>
+              <option value="1">{t('existing_exh')}</option>
+              <option value="0">{t('new_exh')}</option>
             </select>
             {!modal.isNew && (
               <div style={{ marginTop: 16, padding: '12px 14px', background: '#FFF0F0', borderRadius: 8, border: '1px solid #F5C6C6' }}>
-                <div style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 8 }}>⚠ 이 일정 항목을 완전히 삭제합니다.</div>
+                <div style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 8 }}>{t('delete_sched_warn')}</div>
                 <button className="btn btn-sm" style={{ background: '#D63031', color: 'white', border: 'none' }}
                   onClick={async () => {
-                    if (!modal.entry || !confirm('이 일정을 삭제하시겠습니까?')) return
+                    if (!modal.entry || !confirm(t('confirm_delete'))) return
                     await deleteEntry(modal.entry.key, modal.entry.year)
                     setModal({ open: false, isNew: false })
                   }}>
-                  🗑 이 일정 삭제
+                  {t('delete_sched_btn')}
                 </button>
               </div>
             )}
             <div className="modal-footer">
-              <button className="btn btn-muted" onClick={() => setModal({ open: false, isNew: false })}>취소</button>
-              <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? '저장 중...' : '저장'}</button>
+              <button className="btn btn-muted" onClick={() => setModal({ open: false, isNew: false })}>{t('cancel')}</button>
+              <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? t('saving') : t('save')}</button>
             </div>
           </div>
         </div>

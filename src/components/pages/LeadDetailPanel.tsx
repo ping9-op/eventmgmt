@@ -4,6 +4,7 @@ import { STAGE_ORDER, STAGE_COLORS } from '../../lib/utils'
 import { loadAllSettings, CONTRACT_STATUSES as SYSTEM_CONTRACT_STATUSES, ONBOARD_STATUSES as SYSTEM_ONBOARD_STATUSES, type SalesSettingsData } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
 import type { SalesLead, SalesActivity, SalesTask, SalesProposal } from '../../types/database'
+import { useLang } from '../../contexts/LangContext'
 
 const CONTRACT_STATUSES = SYSTEM_CONTRACT_STATUSES
 const ONBOARD_STATUSES = SYSTEM_ONBOARD_STATUSES
@@ -18,6 +19,7 @@ export default function LeadDetailPanel({
   onClose: () => void
   onRefresh: () => void
 }) {
+  const { t } = useLang()
   const { showToast } = useToast()
   const [settings, setSettings] = useState<SalesSettingsData | null>(null)
   const [tab, setTab] = useState<TabId>('basic')
@@ -110,7 +112,7 @@ export default function LeadDetailPanel({
     }
 
     setSaving(false)
-    showToast('저장되었습니다.')
+    showToast(t('saved_ok'))
     onRefresh()
     // Refresh lead data
     const { data } = await supabase.from('sales_leads').select('*').eq('id', leadId).single()
@@ -177,7 +179,7 @@ export default function LeadDetailPanel({
               </span>
               <button onClick={save} disabled={saving}
                 style={{ background: 'var(--accent)', border: 'none', color: 'white', padding: '6px 14px', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
-                {saving ? '저장 중...' : '💾 저장'}
+                {saving ? t('saving') : `💾 ${t('save')}`}
               </button>
               <button onClick={onClose}
                 style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: 'white', width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>
@@ -188,18 +190,18 @@ export default function LeadDetailPanel({
 
           {/* Tabs */}
           <div style={{ display: 'flex', background: '#F5F0F0', borderBottom: '1px solid var(--border2)', flexShrink: 0 }}>
-            {tabs.map(t => (
-              <div key={t.id}
-                onClick={() => setTab(t.id)}
+            {tabs.map(tb => (
+              <div key={tb.id}
+                onClick={() => setTab(tb.id)}
                 style={{
                   padding: '11px 18px', fontSize: 13,
-                  fontWeight: tab === t.id ? 700 : 500,
+                  fontWeight: tab === tb.id ? 700 : 500,
                   cursor: 'pointer',
-                  color: tab === t.id ? 'var(--accent)' : 'var(--muted)',
-                  borderBottom: tab === t.id ? '3px solid var(--accent)' : '3px solid transparent',
+                  color: tab === tb.id ? 'var(--accent)' : 'var(--muted)',
+                  borderBottom: tab === tb.id ? '3px solid var(--accent)' : '3px solid transparent',
                   whiteSpace: 'nowrap', transition: 'all .15s',
                 }}>
-                {t.label}
+                {tb.label}
               </div>
             ))}
           </div>
@@ -368,8 +370,8 @@ export default function LeadDetailPanel({
                       <textarea value={actNote} rows={2} onChange={e => setActNote(e.target.value)} style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }} />
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={addActivity} style={{ padding: '6px 14px', borderRadius: 6, background: 'var(--accent)', color: 'white', border: 'none', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>저장</button>
-                      <button onClick={() => setShowActForm(false)} style={{ padding: '6px 14px', borderRadius: 6, background: 'white', color: 'var(--muted)', border: '1px solid var(--border2)', fontSize: 12, cursor: 'pointer' }}>취소</button>
+                      <button onClick={addActivity} style={{ padding: '6px 14px', borderRadius: 6, background: 'var(--accent)', color: 'white', border: 'none', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>{t('save')}</button>
+                      <button onClick={() => setShowActForm(false)} style={{ padding: '6px 14px', borderRadius: 6, background: 'white', color: 'var(--muted)', border: '1px solid var(--border2)', fontSize: 12, cursor: 'pointer' }}>{t('cancel')}</button>
                     </div>
                   </div>
                 )}
@@ -396,14 +398,14 @@ export default function LeadDetailPanel({
                 <div style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Follow-up Tasks</div>
                   {tasks.length === 0 && <div style={{ color: 'var(--muted)', fontSize: 13 }}>등록된 Task 없음</div>}
-                  {tasks.map(t => (
-                    <div key={t.id} style={{ background: 'var(--light)', borderRadius: 8, padding: '10px 14px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  {tasks.map(tk => (
+                    <div key={tk.id} style={{ background: 'var(--light)', borderRadius: 8, padding: '10px 14px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <div style={{ fontSize: 13, fontWeight: 600 }}>{t.task_title}</div>
-                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>{t.task_type} · {t.due_date} · {t.owner}</div>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{tk.task_title}</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>{tk.task_type} · {tk.due_date} · {tk.owner}</div>
                       </div>
-                      {t.status !== 'Done'
-                        ? <button onClick={() => markTaskDone(t.id)} style={{ padding: '4px 10px', borderRadius: 6, background: '#059669', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer' }}>✓ Done</button>
+                      {tk.status !== 'Done'
+                        ? <button onClick={() => markTaskDone(tk.id)} style={{ padding: '4px 10px', borderRadius: 6, background: '#059669', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer' }}>{t('mark_done')}</button>
                         : <span style={{ color: '#059669', fontWeight: 600, fontSize: 12 }}>✅ Done</span>
                       }
                     </div>

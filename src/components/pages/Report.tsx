@@ -5,11 +5,13 @@ import { krw, exhColor } from '../../lib/utils'
 import type { Exhibition, Proposal, Result, ActualCost, MarketingActivity } from '../../types/database'
 import { useToast } from '../../contexts/ToastContext'
 import pptxgen from 'pptxgenjs'
+import { useLang } from '../../contexts/LangContext'
 
 interface ReportKey { label: string; exhibition_key: string }
 
 export default function Report() {
   const { showToast } = useToast()
+  const { t } = useLang()
   const location = useLocation()
   const initKey = (location.state as any)?.key || null
   const [reportKeys, setReportKeys] = useState<ReportKey[]>([])
@@ -204,7 +206,7 @@ export default function Report() {
     }
   }
 
-  if (loading) return <div className="view"><div style={{ color: 'var(--muted)', padding: 40 }}>로딩 중...</div></div>
+  if (loading) return <div className="view"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
 
   const r = report || initReport()
 
@@ -239,8 +241,8 @@ export default function Report() {
     <div className="view">
       <div className="sec-hdr">
         <div className="bar" />
-        <div className="txt">결과 보고서</div>
-        <div className="sub">실제 지출 vs 예산 비교</div>
+        <div className="txt">{t('report_title')}</div>
+        <div className="sub">{t('report_sub')}</div>
       </div>
       <div className="report-layout">
         {/* Left */}
@@ -253,15 +255,15 @@ export default function Report() {
         </div>
 
         {/* Right */}
-        {selected && (
+        {selected ? (
           <div>
             {/* 커버 슬라이드 */}
             <div style={{ background: 'var(--light)', borderRadius: 10, padding: '14px 16px', marginBottom: 16, border: '1px solid var(--border2)' }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 10 }}>📄 커버 슬라이드 (자동 입력됨)</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 10 }}>{t('cover_slide')}</div>
               <div className="form-row cols3">
-                <div><label style={{ marginTop: 0 }}>제목</label><input value={r.cover_title || ''} onChange={e => updateField('cover_title', e.target.value)} /></div>
-                <div><label style={{ marginTop: 0 }}>날짜</label><input type="date" value={r.cover_date || ''} onChange={e => updateField('cover_date', e.target.value)} /></div>
-                <div><label style={{ marginTop: 0 }}>작성자</label><input value={r.cover_author || 'Andrew'} onChange={e => updateField('cover_author', e.target.value)} /></div>
+                <div><label style={{ marginTop: 0 }}>{t('cover_title_lbl')}</label><input value={r.cover_title || ''} onChange={e => updateField('cover_title', e.target.value)} /></div>
+                <div><label style={{ marginTop: 0 }}>{t('cover_date_lbl')}</label><input type="date" value={r.cover_date || ''} onChange={e => updateField('cover_date', e.target.value)} /></div>
+                <div><label style={{ marginTop: 0 }}>{t('cover_author_lbl')}</label><input value={r.cover_author || 'Andrew'} onChange={e => updateField('cover_author', e.target.value)} /></div>
               </div>
             </div>
 
@@ -274,8 +276,8 @@ export default function Report() {
             {/* Section 2: Event Overview */}
             <SectionHeader num={2} title="Event Overview" enabled={r.sections_enabled?.['2'] !== false} onToggle={v => updateField('sections_enabled', { ...r.sections_enabled, '2': v })} />
             <div className="form-row cols3" style={{ marginBottom: 16 }}>
-              <div><label style={{ marginTop: 0 }}>행사 기간</label><input value={r.event_date || ''} onChange={e => updateField('event_date', e.target.value)} /></div>
-              <div><label style={{ marginTop: 0 }}>장소</label><input value={r.event_venue || ''} onChange={e => updateField('event_venue', e.target.value)} /></div>
+              <div><label style={{ marginTop: 0 }}>{t('event_period')}</label><input value={r.event_date || ''} onChange={e => updateField('event_date', e.target.value)} /></div>
+              <div><label style={{ marginTop: 0 }}>{t('venue')}</label><input value={r.event_venue || ''} onChange={e => updateField('event_venue', e.target.value)} /></div>
               <div><label style={{ marginTop: 0 }}>타겟 고객</label><input value={r.event_target || ''} onChange={e => updateField('event_target', e.target.value)} /></div>
             </div>
 
@@ -284,7 +286,7 @@ export default function Report() {
 
             {/* Actual costs */}
             <table className="actual-table" style={{ marginBottom: 6 }}>
-              <thead><tr><th>항목</th><th style={{ textAlign: 'right' }}>승인 예산</th><th style={{ textAlign: 'right' }}>실제 지출</th><th style={{ textAlign: 'right' }}>차이</th><th>비고</th><th></th></tr></thead>
+              <thead><tr><th>{t('item_col')}</th><th style={{ textAlign: 'right' }}>{t('budgeted')}</th><th style={{ textAlign: 'right' }}>{t('actual')}</th><th style={{ textAlign: 'right' }}>{t('diff')}</th><th>{t('note_col')}</th><th></th></tr></thead>
               <tbody>
                 {(r.actual_costs || []).map((c, i) => {
                   const diff = (c.actual || 0) - (c.budgeted || 0)
@@ -306,7 +308,7 @@ export default function Report() {
               </tbody>
               <tfoot>
                 <tr>
-                  <td><strong>합계</strong></td>
+                  <td><strong>{t('budget_total')}</strong></td>
                   <td style={{ textAlign: 'right' }}><strong>{krw(totalBudgeted)}</strong></td>
                   <td style={{ textAlign: 'right' }}><strong style={{ color: (totalActual - totalBudgeted) > 0 ? 'var(--danger)' : (totalActual - totalBudgeted) < 0 ? 'var(--green)' : 'inherit' }}>{totalActual ? krw(totalActual) : '-'}</strong></td>
                   <td style={{ textAlign: 'right' }}>
@@ -318,14 +320,14 @@ export default function Report() {
                 </tr>
               </tfoot>
             </table>
-            <button className="add-row-btn" onClick={addCost} style={{ marginBottom: 16 }}>+ 비용 항목 추가</button>
+            <button className="add-row-btn" onClick={addCost} style={{ marginBottom: 16 }}>{t('add_cost_item')}</button>
 
             {/* Section 4: Marketing Activities */}
             <SectionHeader num={4} title="Marketing Activities" enabled={r.sections_enabled?.['4'] !== false} onToggle={v => updateField('sections_enabled', { ...r.sections_enabled, '4': v })} />
             <div className="card" style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                <h4 style={{ fontSize: 15, fontWeight: 700 }}>마케팅 활동</h4>
-                <button className="btn btn-muted btn-sm" onClick={() => updateField('marketing_activities', [...(r.marketing_activities || []), { type: '', description: '', result: '' }])}>+ 추가</button>
+                <h4 style={{ fontSize: 15, fontWeight: 700 }}>{t('marketing_activities')}</h4>
+                <button className="btn btn-muted btn-sm" onClick={() => updateField('marketing_activities', [...(r.marketing_activities || []), { type: '', description: '', result: '' }])}>{t('add_marketing')}</button>
               </div>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
@@ -386,7 +388,7 @@ export default function Report() {
             </div>
             <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
               <div className="card-sm" style={{ flex: 1, textAlign: 'center' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 6 }}>1인당 비용 (자동 계산)</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 6 }}>{t('per_person_cost')}</div>
                 <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--accent)' }}>
                   {(() => {
                     const totalReg = (r.reg_remittance || 0) + (r.reg_card || 0) + (r.reg_biz || 0)
@@ -409,8 +411,8 @@ export default function Report() {
             {/* Photo gallery */}
             <div className="card" style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>
-                📸 현장 사진
-                <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--muted)', marginLeft: 8 }}>PPT에 자동 배치</span>
+                {t('photos_title')}
+                <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--muted)', marginLeft: 8 }}>{t('photos_sub')}</span>
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                 {(r.marketing_photos || []).map((photo, i) => (
@@ -422,7 +424,7 @@ export default function Report() {
                 ))}
                 <label style={{ width: 160, height: 120, border: '2px dashed var(--border2)', borderRadius: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: 'var(--light)', margin: 0 }}>
                   <span style={{ fontSize: 24, marginBottom: 6 }}>📷</span>
-                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>사진 추가</span>
+                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>{t('add_photo')}</span>
                   <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={e => {
                     const files = Array.from(e.target.files || [])
                     files.forEach(file => {
@@ -466,19 +468,21 @@ export default function Report() {
             {/* Section 10: Conclusion */}
             <SectionHeader num={10} title="Conclusion" enabled={r.sections_enabled?.['10'] !== false} onToggle={v => updateField('sections_enabled', { ...r.sections_enabled, '10': v })} />
             <div className="card" style={{ marginBottom: 16 }}>
-              <label style={{ marginTop: 0, fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>종합 의견</label>
+              <label style={{ marginTop: 0, fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>{t('conclusion_label')}</label>
               <textarea value={r.conclusion || ''} onChange={e => updateField('conclusion', e.target.value)} rows={4} />
             </div>
 
             <div style={{ display: 'flex', gap: 10 }}>
               <button className="btn btn-green" onClick={saveReport} disabled={saving} style={{ flex: 1, padding: 14 }}>
-                {saving ? '저장 중...' : '💾 저장'}
+                {saving ? t('saving') : t('save_report')}
               </button>
               <button className="btn btn-primary" onClick={exportPPT} style={{ flex: 1, padding: 14 }}>
-                📊 PPT 내보내기
+                {t('export_ppt')}
               </button>
             </div>
           </div>
+        ) : (
+          <div style={{ color: 'var(--muted)', fontSize: 14, padding: 20 }}>{t('select_report')}</div>
         )}
       </div>
     </div>
@@ -486,6 +490,7 @@ export default function Report() {
 }
 
 function SectionHeader({ num, title, enabled, onToggle }: { num: number; title: string; enabled: boolean; onToggle: (v: boolean) => void }) {
+  const { t } = useLang()
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '28px 0 14px', paddingBottom: 9, borderBottom: '2px solid var(--accent)' }}>
       <label style={{ display: 'flex', alignItems: 'center', gap: 0, margin: 0, cursor: 'pointer' }}>
@@ -493,7 +498,7 @@ function SectionHeader({ num, title, enabled, onToggle }: { num: number; title: 
       </label>
       <div style={{ background: enabled ? 'var(--accent)' : 'var(--muted)', color: 'white', fontSize: 13, fontWeight: 700, width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{num}</div>
       <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', opacity: enabled ? 1 : 0.35 }}>{title}</div>
-      <span style={{ fontSize: 11, marginLeft: 4, color: enabled ? 'var(--green)' : 'var(--muted)' }}>{enabled ? 'PPT 포함' : 'PPT 제외'}</span>
+      <span style={{ fontSize: 11, marginLeft: 4, color: enabled ? 'var(--green)' : 'var(--muted)' }}>{enabled ? t('ppt_include') : t('ppt_exclude')}</span>
     </div>
   )
 }

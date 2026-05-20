@@ -5,6 +5,7 @@ import { exhColor, costColor, formatEventDate, isPastEvent } from '../../lib/uti
 import { useToast } from '../../contexts/ToastContext'
 import type { Exhibition, Proposal, BudgetItem } from '../../types/database'
 import ProposalEditModal from '../ProposalEditModal'
+import { useLang } from '../../contexts/LangContext'
 
 const CUR_SYM: Record<string, string> = { KRW: '₩', JPY: '¥', USD: '$', EUR: '€', SGD: 'S$' }
 const CURRENCIES = ['KRW', 'JPY', 'USD', 'EUR', 'SGD']
@@ -38,6 +39,7 @@ const defaultBudgetRows = (): BudgetRow[] => [
 export default function Exhibitions() {
   const navigate = useNavigate()
   const { showToast } = useToast()
+  const { t } = useLang()
   const [data, setData] = useState<ExhEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
@@ -180,15 +182,15 @@ export default function Exhibitions() {
     load()
   }
 
-  if (loading) return <div className="view"><div style={{ color: 'var(--muted)', padding: 40 }}>로딩 중...</div></div>
+  if (loading) return <div className="view"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
 
   return (
     <div className="view">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div className="sec-hdr" style={{ margin: 0 }}>
           <div className="bar" />
-          <div className="txt">기존 박람회 목록</div>
-          <div className="sub">저장된 승인 Proposal 이력</div>
+          <div className="txt">{t('exh_list')}</div>
+          <div className="sub">{t('exh_sub')}</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-primary btn-sm" onClick={() => setShowAddModal(true)}>+ 과거 Proposal 등록</button>
@@ -225,7 +227,7 @@ export default function Exhibitions() {
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
                     <span className="badge" style={{ background: exh.recurring ? '#2E7D51' : 'var(--amber)' }}>
-                      {exh.recurring ? '기존' : '신규'}
+                      {exh.recurring ? t('badge_existing') : t('badge_new')}
                     </span>
                     <button onClick={() => setDeleteConfirm(exh.id)}
                       style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 5, color: 'var(--muted)', cursor: 'pointer', fontSize: 11, padding: '2px 8px' }}>
@@ -253,14 +255,14 @@ export default function Exhibitions() {
                             initialDate: p.date_of_event, initialVenue: p.venue,
                             initialObjective: p.objective || '',
                             initialBudget: p.budget.map((b: any) => ({ item: b.item, curr: b.curr, prev: b.prev || 0, currency: b.currency || 'KRW', note: b.note || '' }))
-                          })}>편집</button>
+                          })}>{t('edit')}</button>
                       </div>
                     </div>
                   ))}
                   {proposals.length === 0 && <div style={{ fontSize: 12, color: 'var(--muted)', padding: '10px 0' }}>이력 없음</div>}
                 </div>
 
-                <div style={{ fontSize: 16, fontWeight: 800, color, marginBottom: 12 }}>총 예산: {cumBudgetStr}</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color, marginBottom: 12 }}>{t('total_budget')}: {cumBudgetStr}</div>
 
                 {latest && latest.budget.slice(0, 3).map((b, i) => (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
@@ -289,7 +291,7 @@ export default function Exhibitions() {
         <div className="modal-bg open">
           <div className="modal" style={{ width: 680 }}>
             <div className="modal-hdr">
-              <h3>과거 Proposal 등록</h3>
+              <h3>{t('reg_past_proposal')}</h3>
               <button className="modal-close" onClick={() => { setShowAddModal(false); resetForm() }}>✕</button>
             </div>
 
@@ -318,38 +320,38 @@ export default function Exhibitions() {
               )}
             </div>
 
-            <label style={{ marginTop: 0 }}>박람회 선택 (기존 선택 또는 직접 입력)</label>
+            <label style={{ marginTop: 0 }}>{t('exh_select_existing')}</label>
             <select value={apExhSel} onChange={e => onApExhSel(e.target.value)}>
               <option value="">-- 새 박람회 직접 입력 --</option>
               {data.map(d => <option key={d.exh.id} value={d.exh.id}>{d.exh.name}</option>)}
             </select>
 
             <div className="form-row cols2">
-              <div><label>박람회 이름</label><input value={apName} onChange={e => setApName(e.target.value)} placeholder="Korea Import Fair (KIF)" /></div>
-              <div><label>연도</label><input type="number" value={apYear} onChange={e => setApYear(e.target.value)} /></div>
+              <div><label>박람회 이름</label><input value={apName} onChange={e => setApName(e.target.value)} placeholder={t('exh_name_placeholder')} /></div>
+              <div><label>{t('year_label')}</label><input type="number" value={apYear} onChange={e => setApYear(e.target.value)} /></div>
             </div>
             <div className="form-row cols3">
-              <div><label>작성자</label><input value={apAuthor} onChange={e => setApAuthor(e.target.value)} /></div>
-              <div><label>작성일</label><input type="date" value={apPdate} onChange={e => setApPdate(e.target.value)} /></div>
+              <div><label>{t('author_label')}</label><input value={apAuthor} onChange={e => setApAuthor(e.target.value)} /></div>
+              <div><label>{t('write_date')}</label><input type="date" value={apPdate} onChange={e => setApPdate(e.target.value)} /></div>
               <div>
-                <label>기존 박람회?</label>
+                <label>{t('is_recurring')}</label>
                 <select value={apRecurring} onChange={e => setApRecurring(e.target.value as '1' | '0')}>
-                  <option value="1">기존 박람회</option>
-                  <option value="0">신규 박람회</option>
+                  <option value="1">{t('existing_exh')}</option>
+                  <option value="0">{t('new_exh')}</option>
                 </select>
               </div>
             </div>
             <div className="form-row cols2">
-              <div><label>행사 기간</label><input value={apDate} onChange={e => setApDate(e.target.value)} placeholder="2025 Jun 24-26" /></div>
-              <div><label>장소</label><input value={apVenue} onChange={e => setApVenue(e.target.value)} placeholder="COEX Hall B" /></div>
+              <div><label>{t('event_period')}</label><input value={apDate} onChange={e => setApDate(e.target.value)} placeholder="2025 Jun 24-26" /></div>
+              <div><label>{t('venue')}</label><input value={apVenue} onChange={e => setApVenue(e.target.value)} placeholder={t('venue_placeholder')} /></div>
             </div>
-            <label>참가 목적</label>
-            <input value={apObj} onChange={e => setApObj(e.target.value)} placeholder="To promote GME BIZ to potential Korean Merchants." />
+            <label>{t('objective')}</label>
+            <input value={apObj} onChange={e => setApObj(e.target.value)} placeholder={t('objective_placeholder')} />
 
-            <label style={{ marginTop: 16 }}>예산 항목</label>
+            <label style={{ marginTop: 16 }}>{t('budget_items')}</label>
             <table className="budget-table" style={{ marginBottom: 8 }}>
               <thead>
-                <tr><th>항목</th><th>금액</th><th>통화</th><th>비고</th><th></th></tr>
+                <tr><th>{t('item_col')}</th><th>{t('amount_col')}</th><th>{t('currency_col')}</th><th>{t('note_col')}</th><th></th></tr>
               </thead>
               <tbody>
                 {apBudget.map((row, i) => (
@@ -376,13 +378,13 @@ export default function Exhibitions() {
               </tbody>
             </table>
             <button className="btn btn-muted btn-sm" onClick={() => setApBudget(prev => [...prev, { item: '', curr: 0, currency: 'KRW', note: '' }])}>
-              + 항목 추가
+              {t('add_item')}
             </button>
 
             <div className="modal-footer">
-              <button className="btn btn-muted" onClick={() => { setShowAddModal(false); resetForm() }}>취소</button>
+              <button className="btn btn-muted" onClick={() => { setShowAddModal(false); resetForm() }}>{t('cancel')}</button>
               <button className="btn btn-primary" onClick={saveApProposal} disabled={saving || !apName}>
-                {saving ? '저장 중...' : '💾 등록 완료'}
+                {saving ? t('saving') : t('register_done')}
               </button>
             </div>
           </div>
@@ -404,15 +406,15 @@ export default function Exhibitions() {
         <div className="modal-bg open">
           <div className="modal" style={{ maxWidth: 400 }}>
             <div className="modal-hdr">
-              <h3>박람회 삭제</h3>
+              <h3>{t('delete_exh_title')}</h3>
               <button className="modal-close" onClick={() => setDeleteConfirm(null)}>✕</button>
             </div>
             <p style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 20 }}>
-              이 박람회와 모든 관련 Proposal을 삭제합니다. 이 작업은 되돌릴 수 없습니다.
+              {t('delete_exh_desc')}
             </p>
             <div className="modal-footer">
-              <button className="btn btn-muted" onClick={() => setDeleteConfirm(null)}>취소</button>
-              <button className="btn btn-red" onClick={() => deleteExhibition(deleteConfirm)}>삭제</button>
+              <button className="btn btn-muted" onClick={() => setDeleteConfirm(null)}>{t('cancel')}</button>
+              <button className="btn btn-red" onClick={() => deleteExhibition(deleteConfirm)}>{t('delete')}</button>
             </div>
           </div>
         </div>
