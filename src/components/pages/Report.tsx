@@ -9,6 +9,36 @@ import { useLang } from '../../contexts/LangContext'
 
 interface ReportKey { label: string; exhibition_key: string }
 
+// Proposal 데이터로 보고서 초기값 자동 생성
+function buildDefaultFromProposal(key: string, prop: Proposal, exhName: string): Partial<Result> {
+  const budget = (prop.budget as any[]) || []
+  return {
+    exhibition_key: key,
+    cover_title: `${exhName} ${prop.year}`,
+    cover_date: new Date().toISOString().split('T')[0],
+    cover_author: prop.author || 'Andrew',
+    objective: prop.objective || '',
+    event_date: prop.date_of_event || '',
+    event_venue: prop.venue || '',
+    event_target: '',
+    // 예산 항목을 승인예산으로 자동 로드 (실제 지출은 0으로 초기화)
+    actual_costs: budget.map((b: any) => ({
+      item: b.item,
+      budgeted: b.curr || 0,
+      actual: 0,
+      currency: b.currency || 'KRW',
+      note: '',
+    })),
+    marketing_activities: [],
+    marketing_photos: [],
+    reg_remittance: 0, reg_card: 0, reg_biz: 0, reg_onboard: 0,
+    cost_per_person: 0, visitors: 0, new_merchants: 0, new_registrations: 0,
+    shortcomings: [], improvements: [], recommendations: [], requests: [],
+    conclusion: '',
+    sections_enabled: {},
+  }
+}
+
 export default function Report() {
   const { showToast } = useToast()
   const { t } = useLang()
@@ -19,6 +49,8 @@ export default function Report() {
   const [report, setReport] = useState<Result | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  // Proposal 데이터 캐시 (exhibition_key → proposal)
+  const [propCache, setPropCache] = useState<Record<string, { prop: Proposal; exhName: string }>>({})
 
   async function load() {
     const [{ data: exhData }, { data: propData }, { data: resultData }] = await Promise.all([
@@ -29,10 +61,20 @@ export default function Report() {
     const exhMap: Record<string, Exhibition> = {}
     for (const e of (exhData || [])) exhMap[e.id] = e
 
-    const keys: ReportKey[] = ((propData || []) as unknown as Proposal[]).map(p => {
+    // Proposal 캐시 구성 (exhibition_key → 최신 proposal)
+    const cache: Record<string, { prop: Proposal; exhName: string }> = {}
+    for (const p of (propData || []) as unknown as Proposal[]) {
       const exh = exhMap[p.exhibition_id]
-      return { label: (exh?.name || '') + ' ' + p.year, exhibition_key: (exh?.key || '') + '_' + p.year }
-    })
+      if (!exh) continue
+      const k = `${exh.key}_${p.year}`
+      cache[k] = { prop: p, exhName: exh.name }
+    }
+    setPropCache(cache)
+
+    const keys: ReportKey[] = Object.entries(cache).map(([k, { exhName, prop }]) => ({
+      label: `${exhName} ${prop.year}`,
+      exhibition_key: k,
+    })).sort((a, b) => b.label.localeCompare(a.label))
     setReportKeys(keys)
 
     const resultMap: Record<string, Result> = {}
@@ -41,7 +83,12 @@ export default function Report() {
     const sel = initKey || keys[0]?.exhibition_key
     if (sel) {
       setSelected(sel)
-      setReport(resultMap[sel] || null)
+      // 기존 저장된 보고서가 있으면 로드, 없으면 Proposal에서 자동 생성
+      if (resultMap[sel]) {
+        setReport(resultMap[sel])
+      } else if (cache[sel]) {
+        setReport(buildDefaultFromProposal(sel, cache[sel].prop, cache[sel].exhName) as unknown as Result)
+      }
     }
     setLoading(false)
   }
@@ -51,7 +98,14 @@ export default function Report() {
   async function selectKey(k: string) {
     setSelected(k)
     const { data } = await supabase.from('results').select('*').eq('exhibition_key', k).single()
-    setReport(data as Result | null)
+    if (data) {
+      setReport(data as unknown as Result)
+    } else if (propCache[k]) {
+      // 저장된 보고서 없음 → Proposal 데이터로 자동 초기화
+      setReport(buildDefaultFromProposal(k, propCache[k].prop, propCache[k].exhName) as unknown as Result)
+    } else {
+      setReport(null)
+    }
   }
 
   async function saveReport() {
