@@ -10,6 +10,13 @@ const CONTRACT_STATUSES = SYSTEM_CONTRACT_STATUSES
 const ONBOARD_STATUSES = SYSTEM_ONBOARD_STATUSES
 const ACTIVITY_RESULTS = ['Interested', 'No Response', 'Not Interested', 'Requested Info', 'Scheduled Meeting']
 
+const TASK_TYPE_MAP: Record<string, string> = {
+  '이메일': 'Email', '전화': 'Call', '문자': 'SMS', '카카오': 'KakaoTalk',
+  '미팅': 'Meeting', '미팅 준비': 'Meeting Prep', '서류': 'Request Docs',
+  '제안서': 'Send Proposal', '기타': 'Other',
+}
+function taskTypeEn(type: string): string { return TASK_TYPE_MAP[type] || type }
+
 type TabId = 'basic' | 'funnel' | 'activity' | 'proposal'
 
 export default function LeadDetailPanel({
@@ -19,7 +26,7 @@ export default function LeadDetailPanel({
   onClose: () => void
   onRefresh: () => void
 }) {
-  const { t } = useLang()
+  const { t, lang } = useLang()
   const { showToast } = useToast()
   const [settings, setSettings] = useState<SalesSettingsData | null>(null)
   const [tab, setTab] = useState<TabId>('basic')
@@ -402,7 +409,7 @@ export default function LeadDetailPanel({
                     <div key={tk.id} style={{ background: 'var(--light)', borderRadius: 8, padding: '10px 14px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <div style={{ fontSize: 13, fontWeight: 600 }}>{tk.task_title}</div>
-                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>{tk.task_type} · {tk.due_date} · {tk.owner}</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>{lang === 'en' ? taskTypeEn(tk.task_type) : tk.task_type} · {tk.due_date} · {tk.owner}</div>
                       </div>
                       {tk.status !== 'Done'
                         ? <button onClick={() => markTaskDone(tk.id)} style={{ padding: '4px 10px', borderRadius: 6, background: '#059669', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer' }}>{t('mark_done')}</button>

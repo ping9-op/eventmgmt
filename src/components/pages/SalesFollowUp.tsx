@@ -12,6 +12,16 @@ const TASK_TYPES = ['Email', 'Call', 'SMS', 'Meeting', 'Send Proposal', 'Request
 const PRIORITIES = ['High', 'Medium', 'Low']
 const STATUSES = ['Pending', 'In Progress', 'Done']
 
+// DB에 한국어로 저장된 task_type 영어 매핑
+const TASK_TYPE_MAP: Record<string, string> = {
+  '이메일': 'Email', '전화': 'Call', '문자': 'SMS', '카카오': 'KakaoTalk',
+  '미팅': 'Meeting', '미팅 준비': 'Meeting Prep', '서류': 'Request Docs',
+  '제안서': 'Send Proposal', '기타': 'Other',
+}
+function taskTypeEn(type: string): string {
+  return TASK_TYPE_MAP[type] || type
+}
+
 type TaskFilter = 'today' | 'week' | 'overdue' | 'done' | null
 
 function PriorityBadge({ p }: { p: string }) {
@@ -25,7 +35,7 @@ function StatusBadge({ s }: { s: string }) {
 }
 
 export default function SalesFollowUp() {
-  const { t } = useLang()
+  const { t, lang } = useLang()
   const location = useLocation()
   const { showToast } = useToast()
   const settings = loadSalesSettings()
@@ -208,7 +218,7 @@ export default function SalesFollowUp() {
                         ? <span style={{ display: 'inline-block', padding: '3px 9px', borderRadius: 99, fontSize: 11, fontWeight: 700, color: 'white', background: stageBg }}>{lead.current_stage}</span>
                         : '—'}
                     </td>
-                    <td style={{ padding: '9px 14px', fontSize: 12 }}>{task.task_type}</td>
+                    <td style={{ padding: '9px 14px', fontSize: 12 }}>{lang === 'en' ? taskTypeEn(task.task_type) : task.task_type}</td>
                     <td style={{ padding: '9px 14px', fontSize: 12, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.note || '—'}</td>
                     <td style={{ padding: '9px 14px' }}>{task.owner}</td>
                     <td style={{ padding: '9px 14px' }}><PriorityBadge p={task.priority} /></td>
