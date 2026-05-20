@@ -223,7 +223,7 @@ export default function SalesLeads() {
                 {lbl}
               </button>
             ))}
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Company, 담당자, Owner 검색..."
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('search_placeholder')}
               style={{ flex: 1, minWidth: 200, padding: '7px 12px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13 }} />
             {filterOwner && (
               <span style={{ background: '#EEF2FF', color: '#4F46E5', padding: '4px 10px', borderRadius: 99, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -286,7 +286,7 @@ export default function SalesLeads() {
               <span className="txt">👥 {groupKey || '전체'}</span>
               <span className="sub">{detailLeads.length}개</span>
             </div>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 검색..."
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('search_short')}
               style={{ padding: '7px 12px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, width: 200 }} />
             <button className="btn btn-primary btn-sm" onClick={() => setShowRegister(true)}>+ 등록</button>
           </div>

@@ -270,7 +270,7 @@ export default function Report() {
             {/* Section 1: Objective */}
             <SectionHeader num={1} title="Objective" enabled={r.sections_enabled?.['1'] !== false} onToggle={v => updateField('sections_enabled', { ...r.sections_enabled, '1': v })} />
             <textarea rows={3} style={{ width: '100%', fontSize: 13, border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 13px', resize: 'vertical', fontFamily: 'inherit', marginBottom: 4, boxSizing: 'border-box' }}
-              placeholder="박람회 참가 목적을 입력하세요..."
+              placeholder={t('objective_placeholder')}
               value={r.objective || ''} onChange={e => updateField('objective', e.target.value)} />
 
             {/* Section 2: Event Overview */}
@@ -300,7 +300,7 @@ export default function Report() {
                           {c.actual ? (diff > 0 ? `▲ ${krw(diff)}` : diff < 0 ? `▼ ${krw(Math.abs(diff))}` : '-') : '-'}
                         </span>
                       </td>
-                      <td><input value={(c as any).note || ''} placeholder="차이 사유..." onChange={e => updateCost(i, 'note' as any, e.target.value)} /></td>
+                      <td><input value={(c as any).note || ''} placeholder={t('cost_note_placeholder')} onChange={e => updateCost(i, 'note' as any, e.target.value)} /></td>
                       <td><button onClick={() => { const arr = [...(r.actual_costs || [])]; arr.splice(i, 1); updateField('actual_costs', arr) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 15 }}>✕</button></td>
                     </tr>
                   )
@@ -313,7 +313,7 @@ export default function Report() {
                   <td style={{ textAlign: 'right' }}><strong style={{ color: (totalActual - totalBudgeted) > 0 ? 'var(--danger)' : (totalActual - totalBudgeted) < 0 ? 'var(--green)' : 'inherit' }}>{totalActual ? krw(totalActual) : '-'}</strong></td>
                   <td style={{ textAlign: 'right' }}>
                     <span className={totalActual - totalBudgeted > 0 ? 'over' : totalActual - totalBudgeted < 0 ? 'under' : ''}>
-                      {totalActual ? (totalActual - totalBudgeted > 0 ? `▲ ${krw(totalActual - totalBudgeted)} 초과` : totalActual - totalBudgeted < 0 ? `▼ ${krw(Math.abs(totalActual - totalBudgeted))} 절감` : '동일') : '-'}
+                      {totalActual ? (totalActual - totalBudgeted > 0 ? `▲ ${krw(totalActual - totalBudgeted)} ${t('over_lbl')}` : totalActual - totalBudgeted < 0 ? `▼ ${krw(Math.abs(totalActual - totalBudgeted))} ${t('under_lbl')}` : t('same_lbl')) : '-'}
                     </span>
                   </td>
                   <td colSpan={2} />
