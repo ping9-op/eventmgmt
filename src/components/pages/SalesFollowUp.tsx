@@ -240,9 +240,9 @@ export default function SalesFollowUp() {
               <h3>{t('add_task_title')}</h3>
               <button className="modal-close" onClick={() => setShowAddTask(false)}>✕</button>
             </div>
-            <label style={{ marginTop: 0 }}>Lead 선택</label>
+            <label style={{ marginTop: 0 }}>{t('s_leads_title')}</label>
             <select value={form.lead_id} onChange={e => setForm(f => ({ ...f, lead_id: e.target.value }))}>
-              <option value="">-- Lead 선택 --</option>
+              <option value="">{t('select_placeholder')}</option>
               {leads.filter(l => l.current_stage !== 'Lost' && l.current_stage !== 'Onboarded / Won').map(l => (
                 <option key={l.id} value={l.id}>{l.company_name} ({l.contact_person})</option>
               ))}
