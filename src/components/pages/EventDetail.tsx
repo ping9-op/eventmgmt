@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { exhColor, formatEventDate, costColor } from '../../lib/utils'
 import { useToast } from '../../contexts/ToastContext'
 import type { Payment } from '../../types/database'
+import ProposalEditModal from '../ProposalEditModal'
 
 type TabId = 'overview' | 'budget' | 'checklist' | 'design' | 'gifts' | 'equipment' | 'itinerary'
 
@@ -116,6 +117,7 @@ export default function EventDetail() {
   const [equipment, setEquipment] = useState<any[]>([])
   const [itinerary, setItinerary] = useState<any[]>([])
   const [dataId, setDataId] = useState<string | null>(null)
+  const [showEpModal, setShowEpModal] = useState(false)
 
   const dbKey = `${key}_${year}`
   const yearNum = parseInt(year || '0')
@@ -269,7 +271,7 @@ export default function EventDetail() {
                 <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, overflow: 'hidden' }}>
                   <div style={{ background: 'var(--accent)', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{ fontSize: 14, fontWeight: 700, color: 'white' }}>📋 박람회 기본 정보</span>
-                    <button onClick={() => navigate('/expo/create', { state: { exhId: overview.exhibition_id } })}
+                    <button onClick={() => setShowEpModal(true)}
                       style={{ marginLeft: 'auto', background: 'rgba(255,255,255,.2)', border: 'none', color: 'white', padding: '4px 12px', borderRadius: 6, fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
                       ✏️ Proposal 수정
                     </button>
@@ -353,6 +355,7 @@ export default function EventDetail() {
             onSavePayRow={savePayRow}
             onAddPayRow={addPayRow}
             onDeletePayRow={deletePayRow}
+            onEditProposal={() => setShowEpModal(true)}
           />
         )}
 
@@ -537,6 +540,22 @@ export default function EventDetail() {
           </div>
         )}
       </div>
+
+      {/* Proposal 편집 모달 */}
+      {showEpModal && overview && (
+        <ProposalEditModal
+          propId={overview.id}
+          exhName={exhName}
+          year={yearNum}
+          initialDate={overview.date_of_event || ''}
+          initialVenue={overview.venue || ''}
+          initialObjective={overview.objective || ''}
+          initialBudget={(overview.budget || []).map((b: any) => ({ item: b.item, curr: b.curr, prev: b.prev || 0, currency: b.currency || 'KRW', note: b.note || '' }))}
+          onClose={() => setShowEpModal(false)}
+          onSaved={() => { setShowEpModal(false); window.location.reload() }}
+          onDeleted={() => { setShowEpModal(false); navigate(-1) }}
+        />
+      )}
     </div>
   )
 }
@@ -621,7 +640,7 @@ function OverviewBudgetTable({ budget, prevBudget, prevYear }: { budget: any[]; 
 }
 
 // ── 예산 탭 ──────────────────────────────────────────
-function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAddPayRow, onDeletePayRow }: {
+function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAddPayRow, onDeletePayRow, onEditProposal }: {
   overview: any
   payments: Payment[]
   dbKey: string
@@ -629,6 +648,7 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
   onSavePayRow: (id: string, updates: Partial<Payment>) => void
   onAddPayRow: () => void
   onDeletePayRow: (id: string) => void
+  onEditProposal?: () => void
 }) {
   const [editAmts, setEditAmts] = useState<Record<string, { dep?: number; fin?: number; depDue?: string; finDue?: string }>>({})
 
@@ -674,6 +694,12 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, overflow: 'hidden' }}>
           <div style={{ background: '#1E3A5F', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: 'white' }}>💰 예산 내역</span>
+            {onEditProposal && (
+              <button onClick={onEditProposal}
+                style={{ background: 'rgba(255,255,255,.2)', border: 'none', color: 'white', padding: '4px 12px', borderRadius: 6, fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
+                ✏️ 예산 수정
+              </button>
+            )}
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>

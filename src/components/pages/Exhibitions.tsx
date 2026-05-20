@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { exhColor, costColor, formatEventDate, isPastEvent } from '../../lib/utils'
 import { useToast } from '../../contexts/ToastContext'
 import type { Exhibition, Proposal, BudgetItem } from '../../types/database'
+import ProposalEditModal from '../ProposalEditModal'
 
 const CUR_SYM: Record<string, string> = { KRW: '₩', JPY: '¥', USD: '$', EUR: '€', SGD: 'S$' }
 const CURRENCIES = ['KRW', 'JPY', 'USD', 'EUR', 'SGD']
@@ -22,6 +23,12 @@ function budgetStr(budget: BudgetItem[]): string {
 interface ExhEntry { exh: Exhibition; proposals: (Proposal & { budget: BudgetItem[] })[] }
 interface BudgetRow { item: string; curr: number; currency: string; note: string }
 
+interface EpModalState {
+  propId: string; exhName: string; year: number
+  initialDate: string; initialVenue: string; initialObjective: string
+  initialBudget: Array<{ item: string; curr: number; prev: number; currency: string; note: string }>
+}
+
 const defaultBudgetRows = (): BudgetRow[] => [
   { item: 'Booth Fee', curr: 0, currency: 'KRW', note: '' },
   { item: 'Design', curr: 0, currency: 'KRW', note: '' },
@@ -34,6 +41,7 @@ export default function Exhibitions() {
   const [data, setData] = useState<ExhEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [epModal, setEpModal] = useState<EpModalState | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [parseState, setParseState] = useState<'idle' | 'parsing' | 'done'>('idle')
@@ -240,7 +248,12 @@ export default function Exhibitions() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ fontSize: 12, fontWeight: 700, color, whiteSpace: 'nowrap' }}>{budgetStr(p.budget)}</span>
                         <button className="btn btn-outline btn-sm" style={{ padding: '2px 8px', fontSize: 10 }}
-                          onClick={() => navigate('/expo/create', { state: { exhId: exh.id } })}>편집</button>
+                          onClick={() => setEpModal({
+                            propId: p.id, exhName: exh.name, year: p.year,
+                            initialDate: p.date_of_event, initialVenue: p.venue,
+                            initialObjective: p.objective || '',
+                            initialBudget: p.budget.map((b: any) => ({ item: b.item, curr: b.curr, prev: b.prev || 0, currency: b.currency || 'KRW', note: b.note || '' }))
+                          })}>편집</button>
                       </div>
                     </div>
                   ))}
@@ -374,6 +387,16 @@ export default function Exhibitions() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Proposal 편집 모달 */}
+      {epModal && (
+        <ProposalEditModal
+          {...epModal}
+          onClose={() => setEpModal(null)}
+          onSaved={() => { setEpModal(null); load() }}
+          onDeleted={() => { setEpModal(null); load() }}
+        />
       )}
 
       {/* 삭제 확인 모달 */}

@@ -298,7 +298,7 @@ export default function Report() {
                           {c.actual ? (diff > 0 ? `▲ ${krw(diff)}` : diff < 0 ? `▼ ${krw(Math.abs(diff))}` : '-') : '-'}
                         </span>
                       </td>
-                      <td><input value={(c as any).note || ''} placeholder="차이 사유..." onChange={e => updateCost(i, 'item' as any, (c as any).note = e.target.value)} /></td>
+                      <td><input value={(c as any).note || ''} placeholder="차이 사유..." onChange={e => updateCost(i, 'note' as any, e.target.value)} /></td>
                       <td><button onClick={() => { const arr = [...(r.actual_costs || [])]; arr.splice(i, 1); updateField('actual_costs', arr) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 15 }}>✕</button></td>
                     </tr>
                   )
