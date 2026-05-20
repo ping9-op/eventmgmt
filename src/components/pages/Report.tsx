@@ -278,7 +278,7 @@ export default function Report() {
             <div className="form-row cols3" style={{ marginBottom: 16 }}>
               <div><label style={{ marginTop: 0 }}>{t('event_period')}</label><input value={r.event_date || ''} onChange={e => updateField('event_date', e.target.value)} /></div>
               <div><label style={{ marginTop: 0 }}>{t('venue')}</label><input value={r.event_venue || ''} onChange={e => updateField('event_venue', e.target.value)} /></div>
-              <div><label style={{ marginTop: 0 }}>타겟 고객</label><input value={r.event_target || ''} onChange={e => updateField('event_target', e.target.value)} /></div>
+              <div><label style={{ marginTop: 0 }}>{t('target_customer')}</label><input value={r.event_target || ''} onChange={e => updateField('event_target', e.target.value)} /></div>
             </div>
 
             {/* Section 3: Cost */}
@@ -332,9 +332,9 @@ export default function Report() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    <th style={{ padding: '6px 8px', textAlign: 'left', color: 'var(--muted)', fontWeight: 500, width: 100 }}>타입</th>
-                    <th style={{ padding: '6px 8px', textAlign: 'left', color: 'var(--muted)', fontWeight: 500 }}>내용</th>
-                    <th style={{ padding: '6px 8px', textAlign: 'left', color: 'var(--muted)', fontWeight: 500 }}>결과</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'left', color: 'var(--muted)', fontWeight: 500, width: 100 }}>{t('type_lbl')}</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'left', color: 'var(--muted)', fontWeight: 500 }}>{t('content_lbl')}</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'left', color: 'var(--muted)', fontWeight: 500 }}>{t('result_col')}</th>
                     <th style={{ width: 30 }}></th>
                   </tr>
                 </thead>
@@ -358,7 +358,7 @@ export default function Report() {
                     </tr>
                   ))}
                   {(r.marketing_activities || []).length === 0 && (
-                    <tr><td colSpan={4} style={{ padding: 16, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>마케팅 활동 없음</td></tr>
+                    <tr><td colSpan={4} style={{ padding: 16, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>{t('no_marketing')}</td></tr>
                   )}
                 </tbody>
               </table>
@@ -395,10 +395,10 @@ export default function Report() {
                     return totalReg > 0 ? '₩' + Math.round(totalActual / totalReg).toLocaleString() : '-'
                   })()}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>총 실지출 ÷ 총 등록 수</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{t('per_person_calc')}</div>
               </div>
               <div className="card-sm" style={{ flex: 1, textAlign: 'center' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 6 }}>신규 등록</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 6 }}>{t('new_registrations_lbl')}</div>
                 <input
                   type="number"
                   style={{ fontSize: 22, fontWeight: 800, color: '#3A5FA0', textAlign: 'center', background: 'transparent', border: 'none', outline: 'none', width: '100%' }}

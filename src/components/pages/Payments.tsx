@@ -222,7 +222,7 @@ export default function Payments() {
                   onDragOver={e => e.preventDefault()}
                   onClick={() => document.getElementById('invoice-input')?.click()}>
                   <div style={{ fontSize: 32, marginBottom: 8 }}>📄</div>
-                  <div style={{ fontSize: 14, color: 'var(--muted)', fontWeight: 500 }}>인보이스 파일을 드래그하거나 클릭하여 업로드</div>
+                  <div style={{ fontSize: 14, color: 'var(--muted)', fontWeight: 500 }}>{t('invoice_drag_desc')}</div>
                   <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>PDF, JPG, PNG 지원</div>
                   <input id="invoice-input" type="file" accept=".pdf,.jpg,.png" style={{ display: 'none' }} onChange={() => {}} />
                 </div>
@@ -261,7 +261,7 @@ export default function Payments() {
 
             {selPays.length === 0 && (
               <div style={{ color: 'var(--muted)', fontSize: 14, padding: '24px 0', textAlign: 'center' }}>
-                항목이 없습니다. "+ 항목 추가" 버튼으로 추가하세요.
+                {t('no_items')}
               </div>
             )}
           </div>
@@ -282,7 +282,7 @@ export default function Payments() {
               {/* 항목명 + 통화 */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'end' }}>
                 <div>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>항목명 *</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>{t('item_name_required')}</label>
                   <input
                     ref={itemInputRef}
                     value={addForm.item}
@@ -305,7 +305,7 @@ export default function Payments() {
 
               {/* 총 예산 */}
               <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>총 예산 금액 *</label>
+                <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>{t('total_amount_required')}</label>
                 <input
                   type="number"
                   value={addForm.total}

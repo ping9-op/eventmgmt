@@ -22,7 +22,7 @@ export default function SalesReports() {
     navigate('/sales/leads', { state: { filter } })
   }
 
-  if (loading) return <div className="view wide"><div style={{ color: 'var(--muted)', padding: 40 }}>로딩 중...</div></div>
+  if (loading) return <div className="view wide"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
 
   const total = leads.length
   const won = leads.filter(l => l.current_stage === 'Onboarded / Won').length
@@ -57,7 +57,7 @@ export default function SalesReports() {
           <div className="txt">{t('s_reports_title')}</div>
           <div className="sub">{t('s_reports_sub')}</div>
         </div>
-        <button className="btn btn-outline btn-sm">⬇️ Excel</button>
+        <button className="btn btn-outline btn-sm">⬇️ {t('export_excel')}</button>
       </div>
 
       {/* KPI 카드 5개 */}
@@ -70,7 +70,7 @@ export default function SalesReports() {
             onMouseOut={e => { if (k.f) { (e.currentTarget as HTMLDivElement).style.transform = ''; (e.currentTarget as HTMLDivElement).style.boxShadow = '' } }}>
             <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>{k.lbl}</div>
             <div style={{ fontSize: 28, fontWeight: 800, color: k.col }}>{k.val}</div>
-            {k.f && <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>클릭하여 리드 보기 →</div>}
+            {k.f && <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>{t('click_to_view_leads')}</div>}
           </div>
         ))}
       </div>
@@ -168,7 +168,7 @@ export default function SalesReports() {
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px' }}>
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>
             {t('s_owner_report')}
-            <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--muted)', marginLeft: 8 }}>이름 클릭 → 해당 리드 목록</span>
+            <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--muted)', marginLeft: 8 }}>{t('name_click_hint')}</span>
           </div>
           <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
             <thead>

@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useLang } from '../../contexts/LangContext'
 import { Chart, ArcElement, Tooltip, DoughnutController } from 'chart.js'
 Chart.register(ArcElement, Tooltip, DoughnutController)
 import { supabase } from '../../lib/supabase'
@@ -31,6 +32,7 @@ interface UpcomingItem {
 
 export default function ExpoOverview() {
   const navigate = useNavigate()
+  const { t } = useLang()
   const [entries, setEntries] = useState<ExhEntry[]>([])
   const [results, setResults] = useState<Record<string, { actual_costs: ActualCost[] }>>({})
   const [payments, setPayments] = useState<Record<string, any[]>>({})
@@ -126,7 +128,7 @@ export default function ExpoOverview() {
     return items.sort((a, b) => a.days - b.days).slice(0, 5)
   }
 
-  if (loading) return <div className="view"><div style={{ color: 'var(--muted)', padding: 40 }}>로딩 중...</div></div>
+  if (loading) return <div className="view"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
 
   const upcoming = getUpcoming()
   const allE = entries
@@ -158,11 +160,11 @@ export default function ExpoOverview() {
       {/* 다가오는 일정 */}
       <div className="sec-hdr">
         <div className="bar" />
-        <div className="txt">다가오는 일정</div>
-        <div className="sub">오늘 기준 {new Date().toISOString().split('T')[0].replace(/-/g, '.')} · 향후 60일 / 최근 지연 포함</div>
+        <div className="txt">{t('upcoming')}</div>
+        <div className="sub">{t('upcoming_sub')} {new Date().toISOString().split('T')[0].replace(/-/g, '.')} · {t('upcoming_range')}</div>
       </div>
       {upcoming.length === 0 ? (
-        <div className="card-sm" style={{ color: 'var(--muted)', textAlign: 'center', padding: 28 }}>향후 60일 내 일정 없음</div>
+        <div className="card-sm" style={{ color: 'var(--muted)', textAlign: 'center', padding: 28 }}>{t('no_upcoming')}</div>
       ) : (
         <div className="upcoming-row">
           {upcoming.map((u, i) => {
@@ -180,7 +182,7 @@ export default function ExpoOverview() {
                 <div className="uc-name">{u.name}</div>
                 <div className="uc-date">{u.date}</div>
                 {u.detail && <div className="uc-detail" style={{ color: u.color }}>{u.detail}</div>}
-                <div style={{ marginTop: 8, fontSize: 10, color: u.color, opacity: .7 }}>클릭하여 이동 →</div>
+                <div style={{ marginTop: 8, fontSize: 10, color: u.color, opacity: .7 }}>{t('click_to_view')}</div>
               </div>
             )
           })}
@@ -188,25 +190,25 @@ export default function ExpoOverview() {
       )}
 
       {/* 요약 */}
-      <div className="sec-hdr"><div className="bar" /><div className="txt">요약</div></div>
+      <div className="sec-hdr"><div className="bar" /><div className="txt">{t('summary')}</div></div>
       <div className="metrics-grid">
-        <div className="metric" onClick={() => navigate('/expo/exhibitions')} title="기존 박람회로 이동">
-          <div className="lbl">참가 박람회 수</div>
-          <div className="val" style={{ color: 'var(--accent)' }}>{uniqueExhs}개</div>
-          <div className="sub">전체 {allE.length}건 이력</div>
+        <div className="metric" onClick={() => navigate('/expo/exhibitions')}>
+          <div className="lbl">{t('exh_count_lbl')}</div>
+          <div className="val" style={{ color: 'var(--accent)' }}>{uniqueExhs}</div>
+          <div className="sub">{t('total')} {allE.length}{t('total_hist')}</div>
         </div>
-        <div className="metric" onClick={() => navigate('/expo/payments')} title="결제 일정으로 이동">
-          <div className="lbl">{maxYear} 총 승인 예산</div>
+        <div className="metric" onClick={() => navigate('/expo/payments')}>
+          <div className="lbl">{maxYear} {t('budget_lbl')}</div>
           <div className="val" style={{ color: 'var(--green)', fontSize: 18 }}>{krw(total2026)}</div>
-          <div className="sub">{yr2026.length}개 박람회 합산</div>
+          <div className="sub">{yr2026.length}{t('exh_sum')}</div>
         </div>
-        <div className="metric" onClick={() => navigate('/expo/schedule')} title="일정 관리로 이동">
-          <div className="lbl">박람회 평균 비용</div>
+        <div className="metric" onClick={() => navigate('/expo/schedule')}>
+          <div className="lbl">{t('avg_lbl')}</div>
           <div className="val" style={{ color: 'var(--amber)', fontSize: 18 }}>{krw(avg)}</div>
-          <div className="sub">전체 이력 기준</div>
+          <div className="sub">{t('all_hist')}</div>
         </div>
-        <div className="metric" onClick={() => biggest && navigate(`/expo/event/${biggest.key}/${biggest.year || maxYear}`)} title="이벤트 상세로 이동" style={{ cursor: 'pointer' }}>
-          <div className="lbl">최고 비용 박람회</div>
+        <div className="metric" onClick={() => biggest && navigate(`/expo/event/${biggest.key}/${biggest.year || maxYear}`)} style={{ cursor: 'pointer' }}>
+          <div className="lbl">{t('top_lbl')}</div>
           <div className="val" style={{ color: 'var(--danger)', fontSize: 15 }}>{biggest?.name} {biggest?.year}</div>
           <div className="sub">{krw(biggest?.total || 0)}</div>
         </div>
@@ -216,7 +218,7 @@ export default function ExpoOverview() {
       <YearDonutSection entries={allE} latestSorted={latestSorted} />
 
       {/* 박람회 참가 현황 카드 */}
-      <div className="sec-hdr"><div className="bar" /><div className="txt">박람회 참가 현황</div><div className="sub">일정 순 · {new Date().toISOString().split('T')[0].replace(/-/g, '.')}</div></div>
+      <div className="sec-hdr"><div className="bar" /><div className="txt">{t('exh_status')}</div><div className="sub">{t('date_order')} · {new Date().toISOString().split('T')[0].replace(/-/g, '.')}</div></div>
       <div className="exh-grid">
         {latestSorted.map(e => {
           const past = isPastEvent(e.date, e.year)
@@ -246,7 +248,7 @@ export default function ExpoOverview() {
                 <div className="ec-meta">📅 {formatEventDate(e.date, e.year)} &nbsp;📍 {e.venue}</div>
 
                 {/* 참가 이력 */}
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6, fontWeight: 500 }}>참가 이력 {hist.length}회</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6, fontWeight: 500 }}>{t('hist_count')} {hist.length}{t('times')}</div>
                 <div style={{ height: 110, overflowY: 'auto', border: '0.5px solid var(--border)', borderRadius: 8, padding: '4px 10px', background: '#FDFBFB', marginBottom: 12 }}>
                   {hist.slice().reverse().map((h, i) => (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '0.5px solid var(--border)' }}>
@@ -257,10 +259,10 @@ export default function ExpoOverview() {
                 </div>
 
                 <hr className="divider" />
-                <div className="bar-lbl"><span>승인 예산</span><span style={{ fontWeight: 700, color: topColor }}>{budgetByCurStr(e.budget)}</span></div>
+                <div className="bar-lbl"><span>{t('budgeted')}</span><span style={{ fontWeight: 700, color: topColor }}>{budgetByCurStr(e.budget)}</span></div>
                 <div className="bar-track"><div className="bar-fill" style={{ width: '100%', background: topColor }} /></div>
                 <div className="bar-lbl">
-                  <span>실제 지출</span>
+                  <span>{t('actual')}</span>
                   <span style={hasActual ? { fontWeight: 700, color: actC } : {}}>
                     {hasActual ? (
                       <>{krw(actualTotal)}{diffStr && <small style={{ color: actC }}> {diffStr}</small>}</>
@@ -269,7 +271,7 @@ export default function ExpoOverview() {
                 </div>
                 <div className="bar-track"><div className="bar-fill" style={{ width: actW, background: hasActual ? actC : '#ddd' }} /></div>
                 {past && !hasActual && (
-                  <div className="warn-box">⚠ 실제 지출 미입력 — 결과 보고서 작성 필요</div>
+                  <div className="warn-box">⚠ {t('result_needed')}</div>
                 )}
                 <div className="exh-items" style={{ marginTop: 10 }}>
                   {e.budget.slice(0, 3).map((b, i) => (
@@ -278,7 +280,7 @@ export default function ExpoOverview() {
                       <span>{fmtCur(b.curr, (b as any).currency || 'KRW')}</span>
                     </div>
                   ))}
-                  {e.budget.length > 3 && <div className="exh-item-row"><span style={{ color: 'var(--muted)' }}>외 {e.budget.length - 3}개...</span></div>}
+                  {e.budget.length > 3 && <div className="exh-item-row"><span style={{ color: 'var(--muted)' }}>+{e.budget.length - 3}{t('others_count')}</span></div>}
                 </div>
 
                 <div style={{ display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 12 }}>
@@ -298,7 +300,7 @@ export default function ExpoOverview() {
       </div>
 
       {/* 비용 구조 차트 */}
-      <div className="sec-hdr"><div className="bar" /><div className="txt">박람회별 예산 구조 비교</div></div>
+      <div className="sec-hdr"><div className="bar" /><div className="txt">{t('cost_chart')}</div></div>
       <div className="chart-card">
         {latestSorted.map(e => (
           <div key={`${e.key}_${e.year}`} className="hbar-row" style={{ cursor: 'pointer' }}
@@ -325,10 +327,10 @@ export default function ExpoOverview() {
       </div>
 
       {/* 순위 테이블 */}
-      <div className="sec-hdr"><div className="bar" /><div className="txt">전체 이력 비용 순위</div></div>
+      <div className="sec-hdr"><div className="bar" /><div className="txt">{t('rank')}</div></div>
       <table className="rank-table">
         <thead>
-          <tr><th>순위</th><th>박람회명</th><th>연도</th><th>행사 기간</th><th>장소</th><th>총 예산</th><th>부스 비용</th></tr>
+          <tr><th>{t('col_rank')}</th><th>{t('col_name')}</th><th>{t('col_year')}</th><th>{t('col_date')}</th><th>{t('col_venue')}</th><th>{t('col_budget')}</th><th>{t('col_booth')}</th></tr>
         </thead>
         <tbody>
           {ranked.map((e, i) => (
@@ -345,7 +347,7 @@ export default function ExpoOverview() {
           ))}
         </tbody>
         <tfoot>
-          <tr><td></td><td><strong>합계</strong></td><td></td><td></td><td></td><td><strong>{krw(totalAll)}</strong></td><td></td></tr>
+          <tr><td></td><td><strong>{t('total')}</strong></td><td></td><td></td><td></td><td><strong>{krw(totalAll)}</strong></td><td></td></tr>
         </tfoot>
       </table>
     </div>
@@ -395,6 +397,7 @@ function DonutChart({ data, colors, centerText }: { data: number[]; colors: stri
 
 function YearDonutSection({ entries, latestSorted }: { entries: ExhEntry[]; latestSorted: ExhEntry[] }) {
   const navigate = useNavigate()
+  const { t } = useLang()
   const [offset, setOffset] = useState(0)
   const MAX = 4
 
@@ -415,7 +418,7 @@ function YearDonutSection({ entries, latestSorted }: { entries: ExhEntry[]; late
 
   return (
     <>
-      <div className="sec-hdr"><div className="bar" /><div className="txt">연도별 박람회 참가 현황</div></div>
+      <div className="sec-hdr"><div className="bar" /><div className="txt">{t('yearly')}</div></div>
       <div className="donuts-wrapper" style={{ padding: '0 24px' }}>
         {/* Left nav */}
         <div className={`donuts-nav left${canLeft ? '' : ' disabled'}`}

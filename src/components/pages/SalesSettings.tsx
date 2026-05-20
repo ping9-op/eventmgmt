@@ -15,6 +15,7 @@ function EditableCard({
   onAdd: (val: string) => void; onRemove: (i: number) => void; saving: boolean
   addPlaceholder: string; addBtnLabel: string; deleteBtnLabel: string; itemsCountSuffix: string
 }) {
+  const { t } = useLang()
   const [input, setInput] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -62,7 +63,7 @@ function EditableCard({
       {/* 목록 */}
       <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 240, overflowY: 'auto' }}>
         {items.length === 0 && (
-          <div style={{ padding: '12px 6px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>항목이 없습니다</div>
+          <div style={{ padding: '12px 6px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>{t('no_items')}</div>
         )}
         {items.map((v, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '8px 12px', background: 'var(--light)', borderRadius: 7, gap: 10 }}>

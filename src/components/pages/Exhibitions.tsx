@@ -236,11 +236,11 @@ export default function Exhibitions() {
                   </div>
                 </div>
                 <div className="ec-meta">
-                  {latest ? `📅 ${formatEventDate(latest.date_of_event, latest.year)} · 📍 ${latest.venue}` : '등록된 Proposal 없음'}
+                  {latest ? `📅 ${formatEventDate(latest.date_of_event, latest.year)} · 📍 ${latest.venue}` : t('no_history')}
                 </div>
 
                 {/* 참가 이력 */}
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6, fontWeight: 500 }}>참가 이력 {proposals.length}회</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6, fontWeight: 500 }}>{t('hist_count')} {proposals.length}{t('times')}</div>
                 <div style={{ height: 110, overflowY: 'auto', border: '0.5px solid var(--border)', borderRadius: 8, padding: '4px 10px', background: '#FDFBFB', marginBottom: 12 }}>
                   {[...proposals].reverse().map((p, i) => (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '0.5px solid var(--border)' }}>
@@ -259,7 +259,7 @@ export default function Exhibitions() {
                       </div>
                     </div>
                   ))}
-                  {proposals.length === 0 && <div style={{ fontSize: 12, color: 'var(--muted)', padding: '10px 0' }}>이력 없음</div>}
+                  {proposals.length === 0 && <div style={{ fontSize: 12, color: 'var(--muted)', padding: '10px 0' }}>{t('no_history')}</div>}
                 </div>
 
                 <div style={{ fontSize: 16, fontWeight: 800, color, marginBottom: 12 }}>{t('total_budget')}: {cumBudgetStr}</div>
@@ -276,9 +276,9 @@ export default function Exhibitions() {
 
                 <div style={{ display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 12 }}>
                   <button className="btn btn-primary btn-sm" style={{ flex: 1 }}
-                    onClick={() => navigate('/expo/create', { state: { exhId: exh.id } })}>✏️ Proposal 작성</button>
+                    onClick={() => navigate('/expo/create', { state: { exhId: exh.id } })}>✏️ {t('btn_proposal')}</button>
                   <button className="btn btn-muted btn-sm" style={{ flex: 1 }}
-                    onClick={() => navigate('/expo/report', { state: { key: `${exh.key}_${latest?.year}` } })}>📋 결과 보고서</button>
+                    onClick={() => navigate('/expo/report', { state: { key: `${exh.key}_${latest?.year}` } })}>📋 {t('btn_report')}</button>
                 </div>
               </div>
             </div>
@@ -308,26 +308,26 @@ export default function Exhibitions() {
               {parseState === 'idle' && (
                 <>
                   <div style={{ fontSize: 28, marginBottom: 6 }}>📄</div>
-                  <div style={{ fontSize: 14, color: 'var(--muted)', fontWeight: 500 }}>기존 승인된 Proposal 파일 첨부</div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>PDF, Word, Excel, 이미지 · 클릭 또는 드래그</div>
+                  <div style={{ fontSize: 14, color: 'var(--muted)', fontWeight: 500 }}>{t('prop_file_upload')}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{t('prop_file_desc')}</div>
                 </>
               )}
               {parseState === 'done' && (
                 <div style={{ textAlign: 'center', fontSize: 14, fontWeight: 600, padding: 8 }}>
                   📎 "{uploadedFileName}" 첨부됨
-                  <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400, marginTop: 4 }}>아래 폼에 내용을 직접 입력해주세요 · 다시 업로드하려면 클릭</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400, marginTop: 4 }}>{t('prop_file_desc2')}</div>
                 </div>
               )}
             </div>
 
             <label style={{ marginTop: 0 }}>{t('exh_select_existing')}</label>
             <select value={apExhSel} onChange={e => onApExhSel(e.target.value)}>
-              <option value="">-- 새 박람회 직접 입력 --</option>
+              <option value="">{t('new_input')}</option>
               {data.map(d => <option key={d.exh.id} value={d.exh.id}>{d.exh.name}</option>)}
             </select>
 
             <div className="form-row cols2">
-              <div><label>박람회 이름</label><input value={apName} onChange={e => setApName(e.target.value)} placeholder={t('exh_name_placeholder')} /></div>
+              <div><label>{t('exh_name_lbl')}</label><input value={apName} onChange={e => setApName(e.target.value)} placeholder={t('exh_name_placeholder')} /></div>
               <div><label>{t('year_label')}</label><input type="number" value={apYear} onChange={e => setApYear(e.target.value)} /></div>
             </div>
             <div className="form-row cols3">

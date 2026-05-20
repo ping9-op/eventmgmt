@@ -231,7 +231,7 @@ export default function LeadDetailPanel({
                 </Field>
                 <Field label="Event Name">
                   <select value={form.event_name || ''} onChange={e => setForm(f => ({ ...f, event_name: e.target.value }))}>
-                    <option value="">— 선택 —</option>
+                    <option value="">{t('select_placeholder')}</option>
                     {(settings?.event_names || []).map(n => <option key={n}>{n}</option>)}
                   </select>
                 </Field>
@@ -353,20 +353,20 @@ export default function LeadDetailPanel({
                   <div style={{ background: '#F9F5F5', border: '1px solid var(--border2)', borderRadius: 10, padding: 14, marginBottom: 16 }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
                       <div>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>유형</div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>{t('type_lbl')}</div>
                         <select value={actType} onChange={e => setActType(e.target.value)}>
                           {(settings?.contact_methods || ['Email', 'Call', 'SMS', 'Kakao', 'Visit']).map(m => <option key={m}>{m}</option>)}
                         </select>
                       </div>
                       <div>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>결과</div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>{t('result_col')}</div>
                         <select value={actResult} onChange={e => setActResult(e.target.value)}>
                           {ACTIVITY_RESULTS.map(r => <option key={r}>{r}</option>)}
                         </select>
                       </div>
                     </div>
                     <div style={{ marginBottom: 10 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>메모</div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>{t('task_note_lbl')}</div>
                       <textarea value={actNote} rows={2} onChange={e => setActNote(e.target.value)} style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }} />
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
@@ -376,7 +376,7 @@ export default function LeadDetailPanel({
                   </div>
                 )}
 
-                {activities.length === 0 && !showActForm && <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: 30 }}>기록된 Activity 없음</div>}
+                {activities.length === 0 && !showActForm && <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: 30 }}>{t('no_activities')}</div>}
 
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   {activities.map((a, i) => (
@@ -397,7 +397,7 @@ export default function LeadDetailPanel({
                 {/* Tasks */}
                 <div style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Follow-up Tasks</div>
-                  {tasks.length === 0 && <div style={{ color: 'var(--muted)', fontSize: 13 }}>등록된 Task 없음</div>}
+                  {tasks.length === 0 && <div style={{ color: 'var(--muted)', fontSize: 13 }}>{t('no_tasks_panel')}</div>}
                   {tasks.map(tk => (
                     <div key={tk.id} style={{ background: 'var(--light)', borderRadius: 8, padding: '10px 14px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>

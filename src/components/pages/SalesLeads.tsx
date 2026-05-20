@@ -193,7 +193,7 @@ export default function SalesLeads() {
 
   const allDetailIds = detailLeads.map(l => l.id)
 
-  if (loading) return <div className="view wide"><div style={{ color: 'var(--muted)', padding: 40 }}>로딩 중...</div></div>
+  if (loading) return <div className="view wide"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
 
   return (
     <div className="view wide">
@@ -237,7 +237,7 @@ export default function SalesLeads() {
                 <button onClick={() => setFilterStage(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: 13, marginLeft: 2 }}>✕</button>
               </span>
             )}
-            <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>총 {filteredLeads.length}개</span>
+            <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{t('total')} {filteredLeads.length}</span>
           </div>
 
           {/* 그룹 테이블 */}
@@ -246,7 +246,7 @@ export default function SalesLeads() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 900 }}>
                 <thead>
                   <tr style={{ background: 'var(--accent)', color: 'white' }}>
-                    <th style={{ padding: '10px 14px', textAlign: 'left' }}>그룹</th>
+                    <th style={{ padding: '10px 14px', textAlign: 'left' }}>{t('group_lbl')}</th>
                     <th style={{ padding: '10px 10px', textAlign: 'center' }}>Total</th>
                     {STAGE_ORDER.map(s => (
                       <th key={s} style={{ padding: '10px 6px', textAlign: 'center', fontSize: 10, whiteSpace: 'nowrap' }}>{s}</th>
@@ -280,7 +280,7 @@ export default function SalesLeads() {
         /* Detail View */
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
-            <button className="btn btn-outline btn-sm" onClick={() => { setViewMode('group'); setGroupKey(null); setStageFilter(null); setSearch('') }}>← 목록</button>
+            <button className="btn btn-outline btn-sm" onClick={() => { setViewMode('group'); setGroupKey(null); setStageFilter(null); setSearch('') }}>{t('back_to_list')}</button>
             <div className="sec-hdr" style={{ margin: 0, flex: 1 }}>
               <div className="bar" />
               <span className="txt">👥 {groupKey || '전체'}</span>
@@ -307,7 +307,7 @@ export default function SalesLeads() {
               )
             })}
             {stageFilter && (
-              <button onClick={() => setStageFilter(null)} style={{ padding: '3px 8px', borderRadius: 99, background: 'var(--light)', border: '1px solid var(--border2)', fontSize: 11, cursor: 'pointer', margin: 3 }}>✕ 해제</button>
+              <button onClick={() => setStageFilter(null)} style={{ padding: '3px 8px', borderRadius: 99, background: 'var(--light)', border: '1px solid var(--border2)', fontSize: 11, cursor: 'pointer', margin: 3 }}>{t('clear_filter')}</button>
             )}
           </div>
 
@@ -315,7 +315,7 @@ export default function SalesLeads() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid var(--border)', background: '#FAFAFA', marginBottom: 0 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
               <input type="checkbox" checked={allDetailIds.length > 0 && allDetailIds.every(i => checked.has(i))} onChange={() => toggleCheck('', allDetailIds)} style={{ width: 16, height: 16, accentColor: 'var(--accent)', cursor: 'pointer' }} />
-              전체 선택
+              {t('select_all')}
             </label>
             <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700, minWidth: 70 }}>{checked.size > 0 ? `${checked.size}개 선택됨` : ''}</span>
             <div style={{ marginLeft: 'auto' }}>
@@ -332,10 +332,10 @@ export default function SalesLeads() {
                   <tr style={{ background: 'var(--accent)', color: 'white' }}>
                     <th style={{ padding: '9px 10px', width: 38 }}><input type="checkbox" style={{ width: 15, height: 15, cursor: 'pointer' }} /></th>
                     <th style={{ padding: '9px 12px' }}>SN</th>
-                    <th style={{ padding: '9px 12px' }}>등록일</th>
-                    <th style={{ padding: '9px 12px' }}>행사명</th>
+                    <th style={{ padding: '9px 12px' }}>{t('registered_date_lbl')}</th>
+                    <th style={{ padding: '9px 12px' }}>{t('s_event')}</th>
                     <th style={{ padding: '9px 12px', textAlign: 'left' }}>Company</th>
-                    <th style={{ padding: '9px 12px' }}>담당자</th>
+                    <th style={{ padding: '9px 12px' }}>{t('owner_lbl')}</th>
                     <th style={{ padding: '9px 12px' }}>Phone/Email</th>
                     <th style={{ padding: '9px 12px' }}>Source</th>
                     <th style={{ padding: '9px 12px' }}>Owner</th>
@@ -402,7 +402,7 @@ export default function SalesLeads() {
               <div>
                 <label style={{ marginTop: 0 }}>{t('event_name_lbl')}</label>
                 <select value={form.event_name || ''} onChange={e => setForm(f => ({ ...f, event_name: e.target.value }))}>
-                  <option value="">— 행사 선택 —</option>
+                  <option value="">{t('select_event')}</option>
                   {(settings?.event_names || []).map(ev => <option key={ev}>{ev}</option>)}
                 </select>
               </div>

@@ -290,10 +290,10 @@ export default function Proposal() {
           {/* 새 박람회 입력 영역 */}
           {isNewExh && (
             <div style={{ background: '#EEF4FF', border: '1.5px solid #A8C4EE', borderRadius: 10, padding: '14px 16px', marginTop: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#3A5FA0', marginBottom: 12 }}>🆕 새 박람회 정보 입력</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#3A5FA0', marginBottom: 12 }}>🆕 {t('exh_name_lbl')}</div>
               <div className="form-row cols2">
                 <div>
-                  <label style={{ marginTop: 0 }}>박람회 전체 이름 *</label>
+                  <label style={{ marginTop: 0 }}>{t('exh_full_name')}</label>
                   <input
                     value={newExhName}
                     onChange={e => setNewExhName(e.target.value)}
@@ -302,7 +302,7 @@ export default function Proposal() {
                   />
                 </div>
                 <div>
-                  <label style={{ marginTop: 0 }}>약칭 (Key) *</label>
+                  <label style={{ marginTop: 0 }}>{t('exh_key_lbl')}</label>
                   <input
                     value={newExhKey}
                     onChange={e => setNewExhKey(e.target.value)}
@@ -312,10 +312,10 @@ export default function Proposal() {
                 </div>
               </div>
               <div style={{ marginTop: 10 }}>
-                <label style={{ marginTop: 0 }}>반복 참가 박람회?</label>
+                <label style={{ marginTop: 0 }}>{t('is_recurring')}</label>
                 <select value={newExhRecurring ? '1' : '0'} onChange={e => setNewExhRecurring(e.target.value === '1')}>
-                  <option value="0">신규 (처음 참가)</option>
-                  <option value="1">반복 참가 박람회</option>
+                  <option value="0">{t('new_first_time')}</option>
+                  <option value="1">{t('recurring_expo')}</option>
                 </select>
               </div>
             </div>
@@ -323,12 +323,12 @@ export default function Proposal() {
 
           <div className="form-row cols2" style={{ marginTop: 14 }}>
             <div>
-              <label style={{ marginTop: 0 }}>박람회 이름</label>
+              <label style={{ marginTop: 0 }}>{t('exh_name_lbl')}</label>
               <input
                 value={isNewExh ? newExhName : (exhibitions.find(e => e.id === exhId)?.name || '')}
                 readOnly
                 style={{ background: '#f8f8f8', color: isNewExh && !newExhName ? 'var(--muted)' : 'var(--text)' }}
-                placeholder="위에서 박람회를 선택하거나 새 박람회를 추가하세요"
+                placeholder={t('exh_select')}
               />
             </div>
             <div>
@@ -466,8 +466,8 @@ export default function Proposal() {
                 const diffEl = prev
                   ? diff > 0 ? <span className="diff-up">▲ {krw(diff)}</span>
                     : diff < 0 ? <span className="diff-down">▼ {krw(Math.abs(diff))}</span>
-                    : <span>변동없음</span>
-                  : <span style={{ color: 'var(--amber)', fontWeight: 600 }}>신규</span>
+                    : <span>{t('no_change')}</span>
+                  : <span style={{ color: 'var(--amber)', fontWeight: 600 }}>{t('new_item')}</span>
                 return (
                   <tr key={i}>
                     <td>
@@ -527,14 +527,14 @@ export default function Proposal() {
                   <label style={{ color: col }}>
                     {r.item} &nbsp; {dir} &nbsp; {r.prev ? krw(r.prev) + ' → ' : ''}{krw(r.curr)}
                   </label>
-                  <input placeholder="변동 이유를 간단히 입력 (AI가 참고합니다)"
+                  <input placeholder={t('memo_title')}
                     value={aiMemos[r.item] || ''}
                     onChange={e => setAiMemos(m => ({ ...m, [r.item]: e.target.value }))} />
                 </div>
               )
             })}
             {changedItems.length === 0 && (
-              <div style={{ fontSize: 13, color: 'var(--muted)', padding: '10px 0' }}>변동된 예산 항목이 없습니다.</div>
+              <div style={{ fontSize: 13, color: 'var(--muted)', padding: '10px 0' }}>{t('no_budget_changes')}</div>
             )}
           </div>
           <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
@@ -596,7 +596,7 @@ export default function Proposal() {
 
         {pageItems.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 32, color: 'var(--muted)', fontSize: 14, background: 'var(--light)', borderRadius: 10 }}>
-            저장된 Proposal이 없습니다.<br />위에서 새 Proposal을 작성하거나 파일을 업로드하세요.
+            {t('no_saved_proposals_desc')}
           </div>
         ) : (
           pageItems.map((p, idx) => (

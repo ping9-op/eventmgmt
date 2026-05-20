@@ -214,7 +214,7 @@ export default function Schedule() {
               <h3>{modal.isNew ? t('sched_add_title') : t('sched_edit_title')}</h3>
               <button className="modal-close" onClick={() => setModal({ open: false, isNew: false })}>✕</button>
             </div>
-            <label>박람회 이름</label>
+            <label>{t('exh_name_lbl')}</label>
             <input value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Korea Import Fair (KIF)" />
             <div className="form-row cols3" style={{ marginTop: 14 }}>
               <div>
@@ -226,7 +226,7 @@ export default function Schedule() {
                 <input value={form.author || ''} onChange={e => setForm(f => ({ ...f, author: e.target.value }))} />
               </div>
               <div>
-                <label style={{ marginTop: 0 }}>Proposal 날짜</label>
+                <label style={{ marginTop: 0 }}>{t('write_date')}</label>
                 <input type="date" value={form.proposal_date || ''} onChange={e => setForm(f => ({ ...f, proposal_date: e.target.value }))} />
               </div>
             </div>
@@ -240,7 +240,7 @@ export default function Schedule() {
                 <input value={form.venue || ''} onChange={e => setForm(f => ({ ...f, venue: e.target.value }))} placeholder={t('venue_placeholder')} />
               </div>
             </div>
-            <label style={{ marginTop: 14 }}>구분</label>
+            <label style={{ marginTop: 14 }}>{t('col_type')}</label>
             <select value={form.recurring ? '1' : '0'} onChange={e => setForm(f => ({ ...f, recurring: e.target.value === '1' }))}>
               <option value="1">{t('existing_exh')}</option>
               <option value="0">{t('new_exh')}</option>

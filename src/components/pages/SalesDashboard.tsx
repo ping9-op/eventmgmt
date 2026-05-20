@@ -43,7 +43,7 @@ export default function SalesDashboard() {
     load()
   }, [])
 
-  if (loading) return <div className="view wide"><div style={{ color: 'var(--muted)', padding: 40 }}>로딩 중...</div></div>
+  if (loading) return <div className="view wide"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
 
   const total = leads.length
   const byStage = (s: string) => leads.filter(l => l.current_stage === s).length
@@ -98,7 +98,7 @@ export default function SalesDashboard() {
           >
             <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>{k.lbl}</div>
             <div style={{ fontSize: 28, fontWeight: 800, color: k.col }}>{k.val}</div>
-            {k.fn && <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>클릭하여 보기 →</div>}
+            {k.fn && <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>{t('click_to_view')}</div>}
           </div>
         ))}
       </div>
@@ -135,19 +135,19 @@ export default function SalesDashboard() {
             onClick={() => navigate('/sales/followup', { state: { filter: 'overdue' } })}>
             <div style={{ fontSize: 12, color: '#DC2626', fontWeight: 600, marginBottom: 4 }}>{t('overdue_tasks_lbl')}</div>
             <div style={{ fontSize: 32, fontWeight: 800, color: '#DC2626' }}>{overdueCount}</div>
-            <div style={{ fontSize: 12, color: '#DC2626', marginTop: 4 }}>즉시 처리 필요</div>
+            <div style={{ fontSize: 12, color: '#DC2626', marginTop: 4 }}>{t('action_required')}</div>
           </div>
           <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 12, padding: '18px 20px', cursor: 'pointer' }}
             onClick={() => navigate('/sales/followup', { state: { filter: 'today' } })}>
             <div style={{ fontSize: 12, color: '#D97706', fontWeight: 600, marginBottom: 4 }}>{t('today_tasks_lbl')}</div>
             <div style={{ fontSize: 32, fontWeight: 800, color: '#D97706' }}>{todayTaskCount}</div>
-            <div style={{ fontSize: 12, color: '#D97706', marginTop: 4 }}>오늘 처리 예정</div>
+            <div style={{ fontSize: 12, color: '#D97706', marginTop: 4 }}>{t('due_today_desc')}</div>
           </div>
           <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 12, padding: '18px 20px', cursor: 'pointer' }}
             onClick={() => navigate('/sales/funnel', { state: { filter: 'Onboarding', view: 'board' } })}>
             <div style={{ fontSize: 12, color: '#059669', fontWeight: 600, marginBottom: 4 }}>{t('onboarding_lbl')}</div>
             <div style={{ fontSize: 32, fontWeight: 800, color: '#059669' }}>{onboardingCount}</div>
-            <div style={{ fontSize: 12, color: '#059669', marginTop: 4 }}>완료 단계 진행 중</div>
+            <div style={{ fontSize: 12, color: '#059669', marginTop: 4 }}>{t('onboarding_in_progress_desc')}</div>
           </div>
         </div>
       </div>
@@ -179,7 +179,7 @@ export default function SalesDashboard() {
                   </td>
                 </tr>
               ))}
-              {topLeads.length === 0 && <tr><td colSpan={3} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>리드 없음</td></tr>}
+              {topLeads.length === 0 && <tr><td colSpan={3} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>{t('no_leads_short')}</td></tr>}
             </tbody>
           </table>
         </div>

@@ -89,7 +89,7 @@ export default function SalesFunnel() {
     setChecked(new Set())
   }
 
-  if (loading) return <div className="view wide"><div style={{ color: 'var(--muted)', padding: 40 }}>로딩 중...</div></div>
+  if (loading) return <div className="view wide"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
 
   const total = leads.length
   const byS = (s: string) => leads.filter(l => l.current_stage === s).length
@@ -177,7 +177,7 @@ export default function SalesFunnel() {
         {filterStage && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, background: '#FFF8F0', border: '1px solid #FDE68A', borderRadius: 8, padding: '7px 14px' }}>
             <span style={{ fontSize: 13 }}>🔍 <strong>{filterStage === '__active__' ? '진행 중인 영업 건' : filterStage}</strong> 필터 중 ({filtered.length}개)</span>
-            <button onClick={() => setFilterStage(null)} style={{ padding: '3px 10px', borderRadius: 5, background: 'white', border: '1px solid var(--border2)', fontSize: 12, cursor: 'pointer', marginLeft: 'auto' }}>✕ 전체 보기</button>
+            <button onClick={() => setFilterStage(null)} style={{ padding: '3px 10px', borderRadius: 5, background: 'white', border: '1px solid var(--border2)', fontSize: 12, cursor: 'pointer', marginLeft: 'auto' }}>{t('clear_view_all')}</button>
           </div>
         )}
 
@@ -242,11 +242,11 @@ export default function SalesFunnel() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid var(--border)', background: '#FAFAFA' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
                 <input type="checkbox" checked={allIds.length > 0 && allIds.every(i => checked.has(i))} onChange={() => toggleCheck('', allIds)} style={{ width: 16, height: 16, accentColor: 'var(--accent)', cursor: 'pointer' }} />
-                전체 선택
+                {t('select_all')}
               </label>
               <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700, minWidth: 70 }}>{checked.size > 0 ? `${checked.size}개 선택됨` : ''}</span>
               <div style={{ marginLeft: 'auto' }}>
-                <button onClick={exportCSV} style={{ padding: '6px 14px', borderRadius: 7, background: 'white', border: '1.5px solid #059669', color: '#059669', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>⬇️ Excel 내보내기</button>
+                <button onClick={exportCSV} style={{ padding: '6px 14px', borderRadius: 7, background: 'white', border: '1.5px solid #059669', color: '#059669', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>⬇️ {t('export_excel')}</button>
               </div>
             </div>
             <div style={{ overflowX: 'auto' }}>
@@ -294,7 +294,7 @@ export default function SalesFunnel() {
                       <td style={{ padding: '9px 12px', fontSize: 11, color: '#DC2626' }}>{l.lost_reason || '—'}</td>
                     </tr>
                   ))}
-                  {filtered.length === 0 && <tr><td colSpan={11} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>해당하는 Lead 없음</td></tr>}
+                  {filtered.length === 0 && <tr><td colSpan={11} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>{t('no_matching_leads')}</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -404,7 +404,7 @@ function ProposalContractView({ leads, proposals, onUpdate, onOpenLead }: {
                   </tr>
                 )
               })}
-              {propLeads.length === 0 && <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>해당 단계 리드 없음</td></tr>}
+              {propLeads.length === 0 && <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>{t('no_stage_leads')}</td></tr>}
             </tbody>
           </table>
         </div>

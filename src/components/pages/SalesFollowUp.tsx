@@ -98,7 +98,7 @@ export default function SalesFollowUp() {
     }
   }
 
-  if (loading) return <div className="view wide"><div style={{ color: 'var(--muted)', padding: 40 }}>로딩 중...</div></div>
+  if (loading) return <div className="view wide"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
 
   const todayCnt = tasks.filter(t => t.due_date === today && t.status !== 'Done').length
   const weekCnt = tasks.filter(t => t.due_date > today && t.due_date <= thisWeekEnd && t.status !== 'Done').length
@@ -154,7 +154,7 @@ export default function SalesFollowUp() {
       {taskFilter && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, background: '#FFF8F0', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 14px' }}>
           <span style={{ fontSize: 13 }}>🔍 필터: <strong>{filterCards.find(c => c.filter === taskFilter)?.lbl}</strong> ({shown.length}개)</span>
-          <button onClick={() => setTaskFilter(null)} style={{ padding: '3px 10px', borderRadius: 5, background: 'white', border: '1px solid var(--border2)', fontSize: 12, cursor: 'pointer', marginLeft: 'auto' }}>✕ 해제</button>
+          <button onClick={() => setTaskFilter(null)} style={{ padding: '3px 10px', borderRadius: 5, background: 'white', border: '1px solid var(--border2)', fontSize: 12, cursor: 'pointer', marginLeft: 'auto' }}>{t('clear_filter')}</button>
         </div>
       )}
 
@@ -275,7 +275,7 @@ export default function SalesFollowUp() {
                 </select>
               </div>
               <div>
-                <label style={{ marginTop: 0 }}>상태</label>
+                <label style={{ marginTop: 0 }}>{t('status_lbl')}</label>
                 <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
                   {STATUSES.map(s => <option key={s}>{s}</option>)}
                 </select>

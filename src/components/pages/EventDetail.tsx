@@ -319,7 +319,7 @@ export default function EventDetail() {
                             <li key={i} style={{ fontSize: 13, marginBottom: 6, lineHeight: 1.5 }}>{r}</li>
                           ))}
                         </ul>
-                      : <div style={{ fontSize: 13, color: 'var(--muted)' }}>기대 효과 미입력</div>
+                      : <div style={{ fontSize: 13, color: 'var(--muted)' }}>{t('no_expected_results')}</div>
                     }
                   </div>
                 </div>
@@ -896,7 +896,7 @@ function ChecklistCard({ row, idx, onUpdate, onDelete }: {
             <input value={row.remarks || ''} onChange={e => onUpdate({ ...row, remarks: e.target.value })}
               style={{ width: 140, fontSize: 13, border: '1px solid var(--border2)', borderRadius: 6, padding: '6px 9px' }} />
           </div>
-          <button onClick={onDelete} style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 20, padding: '0 4px', lineHeight: 1, marginTop: 18 }} title="항목 삭제">✕</button>
+          <button onClick={onDelete} style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 20, padding: '0 4px', lineHeight: 1, marginTop: 18 }} title={t('delete_item')}>✕</button>
         </div>
       </div>
       {/* 서브 아이템 */}
