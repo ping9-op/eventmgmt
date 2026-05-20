@@ -261,13 +261,15 @@ export default function Report() {
 
     // ── 5. Registration Results ───────────────────────────
     const regR = r.reg_remittance || 0, regC = r.reg_card || 0, regB = r.reg_biz || 0, regO = r.reg_onboard || 0
-    if (regR || regC || regB) {
+    const regM = r.new_merchants || 0
+    if (regR || regC || regB || regO || regM) {
       const sl = newSlide(5, 'Registration Results')
       const kpis = [
         { lbl: 'Remittance', val: regR, col: RED },
         { lbl: 'Premium Card', val: regC, col: '7B2D8B' },
-        { lbl: 'GME BIZ Reg.', val: regB, col: '2E7D51' },
+        { lbl: 'BIZ Reg.', val: regB, col: '2E7D51' },
         { lbl: 'Onboarded', val: regO, col: 'C47D1A' },
+        { lbl: 'New Merchants', val: regM, col: 'C47D1A' },
       ].filter(k => k.val > 0)
       const gap = 0.3, cardW = (12.5 - gap * (kpis.length - 1)) / kpis.length
       kpis.forEach((k, i) => {
@@ -497,8 +499,8 @@ export default function Report() {
                 </div>
               ))}
             </div>
-            <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-              <div className="card-sm" style={{ flex: 1, textAlign: 'center' }}>
+            <div style={{ marginBottom: 16 }}>
+              <div className="card-sm" style={{ textAlign: 'center', maxWidth: 280 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 6 }}>{t('per_person_cost')}</div>
                 <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--accent)' }}>
                   {(() => {
@@ -507,15 +509,6 @@ export default function Report() {
                   })()}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{t('per_person_calc')}</div>
-              </div>
-              <div className="card-sm" style={{ flex: 1, textAlign: 'center' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 6 }}>{t('new_registrations_lbl')}</div>
-                <input
-                  type="number"
-                  style={{ fontSize: 22, fontWeight: 800, color: '#3A5FA0', textAlign: 'center', background: 'transparent', border: 'none', outline: 'none', width: '100%' }}
-                  value={r.new_registrations || 0}
-                  onChange={e => updateField('new_registrations', parseInt(e.target.value) || 0)}
-                />
               </div>
             </div>
 
