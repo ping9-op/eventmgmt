@@ -176,16 +176,16 @@ export default function Report() {
     // ── Cover Slide ──────────────────────────────────────
     const cv = pptx.addSlide()
     cv.addImage({ data: `image/png;base64,${coverB64}`, x: 0, y: 0, w: 13.33, h: 7.5 })
-    // 제목
+    // 제목 — GME 원형 워터마크(y:1~4.5) 아래, 우하단 레드 웨이브 위 공간
     cv.addText(r.cover_title || selected, {
-      x: 0.8, y: 2.6, w: 8, h: 1.8,
-      fontSize: 38, bold: true, color: DARK, fontFace: 'Calibri', valign: 'middle',
+      x: 0.7, y: 4.2, w: 7.5, h: 1.5,
+      fontSize: 36, bold: true, color: DARK, fontFace: 'Calibri', valign: 'middle',
       wrap: true,
     })
     // 날짜 & 작성자
     cv.addText(`${r.cover_date || ''}   ·   By ${r.cover_author || 'Andrew'}`, {
-      x: 0.8, y: 4.6, w: 8, h: 0.5,
-      fontSize: 16, color: '555555', fontFace: 'Calibri'
+      x: 0.7, y: 5.8, w: 7.5, h: 0.5,
+      fontSize: 15, color: '444444', fontFace: 'Calibri'
     })
 
     // ── 1. Objective ──────────────────────────────────────
