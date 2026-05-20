@@ -129,10 +129,10 @@ export default function Report() {
     if (costs.length) {
       const sl = newSlide(3, 'Cost')
       const hdr = [
-        { text: '항목', options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13 } },
-        { text: '승인 예산', options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'right' as any } },
-        { text: '실제 지출', options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'right' as any } },
-        { text: '차이', options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'right' as any } },
+        { text: t('item_col'), options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13 } },
+        { text: t('budgeted'), options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'right' as any } },
+        { text: t('actual'), options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'right' as any } },
+        { text: t('diff'), options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'right' as any } },
       ]
       const rows = costs.map((a, ri) => {
         const d = (a.actual || 0) - (a.budgeted || 0)
@@ -146,10 +146,10 @@ export default function Report() {
       })
       const tD = totalA - totalB
       const totalRow = [
-        { text: '합계', options: { bold: true, color: '000000', fill: { color: 'E0E0E0' }, fontSize: 13 } },
+        { text: t('total'), options: { bold: true, color: '000000', fill: { color: 'E0E0E0' }, fontSize: 13 } },
         { text: '₩' + totalB.toLocaleString(), options: { bold: true, align: 'right' as any, fill: { color: 'E0E0E0' }, fontSize: 13, color: '000000' } },
         { text: totalA ? '₩' + totalA.toLocaleString() : '-', options: { bold: true, align: 'right' as any, fill: { color: 'E0E0E0' }, fontSize: 13, color: '000000' } },
-        { text: totalA ? (tD > 0 ? `▲ ₩${tD.toLocaleString()} 초과` : tD < 0 ? `▼ ₩${Math.abs(tD).toLocaleString()} 절감` : '동일') : '-', options: { bold: true, color: tD > 0 ? 'C00000' : tD < 0 ? '375623' : '000000', align: 'right' as any, fill: { color: 'E0E0E0' }, fontSize: 13 } },
+        { text: totalA ? (tD > 0 ? `▲ ₩${tD.toLocaleString()} ${t('over_lbl')}` : tD < 0 ? `▼ ₩${Math.abs(tD).toLocaleString()} ${t('under_lbl')}` : t('same_lbl')) : '-', options: { bold: true, color: tD > 0 ? 'C00000' : tD < 0 ? '375623' : '000000', align: 'right' as any, fill: { color: 'E0E0E0' }, fontSize: 13 } },
       ]
       sl.addTable([hdr, ...rows, totalRow], { x: 0.5, y: 0.9, w: 12.3, rowH: 0.50, colW: [3.5, 2.5, 2.5, 2.5], border: { pt: 0.5, color: 'CCCCCC' }, autoPage: false })
     }
