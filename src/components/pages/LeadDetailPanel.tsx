@@ -1,14 +1,12 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { STAGE_ORDER, STAGE_COLORS } from '../../lib/utils'
-import { loadSalesSettings } from '../../lib/settings'
+import { loadAllSettings, CONTRACT_STATUSES as SYSTEM_CONTRACT_STATUSES, ONBOARD_STATUSES as SYSTEM_ONBOARD_STATUSES, type SalesSettingsData } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
 import type { SalesLead, SalesActivity, SalesTask, SalesProposal } from '../../types/database'
 
-const LOST_REASONS = ['No Demand', 'Price Issue', 'Competitor Already Used', 'No Response', 'Compliance Issue', 'Service Not Available', 'Internal Priority Low', 'Other']
-const CONTRACT_STATUSES = ['Not Sent', 'Sent', 'Under Review', 'Revision Requested', 'Signed', 'Rejected']
-const ONBOARD_STATUSES = ['Not Started', 'Waiting Docs', 'Under Review', 'Approved', 'Rejected', 'Completed']
-const CONTACT_METHODS = ['Email', 'Call', 'SMS', 'Kakao', 'Visit']
+const CONTRACT_STATUSES = SYSTEM_CONTRACT_STATUSES
+const ONBOARD_STATUSES = SYSTEM_ONBOARD_STATUSES
 const ACTIVITY_RESULTS = ['Interested', 'No Response', 'Not Interested', 'Requested Info', 'Scheduled Meeting']
 
 type TabId = 'basic' | 'funnel' | 'activity' | 'proposal'
@@ -21,7 +19,7 @@ export default function LeadDetailPanel({
   onRefresh: () => void
 }) {
   const { showToast } = useToast()
-  const settings = loadSalesSettings()
+  const [settings, setSettings] = useState<SalesSettingsData | null>(null)
   const [tab, setTab] = useState<TabId>('basic')
   const [lead, setLead] = useState<SalesLead | null>(null)
   const [activities, setActivities] = useState<SalesActivity[]>([])
@@ -39,17 +37,17 @@ export default function LeadDetailPanel({
   const [form, setForm] = useState<Partial<SalesLead>>({})
   const [propForm, setPropForm] = useState<Partial<SalesProposal>>({})
 
-  // Fetch event names from existing leads (for selector)
-  const [eventNames, setEventNames] = useState<string[]>([])
+  useEffect(() => {
+    loadAllSettings().then(setSettings)
+  }, [])
 
   useEffect(() => {
     async function load() {
-      const [{ data: lData }, { data: aData }, { data: tData }, { data: pData }, { data: allLeads }] = await Promise.all([
+      const [{ data: lData }, { data: aData }, { data: tData }, { data: pData }] = await Promise.all([
         supabase.from('sales_leads').select('*').eq('id', leadId).single(),
         supabase.from('sales_activities').select('*').eq('lead_id', leadId).order('activity_date', { ascending: false }),
         supabase.from('sales_tasks').select('*').eq('lead_id', leadId).order('due_date'),
         supabase.from('sales_proposals').select('*').eq('lead_id', leadId).single(),
-        supabase.from('sales_leads').select('event_name'),
       ])
       if (lData) {
         setLead(lData as SalesLead)
@@ -61,8 +59,6 @@ export default function LeadDetailPanel({
         setProposal(pData as SalesProposal)
         setPropForm(pData as SalesProposal)
       }
-      const names = [...new Set((allLeads || []).map((l: any) => l.event_name).filter(Boolean))] as string[]
-      setEventNames(names)
     }
     load()
   }, [leadId])
@@ -228,17 +224,18 @@ export default function LeadDetailPanel({
                 </Field>
                 <Field label="Lead Source">
                   <select value={form.lead_source || ''} onChange={e => setForm(f => ({ ...f, lead_source: e.target.value }))}>
-                    {settings.sources.map(s => <option key={s}>{s}</option>)}
+                    {(settings?.sources || []).map(s => <option key={s}>{s}</option>)}
                   </select>
                 </Field>
                 <Field label="Event Name">
                   <select value={form.event_name || ''} onChange={e => setForm(f => ({ ...f, event_name: e.target.value }))}>
-                    {[...new Set([...eventNames, form.event_name || ''])].filter(Boolean).map(n => <option key={n}>{n}</option>)}
+                    <option value="">— 선택 —</option>
+                    {(settings?.event_names || []).map(n => <option key={n}>{n}</option>)}
                   </select>
                 </Field>
                 <Field label="Owner">
                   <select value={form.owner || ''} onChange={e => setForm(f => ({ ...f, owner: e.target.value }))}>
-                    {settings.owners.map(o => <option key={o}>{o}</option>)}
+                    {(settings?.owners || []).map(o => <option key={o}>{o}</option>)}
                   </select>
                 </Field>
                 <Field label="Priority">
@@ -248,12 +245,12 @@ export default function LeadDetailPanel({
                 </Field>
                 <Field label="Corridor">
                   <select value={form.country_corridor || ''} onChange={e => setForm(f => ({ ...f, country_corridor: e.target.value }))}>
-                    {settings.corridors.map(c => <option key={c}>{c}</option>)}
+                    {(settings?.corridors || []).map(c => <option key={c}>{c}</option>)}
                   </select>
                 </Field>
                 <Field label="Business Type">
                   <select value={form.business_type || ''} onChange={e => setForm(f => ({ ...f, business_type: e.target.value }))}>
-                    {settings.businessTypes.map(b => <option key={b}>{b}</option>)}
+                    {(settings?.business_types || []).map(b => <option key={b}>{b}</option>)}
                   </select>
                 </Field>
                 <div style={{ gridColumn: '1 / -1' }}>
@@ -304,7 +301,7 @@ export default function LeadDetailPanel({
                   <div style={{ gridColumn: '1 / -1' }}>
                     <Field label="Lost Reason">
                       <select value={form.lost_reason || ''} onChange={e => setForm(f => ({ ...f, lost_reason: e.target.value }))}>
-                        {LOST_REASONS.map(r => <option key={r}>{r}</option>)}
+                        {(settings?.lost_reasons || ['No Demand', 'Price Issue', 'Competitor Already Used', 'No Response', 'Other']).map(r => <option key={r}>{r}</option>)}
                       </select>
                     </Field>
                   </div>
@@ -356,7 +353,7 @@ export default function LeadDetailPanel({
                       <div>
                         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>유형</div>
                         <select value={actType} onChange={e => setActType(e.target.value)}>
-                          {CONTACT_METHODS.map(m => <option key={m}>{m}</option>)}
+                          {(settings?.contact_methods || ['Email', 'Call', 'SMS', 'Kakao', 'Visit']).map(m => <option key={m}>{m}</option>)}
                         </select>
                       </div>
                       <div>
@@ -465,4 +462,4 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-export { CONTRACT_STATUSES, ONBOARD_STATUSES, LOST_REASONS }
+export { CONTRACT_STATUSES, ONBOARD_STATUSES }

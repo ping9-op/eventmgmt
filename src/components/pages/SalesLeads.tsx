@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { STAGE_ORDER, STAGE_COLORS, priorityColor } from '../../lib/utils'
 import type { SalesLead } from '../../types/database'
-import { loadSalesSettings } from '../../lib/settings'
+import { loadAllSettings, type SalesSettingsData } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
 import LeadDetailPanel from './LeadDetailPanel'
 
@@ -29,7 +29,7 @@ function InlineStageSelect({ lead, onUpdate }: { lead: SalesLead; onUpdate: (id:
 export default function SalesLeads() {
   const location = useLocation()
   const { showToast } = useToast()
-  const settings = loadSalesSettings()
+  const [settings, setSettings] = useState<SalesSettingsData | null>(null)
   const PRIORITIES = ['High', 'Medium', 'Low']
 
   const [leads, setLeads] = useState<SalesLead[]>([])
@@ -75,6 +75,7 @@ export default function SalesLeads() {
       }
     }
     load()
+    loadAllSettings().then(setSettings)
   }, [])
 
   async function load() {
@@ -393,17 +394,20 @@ export default function SalesLeads() {
               <div>
                 <label style={{ marginTop: 0 }}>Lead Source *</label>
                 <select value={form.lead_source || 'Expo'} onChange={e => setForm(f => ({ ...f, lead_source: e.target.value }))}>
-                  {settings.sources.map(s => <option key={s}>{s}</option>)}
+                  {(settings?.sources || []).map(s => <option key={s}>{s}</option>)}
                 </select>
               </div>
               <div>
                 <label style={{ marginTop: 0 }}>Event Name</label>
-                <input value={form.event_name || ''} onChange={e => setForm(f => ({ ...f, event_name: e.target.value }))} placeholder="행사명" />
+                <select value={form.event_name || ''} onChange={e => setForm(f => ({ ...f, event_name: e.target.value }))}>
+                  <option value="">— 행사 선택 —</option>
+                  {(settings?.event_names || []).map(ev => <option key={ev}>{ev}</option>)}
+                </select>
               </div>
               <div>
                 <label style={{ marginTop: 0 }}>Owner</label>
                 <select value={form.owner || 'Andrew'} onChange={e => setForm(f => ({ ...f, owner: e.target.value }))}>
-                  {settings.owners.map(o => <option key={o}>{o}</option>)}
+                  {(settings?.owners || []).map(o => <option key={o}>{o}</option>)}
                 </select>
               </div>
               <div>
@@ -415,13 +419,13 @@ export default function SalesLeads() {
               <div>
                 <label style={{ marginTop: 0 }}>Corridor</label>
                 <select value={form.country_corridor || ''} onChange={e => setForm(f => ({ ...f, country_corridor: e.target.value }))}>
-                  {settings.corridors.map(c => <option key={c}>{c}</option>)}
+                  {(settings?.corridors || []).map(c => <option key={c}>{c}</option>)}
                 </select>
               </div>
               <div>
                 <label style={{ marginTop: 0 }}>Business Type</label>
                 <select value={form.business_type || ''} onChange={e => setForm(f => ({ ...f, business_type: e.target.value }))}>
-                  {settings.businessTypes.map(b => <option key={b}>{b}</option>)}
+                  {(settings?.business_types || []).map(b => <option key={b}>{b}</option>)}
                 </select>
               </div>
               <div>

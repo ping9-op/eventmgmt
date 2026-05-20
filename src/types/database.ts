@@ -161,6 +161,12 @@ export type Database = {
         }
         Relationships: []
       }
+      sales_settings: {
+        Row: { key: string; value: Json; updated_at: string }
+        Insert: { key: string; value: Json; updated_at?: string }
+        Update: { key?: string; value?: Json; updated_at?: string }
+        Relationships: []
+      }
       sales_proposals: {
         Row: {
           id: string; lead_id: string; proposal_sent_date: string | null
