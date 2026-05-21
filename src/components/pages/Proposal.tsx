@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { krw, exhColor, formatEventDate } from '../../lib/utils'
 import type { Exhibition, Proposal as ProposalType, BudgetItem, ProductTarget } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
+import { useToast } from '../../contexts/ToastContext'
 
 const CURRENCIES = ['KRW', 'JPY', 'USD', 'EUR', 'SGD']
 const COST_ITEMS = ['Booth Fee', 'Design', 'Gift', 'Part Timer', 'Flight', 'Accommodation', 'Meal', 'Item Delivery']
@@ -49,6 +50,7 @@ export default function Proposal() {
   const navigate = useNavigate()
   const location = useLocation()
   const { t } = useLang()
+  const { showToast } = useToast()
   const initExhId = (location.state as any)?.exhId || null
 
   const [step, setStep] = useState(1)
@@ -188,6 +190,41 @@ export default function Proposal() {
     setSaved(true)
     await load()
     setTimeout(() => { setSaved(false); setStep(1) }, 1500)
+  }
+
+  async function handleBudgetExcel(file: File) {
+    const XLSX = await import('xlsx')
+    const reader = new FileReader()
+    reader.onload = e => {
+      const data = new Uint8Array(e.target!.result as ArrayBuffer)
+      const wb = XLSX.read(data, { type: 'array' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '' })
+      const items: BudgetItem[] = rows.map(r => {
+        const keys = Object.keys(r)
+        const item = String(r['항목'] || r['Item'] || r['item'] || r[keys[0]] || '')
+        const currRaw = String(r['금액'] || r['Amount'] || r['amount'] || r['curr'] || r[keys[1]] || '')
+        const curr = parseInt(currRaw.replace(/[^0-9]/g, '')) || 0
+        const currency = String(r['통화'] || r['Currency'] || r['currency'] || 'KRW')
+        const note = String(r['비고'] || r['Note'] || r['note'] || '')
+        return { item, curr, prev: 0, note, currency }
+      }).filter(b => b.item && b.curr > 0)
+      if (!items.length) {
+        showToast('⚠️ 유효한 예산 항목이 없습니다. (항목/금액 컬럼 필요)')
+        return
+      }
+      setBudget(prev => {
+        const merged = [...prev]
+        for (const n of items) {
+          const idx = merged.findIndex(b => b.item === n.item)
+          if (idx >= 0) merged[idx] = { ...merged[idx], curr: n.curr, note: n.note }
+          else merged.push(n)
+        }
+        return merged
+      })
+      showToast(`✅ ${items.length}개 항목을 가져왔습니다.`)
+    }
+    reader.readAsArrayBuffer(file)
   }
 
   function runAI() {
@@ -442,13 +479,13 @@ export default function Proposal() {
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
             <div style={{ fontSize: 15, fontWeight: 700 }}>{t('budget_title')}</div>
-            <button className="btn btn-purple btn-sm"
-              onClick={() => {
-                setBudget(b => [...b, { item: 'Part Timer', curr: 500000, prev: 0, note: '추가 인력', currency: 'KRW' }])
-                alert('실제 앱에서는 엑셀 파일을 선택하면 항목과 금액을 자동으로 읽어옵니다.')
-              }}>
-              📂 엑셀 가져오기
-            </button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input id="budget-excel-input" type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleBudgetExcel(f); e.target.value = '' }} />
+              <button className="btn btn-purple btn-sm" onClick={() => document.getElementById('budget-excel-input')?.click()}>
+                📂 엑셀 가져오기
+              </button>
+            </div>
           </div>
           {Object.keys(prevBudgetMap).length > 0 && (
             <div style={{ fontSize: 13, color: 'var(--muted)', background: 'var(--light)', padding: '10px 14px', borderRadius: 8, marginBottom: 14 }}>

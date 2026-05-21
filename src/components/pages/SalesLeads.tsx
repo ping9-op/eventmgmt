@@ -11,6 +11,8 @@ import { useLang } from '../../contexts/LangContext'
 type GroupBy = 'event' | 'date' | 'source'
 type ViewMode = 'group' | 'detail'
 
+interface ExcelPreview { rows: Partial<SalesLead>[]; fileName: string }
+
 function StageBadge({ stage }: { stage: string }) {
   const c = STAGE_COLORS[stage] || { bg: '#6B7280' }
   return <span style={{ display: 'inline-block', padding: '3px 9px', borderRadius: 99, fontSize: 11, fontWeight: 700, color: 'white', background: c.bg, whiteSpace: 'nowrap' }}>{stage}</span>
@@ -46,6 +48,9 @@ export default function SalesLeads() {
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
   const [showRegister, setShowRegister] = useState(false)
   const [checked, setChecked] = useState<Set<string>>(new Set())
+  const [excelPreview, setExcelPreview] = useState<ExcelPreview | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [pdfFileName, setPdfFileName] = useState('')
 
   // Register form
   const [form, setForm] = useState<Partial<SalesLead>>({
@@ -133,6 +138,81 @@ export default function SalesLeads() {
     })
   }
 
+  function downloadTemplate() {
+    const headers = ['company_name', 'contact_person', 'phone', 'email', 'lead_source', 'event_name', 'owner', 'priority', 'country_corridor', 'business_type', 'expected_monthly_volume', 'volume_currency', 'address', 'remarks']
+    const sample = ['Sample Co.', 'John Kim', '+81-90-1234-5678', 'john@sample.com', 'Expo', 'KIF 2026', 'Andrew', 'Medium', 'Korea → Japan', 'Korean Restaurant', '10000', 'USD', 'Tokyo, Japan', 'Met at booth #12']
+    const csv = [headers, sample].map(r => r.map(v => `"${v}"`).join(',')).join('\n')
+    const a = Object.assign(document.createElement('a'), {
+      href: 'data:text/csv;charset=utf-8,﻿' + encodeURIComponent(csv),
+      download: 'GME_Leads_Template.csv',
+    })
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    showToast('📋 템플릿이 다운로드되었습니다.')
+  }
+
+  async function handleExcelFile(file: File) {
+    const XLSX = await import('xlsx')
+    const reader = new FileReader()
+    reader.onload = e => {
+      const data = new Uint8Array(e.target!.result as ArrayBuffer)
+      const wb = XLSX.read(data, { type: 'array' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '' })
+      const parsed: Partial<SalesLead>[] = rows.map(r => ({
+        company_name: String(r.company_name || r['Company'] || r['회사명'] || ''),
+        contact_person: String(r.contact_person || r['Contact'] || r['담당자'] || ''),
+        phone: String(r.phone || r['Phone'] || r['전화'] || '') || null,
+        email: String(r.email || r['Email'] || r['이메일'] || '') || null,
+        lead_source: String(r.lead_source || r['Source'] || 'Expo'),
+        event_name: String(r.event_name || r['Event'] || r['행사명'] || ''),
+        owner: String(r.owner || r['Owner'] || 'Andrew'),
+        priority: String(r.priority || r['Priority'] || 'Medium'),
+        country_corridor: String(r.country_corridor || r['Corridor'] || 'Korea → Japan'),
+        business_type: String(r.business_type || r['Business Type'] || r['business_type'] || 'Korean Restaurant'),
+        expected_monthly_volume: parseInt(String(r.expected_monthly_volume || r['Volume'] || '').replace(/[^0-9]/g, '')) || null,
+        volume_currency: String(r.volume_currency || r['Currency'] || 'USD'),
+        address: String(r.address || r['Address'] || '') || null,
+        remarks: String(r.remarks || r['Remarks'] || '') || null,
+      })).filter(r => r.company_name)
+      if (!parsed.length) { showToast('⚠️ 유효한 데이터가 없습니다. 템플릿을 확인해주세요.'); return }
+      setExcelPreview({ rows: parsed, fileName: file.name })
+    }
+    reader.readAsArrayBuffer(file)
+  }
+
+  async function bulkRegisterLeads(rows: Partial<SalesLead>[]) {
+    setImporting(true)
+    const maxSerial = leads.reduce((max, l) => {
+      const n = parseInt(l.serial_no.replace(/\D/g, '')) || 0
+      return n > max ? n : max
+    }, 0)
+    const inserts = rows.map((r, i) => ({
+      serial_no: `L${String(maxSerial + i + 1).padStart(3, '0')}`,
+      company_name: r.company_name || '',
+      contact_person: r.contact_person || '',
+      phone: r.phone || null,
+      email: r.email || null,
+      lead_source: r.lead_source || 'Expo',
+      event_name: r.event_name || '',
+      owner: r.owner || 'Andrew',
+      priority: r.priority || 'Medium',
+      current_stage: 'New Lead',
+      country_corridor: r.country_corridor || 'Korea → Japan',
+      business_type: r.business_type || 'Korean Restaurant',
+      expected_monthly_volume: r.expected_monthly_volume || null,
+      volume_currency: r.volume_currency || 'USD',
+      address: r.address || null,
+      remarks: r.remarks || null,
+      first_contact_done: false,
+      registered_date: new Date().toISOString().split('T')[0],
+    }))
+    await supabase.from('sales_leads').insert(inserts)
+    setImporting(false)
+    setExcelPreview(null)
+    showToast(`✅ ${rows.length}개 리드가 등록되었습니다.`)
+    load()
+  }
+
   function exportCSV(ids?: string[]) {
     const toExport = ids && ids.length > 0 ? leads.filter(l => ids.includes(l.id)) : (checked.size > 0 ? leads.filter(l => checked.has(l.id)) : leads)
     if (!toExport.length) { alert('내보낼 리드가 없습니다.'); return }
@@ -205,12 +285,21 @@ export default function SalesLeads() {
             <div className="sub">{t('s_leads_sub')}</div>
           </div>
 
+          {/* 숨겨진 file inputs */}
+          <input id="pdf-input" type="file" accept=".pdf" style={{ display: 'none' }}
+            onChange={e => { const f = e.target.files?.[0]; if (f) { setPdfFileName(f.name); showToast(`📎 "${f.name}" 첨부됨`) }; e.target.value = '' }} />
+          <input id="excel-input" type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }}
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleExcelFile(f); e.target.value = '' }} />
+
           {/* 액션 버튼 */}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
             <button className="btn btn-primary" onClick={() => setShowRegister(true)}>{t('s_register')}</button>
-            <button className="btn btn-outline btn-sm" onClick={() => alert('PDF 첨부 — 추후 연결')}>📎 PDF</button>
-            <button className="btn btn-outline btn-sm" onClick={() => alert('Excel Upload — 추후 연결')}>📤 Excel Upload</button>
-            <button className="btn btn-outline btn-sm" onClick={() => alert('Template 다운로드')}>📋 Template</button>
+            <button className="btn btn-outline btn-sm" onClick={() => document.getElementById('pdf-input')?.click()}
+              style={pdfFileName ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : {}}>
+              📎 {pdfFileName ? pdfFileName.replace(/(.{14}).+(\.[^.]+)$/, '$1…$2') : 'PDF'}
+            </button>
+            <button className="btn btn-outline btn-sm" onClick={() => document.getElementById('excel-input')?.click()}>📤 Excel Upload</button>
+            <button className="btn btn-outline btn-sm" onClick={downloadTemplate}>📋 Template</button>
             <button className="btn btn-outline btn-sm" onClick={() => exportCSV([])}>{t('export_excel')}</button>
           </div>
 
@@ -378,6 +467,60 @@ export default function SalesLeads() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Excel 미리보기 모달 */}
+      {excelPreview && (
+        <div className="modal-bg open">
+          <div className="modal" style={{ width: 760 }}>
+            <div className="modal-hdr">
+              <h3>📤 Excel 업로드 미리보기</h3>
+              <button className="modal-close" onClick={() => setExcelPreview(null)}>✕</button>
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 12 }}>
+              📎 "{excelPreview.fileName}" — 총 <strong>{excelPreview.rows.length}</strong>개 리드가 감지되었습니다.
+            </div>
+            <div style={{ overflowX: 'auto', maxHeight: 320, overflowY: 'auto', border: '0.5px solid var(--border2)', borderRadius: 8 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ background: 'var(--accent)', color: 'white', position: 'sticky', top: 0 }}>
+                    <th style={{ padding: '7px 10px' }}>#</th>
+                    <th style={{ padding: '7px 10px', textAlign: 'left' }}>Company</th>
+                    <th style={{ padding: '7px 10px', textAlign: 'left' }}>Contact</th>
+                    <th style={{ padding: '7px 10px', textAlign: 'left' }}>Phone / Email</th>
+                    <th style={{ padding: '7px 10px', textAlign: 'left' }}>Event</th>
+                    <th style={{ padding: '7px 10px' }}>Owner</th>
+                    <th style={{ padding: '7px 10px' }}>Priority</th>
+                    <th style={{ padding: '7px 10px' }}>Stage</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {excelPreview.rows.map((r, i) => (
+                    <tr key={i} style={{ borderBottom: '0.5px solid var(--border)', background: i % 2 === 0 ? 'white' : '#FAFAFA' }}>
+                      <td style={{ padding: '6px 10px', color: 'var(--muted)', textAlign: 'center' }}>{i + 1}</td>
+                      <td style={{ padding: '6px 10px', fontWeight: 700 }}>{r.company_name}</td>
+                      <td style={{ padding: '6px 10px' }}>{r.contact_person || '—'}</td>
+                      <td style={{ padding: '6px 10px', fontSize: 11 }}>{r.phone || '—'}<br /><span style={{ color: 'var(--muted)' }}>{r.email || '—'}</span></td>
+                      <td style={{ padding: '6px 10px', fontSize: 11 }}>{r.event_name || '—'}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'center' }}>{r.owner}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'center' }}>{r.priority}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'center', fontSize: 11, color: 'var(--muted)' }}>New Lead</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 10, padding: '8px 12px', background: 'var(--light)', borderRadius: 7 }}>
+              ⚠️ company_name이 비어 있는 행은 자동으로 제외됩니다. Stage는 모두 "New Lead"로 시작합니다.
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-muted" onClick={() => setExcelPreview(null)}>취소</button>
+              <button className="btn btn-primary" onClick={() => bulkRegisterLeads(excelPreview.rows)} disabled={importing}>
+                {importing ? '등록 중...' : `✅ ${excelPreview.rows.length}개 모두 등록`}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Lead 등록 모달 */}

@@ -163,7 +163,7 @@ export default function Exhibitions() {
     const ext = file.name.split('.').pop()?.toLowerCase()
     const allowed = ['pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'xlsx', 'xls']
     if (!allowed.includes(ext || '')) {
-      alert('PDF, Word, 이미지, Excel 파일을 업로드할 수 있습니다.')
+      showToast('⚠️ PDF, Word, 이미지, Excel 파일만 업로드 가능합니다.')
       return
     }
     setUploadedFileName(file.name)
