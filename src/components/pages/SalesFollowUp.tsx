@@ -86,8 +86,14 @@ export default function SalesFollowUp() {
     showToast('Task 완료!')
   }
 
+  async function deleteTask(taskId: string) {
+    await supabase.from('sales_tasks').delete().eq('id', taskId)
+    setTasks(prev => prev.filter(t => t.id !== taskId))
+    showToast('🗑️ Task가 삭제되었습니다.')
+  }
+
   async function addTask() {
-    if (!form.lead_id || !form.task_title) { alert('Lead와 Task 제목은 필수입니다.'); return }
+    if (!form.lead_id || !form.task_title) { showToast('⚠️ Lead와 Task 제목은 필수입니다.'); return }
     await supabase.from('sales_tasks').insert({
       lead_id: form.lead_id, task_title: form.task_title, task_type: form.task_type,
       due_date: form.due_date, status: form.status, priority: form.priority,
@@ -224,12 +230,18 @@ export default function SalesFollowUp() {
                     <td style={{ padding: '9px 14px' }}><PriorityBadge p={task.priority} /></td>
                     <td style={{ padding: '9px 14px' }}><StatusBadge s={task.status} /></td>
                     <td style={{ padding: '9px 14px' }}>
-                      {task.status !== 'Done' && (
-                        <button onClick={() => markDone(task.id)}
-                          style={{ padding: '4px 10px', borderRadius: 6, background: '#059669', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
-                          {t('mark_done')}
+                      <div style={{ display: 'flex', gap: 5 }}>
+                        {task.status !== 'Done' && (
+                          <button onClick={() => markDone(task.id)}
+                            style={{ padding: '4px 10px', borderRadius: 6, background: '#059669', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                            {t('mark_done')}
+                          </button>
+                        )}
+                        <button onClick={() => deleteTask(task.id)}
+                          style={{ padding: '4px 8px', borderRadius: 6, background: '#FFF0F0', color: '#DC2626', border: '1px solid #FFC5C5', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
+                          🗑️
                         </button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 )

@@ -601,7 +601,7 @@ export default function Proposal() {
               })
               document.body.appendChild(a); a.click(); document.body.removeChild(a)
             }}>
-              💾 .docx 저장
+              💾 TXT 내보내기
             </button>
           </div>
           {saved && (

@@ -100,7 +100,7 @@ export default function Exhibitions() {
   }
 
   async function saveApProposal() {
-    if (!apName || !apYear) { alert('박람회 이름과 연도를 입력하세요'); return }
+    if (!apName || !apYear) { showToast('⚠️ 박람회 이름과 연도를 입력하세요'); return }
     setSaving(true)
 
     let exhId = apExhSel

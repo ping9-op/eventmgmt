@@ -22,6 +22,54 @@ export default function SalesReports() {
     navigate('/sales/leads', { state: { filter } })
   }
 
+  function exportCSV() {
+    const tot = leads.length
+    const wonCount = leads.filter(l => l.current_stage === 'Onboarded / Won').length
+    const evts = [...new Set(leads.map(l => l.event_name))]
+    const ownrs = [...new Set(leads.map(l => l.owner))]
+    const rows: (string | number)[][] = [
+      ['GME Sales Report', new Date().toISOString().split('T')[0]],
+      [],
+      ['[KPI 요약]'],
+      ['전체 리드', tot],
+      ['Contacted', leads.filter(l => l.first_contact_done).length],
+      ['Proposal Sent', leads.filter(l => STAGE_ORDER.indexOf(l.current_stage) >= 3).length],
+      ['Won', wonCount],
+      ['전환율', tot ? `${Math.round(wonCount / tot * 100)}%` : '0%'],
+      [],
+      ['[Funnel 전환율]', 'Count', '%'],
+      ...STAGE_ORDER.map(s => {
+        const cnt = leads.filter(l => l.current_stage === s).length
+        return [s, cnt, tot ? `${Math.round(cnt / tot * 100)}%` : '0%']
+      }),
+      [],
+      ['[행사별 성과]', 'Total', 'Contacted', 'Proposal', 'Won', 'Lost'],
+      ...evts.map(ev => {
+        const el = leads.filter(l => l.event_name === ev)
+        return [ev, el.length,
+          el.filter(l => l.first_contact_done).length,
+          el.filter(l => STAGE_ORDER.indexOf(l.current_stage) >= 3).length,
+          el.filter(l => l.current_stage === 'Onboarded / Won').length,
+          el.filter(l => l.current_stage === 'Lost').length]
+      }),
+      [],
+      ['[담당자별 성과]', 'Total', 'Contacted', 'Proposal', 'Won'],
+      ...ownrs.map(o => {
+        const ol = leads.filter(l => l.owner === o)
+        return [o, ol.length,
+          ol.filter(l => l.first_contact_done).length,
+          ol.filter(l => STAGE_ORDER.indexOf(l.current_stage) >= 3).length,
+          ol.filter(l => l.current_stage === 'Onboarded / Won').length]
+      }),
+    ]
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const a = Object.assign(document.createElement('a'), {
+      href: 'data:text/csv;charset=utf-8,﻿' + encodeURIComponent(csv),
+      download: `GME_Sales_Report_${new Date().toISOString().split('T')[0]}.csv`,
+    })
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+  }
+
   if (loading) return <div className="view wide"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
 
   const total = leads.length
@@ -57,7 +105,7 @@ export default function SalesReports() {
           <div className="txt">{t('s_reports_title')}</div>
           <div className="sub">{t('s_reports_sub')}</div>
         </div>
-        <button className="btn btn-outline btn-sm">⬇️ {t('export_excel')}</button>
+        <button className="btn btn-outline btn-sm" onClick={exportCSV}>⬇️ {t('export_excel')}</button>
       </div>
 
       {/* KPI 카드 5개 */}

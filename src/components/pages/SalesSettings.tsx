@@ -16,12 +16,13 @@ function EditableCard({
   addPlaceholder: string; addBtnLabel: string; deleteBtnLabel: string; itemsCountSuffix: string
 }) {
   const { t } = useLang()
+  const { showToast } = useToast()
   const [input, setInput] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   function submit() {
     const v = input.trim()
-    if (!v || items.includes(v)) { if (!v) return; alert('이미 존재하는 항목입니다.'); return }
+    if (!v || items.includes(v)) { if (!v) return; showToast('⚠️ 이미 존재하는 항목입니다.'); return }
     onAdd(v)
     setInput('')
     inputRef.current?.focus()

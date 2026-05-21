@@ -49,6 +49,7 @@ export default function Payments() {
   const [addError, setAddError] = useState('')
   const [addLoading, setAddLoading] = useState(false)
   const [toast, setToast] = useState('')
+  const [invoicesByKey, setInvoicesByKey] = useState<Record<string, string[]>>({})
   const itemInputRef = useRef<HTMLInputElement>(null)
 
   async function load() {
@@ -76,6 +77,21 @@ export default function Payments() {
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(''), 1800)
+  }
+
+  function handleInvoiceFiles(files: FileList | null) {
+    if (!files || !selected) return
+    const newNames = Array.from(files).map(f => f.name)
+    setInvoicesByKey(prev => {
+      const existing = prev[selected] || []
+      return { ...prev, [selected]: [...existing, ...newNames.filter(n => !existing.includes(n))] }
+    })
+    showToast(`📎 ${newNames.length}개 파일 첨부됨`)
+  }
+
+  function removeInvoice(name: string) {
+    if (!selected) return
+    setInvoicesByKey(prev => ({ ...prev, [selected]: (prev[selected] || []).filter(n => n !== name) }))
   }
 
   function openAddModal() {
@@ -220,12 +236,26 @@ export default function Payments() {
               <div style={{ marginBottom: 16 }}>
                 <div className="invoice-drop"
                   onDragOver={e => e.preventDefault()}
+                  onDrop={e => { e.preventDefault(); handleInvoiceFiles(e.dataTransfer.files) }}
                   onClick={() => document.getElementById('invoice-input')?.click()}>
                   <div style={{ fontSize: 32, marginBottom: 8 }}>📄</div>
                   <div style={{ fontSize: 14, color: 'var(--muted)', fontWeight: 500 }}>{t('invoice_drag_desc')}</div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>PDF, JPG, PNG 지원</div>
-                  <input id="invoice-input" type="file" accept=".pdf,.jpg,.png" style={{ display: 'none' }} onChange={() => {}} />
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>PDF, JPG, PNG · 복수 파일 선택 가능</div>
+                  <input id="invoice-input" type="file" accept=".pdf,.jpg,.png" multiple style={{ display: 'none' }}
+                    onChange={e => { handleInvoiceFiles(e.target.files); e.target.value = '' }} />
                 </div>
+                {(invoicesByKey[selected] || []).length > 0 && (
+                  <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {(invoicesByKey[selected] || []).map((name, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', background: '#EEF4FF', border: '1px solid #C7DAFB', borderRadius: 8, fontSize: 12 }}>
+                        <span style={{ fontWeight: 600 }}>📎</span>
+                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                        <button onClick={() => removeInvoice(name)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 14, flexShrink: 0, lineHeight: 1 }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

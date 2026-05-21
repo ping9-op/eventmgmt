@@ -97,7 +97,7 @@ export default function SalesLeads() {
   }
 
   async function register() {
-    if (!form.company_name) { alert('Company Name은 필수입니다.'); return }
+    if (!form.company_name) { showToast('⚠️ Company Name은 필수입니다.'); return }
     const maxSerial = leads.reduce((max, l) => {
       const n = parseInt(l.serial_no.replace(/\D/g, '')) || 0
       return n > max ? n : max
@@ -215,7 +215,7 @@ export default function SalesLeads() {
 
   function exportCSV(ids?: string[]) {
     const toExport = ids && ids.length > 0 ? leads.filter(l => ids.includes(l.id)) : (checked.size > 0 ? leads.filter(l => checked.has(l.id)) : leads)
-    if (!toExport.length) { alert('내보낼 리드가 없습니다.'); return }
+    if (!toExport.length) { showToast('⚠️ 내보낼 리드가 없습니다.'); return }
     const H = ['SN', '등록일', '행사명', 'Company', '담당자', 'Phone', 'Email', 'Source', '주소', 'Owner', 'Stage', '첫연락', '마지막연락', '다음팔로업', '예상Volume', '통화', 'Priority', 'LostReason', 'Remarks']
     const rows = toExport.map(l => [l.serial_no, l.registered_date, l.event_name, l.company_name, l.contact_person, l.phone || '', l.email || '', l.lead_source, l.address || '', l.owner, l.current_stage, l.first_contact_done ? 'Y' : 'N', l.last_contact_date || '', l.next_follow_up_date || '', l.expected_monthly_volume || '', l.volume_currency, l.priority, l.lost_reason || '', l.remarks || ''])
     const csv = [H, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
