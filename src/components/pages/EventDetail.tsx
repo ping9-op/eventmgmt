@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { useParams, useNavigate, useBlocker } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { exhColor, formatEventDate, costColor } from '../../lib/utils'
 import { useToast } from '../../contexts/ToastContext'
@@ -138,11 +138,15 @@ export default function EventDetail() {
   const [dataId, setDataId] = useState<string | null>(null)
   const [showEpModal, setShowEpModal] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [isDirty, setIsDirty] = useState(false)
+  const justLoaded = useRef(true)
 
   const dbKey = `${key}_${year}`
   const yearNum = parseInt(year || '0')
 
   useEffect(() => {
+    justLoaded.current = true
+    setIsDirty(false)
     async function load() {
       const [{ data: exhData }, { data: allProps }, { data: evData }, { data: payData }] = await Promise.all([
         supabase.from('exhibitions').select('*').eq('key', key || '').single(),
@@ -177,8 +181,30 @@ export default function EventDetail() {
         setItinerary(JSON.parse(JSON.stringify(DEFAULT_ITINERARY)))
       }
     }
-    load()
+    load().then(() => {
+      setTimeout(() => { justLoaded.current = false }, 100)
+    })
   }, [key, year, refreshKey])
+
+  // 변경사항 감지 — 로드 직후는 무시, 그 이후 변경만 추적
+  useEffect(() => {
+    if (justLoaded.current) return
+    setIsDirty(true)
+  }, [checklist, design, giftsOnboard, giftsEvent, equipment, itinerary])
+
+  // 브라우저 새로고침/탭 닫기 방지
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (!isDirty) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [isDirty])
+
+  // React Router 페이지 이탈 차단
+  const blocker = useBlocker(useCallback(() => isDirty, [isDirty]))
 
   async function save() {
     setSaving(true)
@@ -198,6 +224,7 @@ export default function EventDetail() {
       if (data) setDataId((data as any).id)
     }
     setSaving(false)
+    setIsDirty(false)
     showToast('저장되었습니다.')
   }
 
@@ -262,6 +289,11 @@ export default function EventDetail() {
           </div>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
+          {isDirty && (
+            <span style={{ fontSize: 11, color: '#FCD34D', fontWeight: 700, background: 'rgba(0,0,0,.25)', padding: '3px 10px', borderRadius: 99 }}>
+              ● 미저장
+            </span>
+          )}
           <button className="btn btn-primary" style={{ fontSize: 13 }} onClick={save} disabled={saving}>
             {saving ? t('saving') : t('ev_save')}
           </button>
@@ -563,6 +595,29 @@ export default function EventDetail() {
           </div>
         )}
       </div>
+
+      {/* 미저장 이탈 확인 모달 */}
+      {blocker.state === 'blocked' && (
+        <div className="modal-bg open">
+          <div className="modal" style={{ maxWidth: 420 }}>
+            <div className="modal-hdr">
+              <h3>⚠️ 저장하지 않은 변경사항</h3>
+            </div>
+            <p style={{ fontSize: 14, color: 'var(--muted)', margin: '12px 0 20px', lineHeight: 1.6 }}>
+              체크리스트, 디자인, 선물, 장비, 일정 등 수정한 내용이 저장되지 않았습니다.<br />
+              이동하면 변경사항이 <strong style={{ color: '#DC2626' }}>사라집니다</strong>.
+            </p>
+            <div className="modal-footer">
+              <button className="btn btn-muted" onClick={() => blocker.reset()}>계속 편집</button>
+              <button className="btn btn-outline" style={{ color: '#DC2626', borderColor: '#DC2626' }}
+                onClick={() => blocker.proceed()}>저장 안 함</button>
+              <button className="btn btn-primary" onClick={async () => { await save(); blocker.proceed() }}>
+                💾 저장 후 이동
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Proposal 편집 모달 */}
       {showEpModal && overview && (
