@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
-import { useParams, useNavigate, useBlocker } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { exhColor, formatEventDate, costColor } from '../../lib/utils'
 import { useToast } from '../../contexts/ToastContext'
@@ -139,6 +139,8 @@ export default function EventDetail() {
   const [showEpModal, setShowEpModal] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [isDirty, setIsDirty] = useState(false)
+  const [showLeaveModal, setShowLeaveModal] = useState(false)
+  const [pendingNav, setPendingNav] = useState<(() => void) | null>(null)
   const justLoaded = useRef(true)
 
   const dbKey = `${key}_${year}`
@@ -203,8 +205,11 @@ export default function EventDetail() {
     return () => window.removeEventListener('beforeunload', handler)
   }, [isDirty])
 
-  // React Router 페이지 이탈 차단
-  const blocker = useBlocker(useCallback(() => isDirty, [isDirty]))
+  // 미저장 상태에서 이탈 시 확인
+  function safeNavigate(fn: () => void) {
+    if (isDirty) { setPendingNav(() => fn); setShowLeaveModal(true) }
+    else fn()
+  }
 
   async function save() {
     setSaving(true)
@@ -280,7 +285,7 @@ export default function EventDetail() {
   return (
     <div className="ev-wrap">
       <div className="ev-topbar">
-        <button className="back" onClick={() => navigate(-1)}>{t('ev_back')}</button>
+        <button className="back" onClick={() => safeNavigate(() => navigate(-1))}>{t('ev_back')}</button>
         <div style={{ width: 5, height: 22, background: color, borderRadius: 3 }} />
         <div>
           <div className="ev-name">{exhName} {year}</div>
@@ -298,7 +303,7 @@ export default function EventDetail() {
             {saving ? t('saving') : t('ev_save')}
           </button>
           <button style={{ fontSize: 13, padding: '9px 18px', borderRadius: 8, fontWeight: 600, cursor: 'pointer', background: 'rgba(255,255,255,.15)', color: 'white', border: '1.5px solid rgba(255,255,255,.4)' }}
-            onClick={() => navigate('/expo/create', { state: { exhId: overview?.exhibition_id } })}>
+            onClick={() => safeNavigate(() => navigate('/expo/create', { state: { exhId: overview?.exhibition_id } }))}>
             ✏️ Proposal 작성
           </button>
         </div>
@@ -597,7 +602,7 @@ export default function EventDetail() {
       </div>
 
       {/* 미저장 이탈 확인 모달 */}
-      {blocker.state === 'blocked' && (
+      {showLeaveModal && (
         <div className="modal-bg open">
           <div className="modal" style={{ maxWidth: 420 }}>
             <div className="modal-hdr">
@@ -608,10 +613,10 @@ export default function EventDetail() {
               이동하면 변경사항이 <strong style={{ color: '#DC2626' }}>사라집니다</strong>.
             </p>
             <div className="modal-footer">
-              <button className="btn btn-muted" onClick={() => blocker.reset()}>계속 편집</button>
+              <button className="btn btn-muted" onClick={() => { setShowLeaveModal(false); setPendingNav(null) }}>계속 편집</button>
               <button className="btn btn-outline" style={{ color: '#DC2626', borderColor: '#DC2626' }}
-                onClick={() => blocker.proceed()}>저장 안 함</button>
-              <button className="btn btn-primary" onClick={async () => { await save(); blocker.proceed() }}>
+                onClick={() => { setIsDirty(false); setShowLeaveModal(false); pendingNav?.() }}>저장 안 함</button>
+              <button className="btn btn-primary" onClick={async () => { await save(); setShowLeaveModal(false); pendingNav?.() }}>
                 💾 저장 후 이동
               </button>
             </div>
