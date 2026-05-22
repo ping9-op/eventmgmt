@@ -5,6 +5,39 @@ import { useLang } from '../contexts/LangContext'
 
 const CURRENCIES = ['KRW', 'JPY', 'USD', 'EUR', 'SGD']
 const COST_ITEMS = ['Booth Fee', 'Design', 'Gift', 'Part Timer', 'Flight', 'Accommodation', 'Meal', 'Item Delivery']
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+function formatDateRange(start: string, end: string): string {
+  if (!start) return ''
+  const s = new Date(start + 'T00:00:00')
+  if (isNaN(s.getTime())) return ''
+  const yr = s.getFullYear(), m = MON[s.getMonth()], d1 = s.getDate()
+  if (!end || end === start) return `${yr} ${m} ${d1}`
+  const e = new Date(end + 'T00:00:00')
+  if (isNaN(e.getTime())) return `${yr} ${m} ${d1}`
+  const d2 = e.getDate()
+  if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear())
+    return `${yr} ${m} ${d1}-${d2}`
+  return `${yr} ${m} ${d1} - ${e.getFullYear()} ${MON[e.getMonth()]} ${d2}`
+}
+
+function parseDateToInputs(str: string): { start: string; end: string } {
+  if (!str) return { start: '', end: '' }
+  const s = str.toLowerCase()
+  const MAP: Record<string,number> = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12}
+  let month = -1
+  for (const [k, v] of Object.entries(MAP)) { if (s.includes(k)) { month = v; break } }
+  if (month < 0) return { start: '', end: '' }
+  const nums = [...s.matchAll(/\d+/g)].map(m => parseInt(m[0]))
+  const yr = nums.find(n => n > 1000) || new Date().getFullYear()
+  const days = nums.filter(n => n >= 1 && n <= 31)
+  if (!days.length) return { start: '', end: '' }
+  const mm = String(month).padStart(2, '0')
+  return {
+    start: `${yr}-${mm}-${String(days[0]).padStart(2,'0')}`,
+    end:   `${yr}-${mm}-${String(days[days.length-1]).padStart(2,'0')}`,
+  }
+}
 
 interface BudgetRow { item: string; curr: number; prev: number; currency: string; note: string }
 
@@ -29,6 +62,11 @@ export default function ProposalEditModal({ propId, exhName, year, initialDate, 
   const [obj, setObj] = useState(initialObjective)
   const [budget, setBudget] = useState<BudgetRow[]>(initialBudget.map(b => ({ ...b })))
   const [saving, setSaving] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  const initDates = parseDateToInputs(initialDate)
+  const [startDate, setStartDate] = useState(initDates.start)
+  const [endDate, setEndDate] = useState(initDates.end)
 
   function updateRow(i: number, field: keyof BudgetRow, val: string | number) {
     setBudget(p => p.map((r, j) => j === i ? { ...r, [field]: val } : r))
@@ -48,7 +86,6 @@ export default function ProposalEditModal({ propId, exhName, year, initialDate, 
   }
 
   async function deleteProp() {
-    if (!confirm(`${exhName} ${year} Proposal${t('confirm_delete')}`)) return
     await supabase.from('proposals').delete().eq('id', propId)
     showToast(t('saved_ok'))
     onDeleted()
@@ -63,7 +100,24 @@ export default function ProposalEditModal({ propId, exhName, year, initialDate, 
         </div>
 
         <div className="form-row cols2">
-          <div><label>{t('event_period')}</label><input value={date} onChange={e => setDate(e.target.value)} placeholder="2026 Jun 23-25" /></div>
+          <div>
+            <label>{t('event_period')}</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="date" value={startDate}
+                onChange={e => {
+                  const s = e.target.value
+                  setStartDate(s)
+                  if (endDate && s > endDate) { setEndDate(s); setDate(formatDateRange(s, s)) }
+                  else setDate(formatDateRange(s, endDate))
+                }}
+                style={{ flex: 1 }} />
+              <span style={{ color: 'var(--muted)', fontWeight: 600, flexShrink: 0 }}>~</span>
+              <input type="date" value={endDate} min={startDate || undefined}
+                onChange={e => { setEndDate(e.target.value); setDate(formatDateRange(startDate, e.target.value)) }}
+                style={{ flex: 1 }} />
+            </div>
+            {date && <div style={{ marginTop: 4, fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>📅 {date}</div>}
+          </div>
           <div><label>{t('venue')}</label><input value={venue} onChange={e => setVenue(e.target.value)} placeholder="COEX Hall B" /></div>
         </div>
         <label>{t('objective')}</label>
@@ -104,9 +158,17 @@ export default function ProposalEditModal({ propId, exhName, year, initialDate, 
 
         <div style={{ marginTop: 16, padding: '12px 14px', background: '#FFF0F0', borderRadius: 8, border: '1px solid #F5C6C6' }}>
           <div style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 8 }}>⚠ {t('delete_proposal_warn')}</div>
-          <button className="btn btn-sm" style={{ background: '#D63031', color: 'white', border: 'none' }} onClick={deleteProp}>
-            {t('delete_proposal_btn')}
-          </button>
+          {confirmDelete ? (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--danger)' }}>{exhName} {year} — {t('confirm_delete')}</span>
+              <button className="btn btn-sm" style={{ background: '#D63031', color: 'white', border: 'none' }} onClick={deleteProp}>{t('delete')}</button>
+              <button className="btn btn-muted btn-sm" onClick={() => setConfirmDelete(false)}>{t('cancel')}</button>
+            </div>
+          ) : (
+            <button className="btn btn-sm" style={{ background: '#D63031', color: 'white', border: 'none' }} onClick={() => setConfirmDelete(true)}>
+              {t('delete_proposal_btn')}
+            </button>
+          )}
         </div>
 
         <div className="modal-footer">

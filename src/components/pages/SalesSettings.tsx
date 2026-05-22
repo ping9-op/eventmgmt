@@ -18,6 +18,7 @@ function EditableCard({
   const { t } = useLang()
   const { showToast } = useToast()
   const [input, setInput] = useState('')
+  const [confirmIdx, setConfirmIdx] = useState<number | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   function submit() {
@@ -70,12 +71,20 @@ function EditableCard({
           <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '8px 12px', background: 'var(--light)', borderRadius: 7, gap: 10 }}>
             <span style={{ width: 20, textAlign: 'center', fontSize: 11, color: 'var(--muted)', fontWeight: 600, flexShrink: 0 }}>{i + 1}</span>
             <span style={{ flex: 1, fontSize: 13 }}>{v}</span>
-            <button
-              onClick={() => { if (confirm(`"${v}"을(를) 삭제하시겠습니까?`)) onRemove(i) }}
-              style={{ padding: '2px 9px', borderRadius: 5, background: 'white', border: '1px solid #FCA5A5', fontSize: 11, cursor: 'pointer', color: '#DC2626', flexShrink: 0 }}
-            >
-              {deleteBtnLabel}
-            </button>
+            {confirmIdx === i ? (
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+                <span style={{ fontSize: 11, color: '#DC2626', fontWeight: 600 }}>삭제?</span>
+                <button onClick={() => { onRemove(i); setConfirmIdx(null) }}
+                  style={{ padding: '2px 8px', borderRadius: 5, background: '#DC2626', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>Yes</button>
+                <button onClick={() => setConfirmIdx(null)}
+                  style={{ padding: '2px 8px', borderRadius: 5, background: 'white', color: 'var(--muted)', border: '1px solid var(--border2)', fontSize: 11, cursor: 'pointer' }}>No</button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmIdx(i)}
+                style={{ padding: '2px 9px', borderRadius: 5, background: 'white', border: '1px solid #FCA5A5', fontSize: 11, cursor: 'pointer', color: '#DC2626', flexShrink: 0 }}>
+                {deleteBtnLabel}
+              </button>
+            )}
           </div>
         ))}
       </div>

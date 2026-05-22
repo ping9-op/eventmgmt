@@ -26,6 +26,7 @@ export default function Schedule() {
   const [modal, setModal] = useState<ModalState>({ open: false, isNew: false })
   const [form, setForm] = useState<Partial<ExhEntry>>({})
   const [saving, setSaving] = useState(false)
+  const [confirmDel, setConfirmDel] = useState(false)
 
   async function load() {
     const [{ data: exhData }, { data: propData }] = await Promise.all([
@@ -113,7 +114,7 @@ export default function Schedule() {
     }
 
     setSaving(false)
-    setModal({ open: false, isNew: false })
+    setModal({ open: false, isNew: false }); setConfirmDel(false)
     load()
   }
 
@@ -212,7 +213,7 @@ export default function Schedule() {
           <div className="modal" style={{ maxWidth: 500 }}>
             <div className="modal-hdr">
               <h3>{modal.isNew ? t('sched_add_title') : t('sched_edit_title')}</h3>
-              <button className="modal-close" onClick={() => setModal({ open: false, isNew: false })}>✕</button>
+              <button className="modal-close" onClick={() => { setModal({ open: false, isNew: false }); setConfirmDel(false) }}>✕</button>
             </div>
             <label>{t('exh_name_lbl')}</label>
             <input value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Korea Import Fair (KIF)" />
@@ -248,18 +249,27 @@ export default function Schedule() {
             {!modal.isNew && (
               <div style={{ marginTop: 16, padding: '12px 14px', background: '#FFF0F0', borderRadius: 8, border: '1px solid #F5C6C6' }}>
                 <div style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 8 }}>{t('delete_sched_warn')}</div>
-                <button className="btn btn-sm" style={{ background: '#D63031', color: 'white', border: 'none' }}
-                  onClick={async () => {
-                    if (!modal.entry || !confirm(t('confirm_delete'))) return
-                    await deleteEntry(modal.entry.key, modal.entry.year)
-                    setModal({ open: false, isNew: false })
-                  }}>
-                  {t('delete_sched_btn')}
-                </button>
+                {confirmDel ? (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--danger)' }}>{t('confirm_delete')}</span>
+                    <button className="btn btn-sm" style={{ background: '#D63031', color: 'white', border: 'none' }}
+                      onClick={async () => {
+                        if (!modal.entry) return
+                        await deleteEntry(modal.entry.key, modal.entry.year)
+                        setModal({ open: false, isNew: false }); setConfirmDel(false)
+                      }}>{t('delete')}</button>
+                    <button className="btn btn-muted btn-sm" onClick={() => setConfirmDel(false)}>{t('cancel')}</button>
+                  </div>
+                ) : (
+                  <button className="btn btn-sm" style={{ background: '#D63031', color: 'white', border: 'none' }}
+                    onClick={() => setConfirmDel(true)}>
+                    {t('delete_sched_btn')}
+                  </button>
+                )}
               </div>
             )}
             <div className="modal-footer">
-              <button className="btn btn-muted" onClick={() => setModal({ open: false, isNew: false })}>{t('cancel')}</button>
+              <button className="btn btn-muted" onClick={() => { setModal({ open: false, isNew: false }); setConfirmDel(false) }}>{t('cancel')}</button>
               <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? t('saving') : t('save')}</button>
             </div>
           </div>

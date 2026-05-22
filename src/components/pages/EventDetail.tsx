@@ -120,6 +120,7 @@ export default function EventDetail() {
   const [itinerary, setItinerary] = useState<any[]>([])
   const [dataId, setDataId] = useState<string | null>(null)
   const [showEpModal, setShowEpModal] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   const dbKey = `${key}_${year}`
   const yearNum = parseInt(year || '0')
@@ -160,7 +161,7 @@ export default function EventDetail() {
       }
     }
     load()
-  }, [key, year])
+  }, [key, year, refreshKey])
 
   async function save() {
     setSaving(true)
@@ -554,7 +555,7 @@ export default function EventDetail() {
           initialObjective={overview.objective || ''}
           initialBudget={(overview.budget || []).map((b: any) => ({ item: b.item, curr: b.curr, prev: b.prev || 0, currency: b.currency || 'KRW', note: b.note || '' }))}
           onClose={() => setShowEpModal(false)}
-          onSaved={() => { setShowEpModal(false); window.location.reload() }}
+          onSaved={() => { setShowEpModal(false); setRefreshKey(k => k + 1) }}
           onDeleted={() => { setShowEpModal(false); navigate(-1) }}
         />
       )}
@@ -655,6 +656,7 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
 }) {
   const { t } = useLang()
   const [editAmts, setEditAmts] = useState<Record<string, { dep?: number; fin?: number; depDue?: string; finDue?: string }>>({})
+  const [deletePayConfirm, setDeletePayConfirm] = useState<string | null>(null)
 
   const budget = overview?.budget || []
   const byCur: Record<string, number> = {}
@@ -781,10 +783,20 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
                     })} style={{ padding: '4px 10px', borderRadius: 6, background: 'var(--accent)', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
                       {t('save_pay')}
                     </button>
-                    <button onClick={() => { if (confirm(t('confirm_delete'))) onDeletePayRow(p.id) }}
-                      style={{ padding: '4px 8px', borderRadius: 6, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', fontSize: 11, cursor: 'pointer' }}>
-                      ✕
-                    </button>
+                    {deletePayConfirm === p.id ? (
+                      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                        <span style={{ fontSize: 11, color: '#DC2626', fontWeight: 600 }}>삭제?</span>
+                        <button onClick={() => { onDeletePayRow(p.id); setDeletePayConfirm(null) }}
+                          style={{ padding: '3px 8px', borderRadius: 5, background: '#DC2626', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>Yes</button>
+                        <button onClick={() => setDeletePayConfirm(null)}
+                          style={{ padding: '3px 8px', borderRadius: 5, background: 'white', color: 'var(--muted)', border: '1px solid var(--border2)', fontSize: 11, cursor: 'pointer' }}>No</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setDeletePayConfirm(p.id)}
+                        style={{ padding: '4px 8px', borderRadius: 6, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', fontSize: 11, cursor: 'pointer' }}>
+                        ✕
+                      </button>
+                    )}
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     {(['deposit', 'final'] as const).map((type) => {
