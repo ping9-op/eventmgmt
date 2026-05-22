@@ -470,7 +470,7 @@ export default function Exhibitions() {
               </div>
             ))}
             <button className="btn btn-muted btn-sm" style={{ marginBottom: 8 }}
-              onClick={() => setApResults(r => [...r, ''])}>+ {t('add_result')}</button>
+              onClick={() => setApResults(r => [...r, ''])}>{t('add_result')}</button>
 
             <label style={{ marginTop: 8 }}>{t('budget_items')}</label>
             <table className="budget-table" style={{ marginBottom: 8 }}>

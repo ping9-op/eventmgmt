@@ -139,7 +139,7 @@ export default function ProposalEditModal({ propId, exhName, exhKey, year, initi
           </div>
         ))}
         <button className="btn btn-muted btn-sm" style={{ marginBottom: 8 }}
-          onClick={() => setResults(r => [...r, ''])}>+ {t('add_result')}</button>
+          onClick={() => setResults(r => [...r, ''])}>{t('add_result')}</button>
 
         <label style={{ marginTop: 8 }}>{t('budget_items')}</label>
         <table className="budget-table" style={{ marginBottom: 8 }}>
@@ -175,7 +175,7 @@ export default function ProposalEditModal({ propId, exhName, exhKey, year, initi
         </button>
 
         <div style={{ marginTop: 16, padding: '12px 14px', background: '#FFF0F0', borderRadius: 8, border: '1px solid #F5C6C6' }}>
-          <div style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 8 }}>⚠ {t('delete_proposal_warn')}</div>
+          <div style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 8 }}>{t('delete_proposal_warn')}</div>
           {confirmDelete ? (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--danger)' }}>{exhName} {year} — {t('confirm_delete')}</span>

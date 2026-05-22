@@ -170,7 +170,6 @@ export default function Dashboard() {
         {/* 박람회 현황 */}
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 14, overflow: 'hidden' }}>
           <div style={{ background: 'var(--accent)', padding: '13px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 16 }}>🏛</span>
             <span style={{ fontSize: 14, fontWeight: 700, color: 'white' }}>{t('exh_status_card')}</span>
             <button onClick={() => navigate('/expo/overview')} style={{ marginLeft: 'auto', background: 'rgba(255,255,255,.2)', border: 'none', color: 'white', padding: '4px 12px', borderRadius: 6, fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>{t('view_detail')}</button>
           </div>
@@ -220,7 +219,6 @@ export default function Dashboard() {
         {/* Sales 현황 */}
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 14, overflow: 'hidden' }}>
           <div style={{ background: '#1E3A5F', padding: '13px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 16 }}>💼</span>
             <span style={{ fontSize: 14, fontWeight: 700, color: 'white' }}>{t('sales_status_card')}</span>
             <button onClick={() => navigate('/sales/dashboard')} style={{ marginLeft: 'auto', background: 'rgba(255,255,255,.2)', border: 'none', color: 'white', padding: '4px 12px', borderRadius: 6, fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>{t('view_detail')}</button>
           </div>
