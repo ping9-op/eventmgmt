@@ -549,6 +549,7 @@ export default function EventDetail() {
         <ProposalEditModal
           propId={overview.id}
           exhName={exhName}
+          exhKey={key || ''}
           year={yearNum}
           initialDate={overview.date_of_event || ''}
           initialVenue={overview.venue || ''}

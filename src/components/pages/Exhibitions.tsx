@@ -58,7 +58,7 @@ interface ExhEntry { exh: Exhibition; proposals: (Proposal & { budget: BudgetIte
 interface BudgetRow { item: string; curr: number; currency: string; note: string }
 
 interface EpModalState {
-  propId: string; exhName: string; year: number
+  propId: string; exhName: string; exhKey: string; year: number
   initialDate: string; initialVenue: string; initialObjective: string
   initialBudget: Array<{ item: string; curr: number; prev: number; currency: string; note: string }>
 }
@@ -160,71 +160,75 @@ export default function Exhibitions() {
   async function saveApProposal() {
     if (!apName || !apYear) { showToast('⚠️ 박람회 이름과 연도를 입력하세요'); return }
     setSaving(true)
+    try {
+      let exhId = apExhSel
+      let exhKey = ''
 
-    let exhId = apExhSel
-    if (!exhId) {
-      const key = apName.replace(/[^a-zA-Z0-9]/g, '').substring(0, 12) || 'EXH' + Date.now()
-      const { data: newExh, error: exhErr } = await supabase.from('exhibitions').insert({
-        key, name: apName, recurring: apRecurring === '1'
-      }).select().single()
-      if (exhErr || !newExh) {
-        setSaving(false)
-        showToast('⚠️ 박람회 생성 실패: ' + (exhErr?.message || '알 수 없는 오류'))
+      if (!exhId) {
+        const key = apName.replace(/[^a-zA-Z0-9]/g, '').substring(0, 12) || 'EXH' + Date.now()
+        const { data: newExh, error: exhErr } = await supabase.from('exhibitions').insert({
+          key, name: apName, recurring: apRecurring === '1'
+        }).select().single()
+        if (exhErr || !newExh) {
+          showToast('⚠️ 박람회 생성 실패: ' + (exhErr?.message || '알 수 없는 오류'))
+          return
+        }
+        exhId = newExh.id
+        exhKey = newExh.key  // DB에 저장된 실제 key 사용
+      } else {
+        await supabase.from('exhibitions').update({ recurring: apRecurring === '1' }).eq('id', exhId)
+        exhKey = data.find(d => d.exh.id === exhId)?.exh.key || ''
+      }
+
+      // 같은 연도 Proposal이 이미 있는지 확인
+      const { data: existing } = await supabase.from('proposals')
+        .select('id').eq('exhibition_id', exhId).eq('year', parseInt(apYear)).single()
+      if (existing) {
+        showToast(`⚠️ ${apName} ${apYear}년 Proposal이 이미 존재합니다.`)
         return
       }
-      exhId = newExh.id
-    } else {
-      await supabase.from('exhibitions').update({ recurring: apRecurring === '1' }).eq('id', exhId)
-    }
 
-    // 같은 연도 Proposal이 이미 있는지 확인
-    const { data: existing } = await supabase.from('proposals')
-      .select('id').eq('exhibition_id', exhId).eq('year', parseInt(apYear)).single()
-    if (existing) {
-      setSaving(false)
-      showToast(`⚠️ ${apName} ${apYear}년 Proposal이 이미 존재합니다.`)
-      return
-    }
+      const budgetItems = apBudget.filter(b => b.item && b.curr > 0).map(b => ({
+        item: b.item, curr: b.curr, prev: 0, note: b.note, currency: b.currency
+      }))
 
-    const budgetItems = apBudget.filter(b => b.item && b.curr > 0).map(b => ({
-      item: b.item, curr: b.curr, prev: 0, note: b.note, currency: b.currency
-    }))
-
-    const { error: propErr } = await supabase.from('proposals').insert({
-      exhibition_id: exhId,
-      year: parseInt(apYear),
-      proposal_date: apPdate,
-      author: apAuthor,
-      date_of_event: apDate,
-      venue: apVenue,
-      objective: apObj,
-      products: [],
-      expected_results: [],
-      budget: budgetItems as unknown as never,
-      explanations: {}
-    })
-    if (propErr) {
-      setSaving(false)
-      showToast('⚠️ 저장 실패: ' + propErr.message)
-      return
-    }
-
-    // 결제 항목도 자동 생성
-    const dbKey = data.find(d => d.exh.id === exhId)?.exh.key || apName.replace(/[^a-zA-Z0-9]/g, '').substring(0, 12)
-    for (const b of budgetItems) {
-      await supabase.from('payments').insert({
-        exhibition_key: `${dbKey}_${apYear}`,
-        item: b.item, total: b.curr, currency: b.currency,
-        deposit_amount: Math.round(b.curr / 2), deposit_due: null, deposit_paid: false,
-        final_amount: Math.round(b.curr / 2), final_due: null, final_paid: false,
+      const { error: propErr } = await supabase.from('proposals').insert({
+        exhibition_id: exhId,
+        year: parseInt(apYear),
+        proposal_date: apPdate,
+        author: apAuthor,
+        date_of_event: apDate,
+        venue: apVenue,
+        objective: apObj,
+        products: [],
+        expected_results: [],
+        budget: budgetItems as unknown as never,
+        explanations: {}
       })
-    }
+      if (propErr) {
+        showToast('⚠️ 저장 실패: ' + propErr.message)
+        return
+      }
 
-    await load()
-    setSaving(false)
-    setShowAddModal(false)
-    resetForm()
-    showToast('✅ Proposal이 등록되었습니다.')
+      // 결제 항목 자동 생성 (실제 exhKey 사용)
+      for (const b of budgetItems) {
+        await supabase.from('payments').insert({
+          exhibition_key: `${exhKey}_${apYear}`,
+          item: b.item, total: b.curr, currency: b.currency,
+          deposit_amount: Math.round(b.curr / 2), deposit_due: null, deposit_paid: false,
+          final_amount: Math.round(b.curr / 2), final_due: null, final_paid: false,
+        })
+      }
+
+      await load()
+      setShowAddModal(false)
+      resetForm()
+      showToast('✅ Proposal이 등록되었습니다.')
+    } catch (e: any) {
+      showToast('⚠️ 오류 발생: ' + (e?.message || String(e)))
+    } finally {
+      setSaving(false)
+    }
   }
 
   function resetForm() {
@@ -252,6 +256,10 @@ export default function Exhibitions() {
   }
 
   async function deleteExhibition(exhId: string) {
+    const exh = data.find(d => d.exh.id === exhId)?.exh
+    if (exh?.key) {
+      await supabase.from('payments').delete().like('exhibition_key', `${exh.key}_%`)
+    }
     await supabase.from('proposals').delete().eq('exhibition_id', exhId)
     await supabase.from('exhibitions').delete().eq('id', exhId)
     setDeleteConfirm(null)
@@ -328,7 +336,7 @@ export default function Exhibitions() {
                         <span style={{ fontSize: 12, fontWeight: 700, color, whiteSpace: 'nowrap' }}>{budgetStr(p.budget)}</span>
                         <button className="btn btn-outline btn-sm" style={{ padding: '2px 8px', fontSize: 10 }}
                           onClick={() => setEpModal({
-                            propId: p.id, exhName: exh.name, year: p.year,
+                            propId: p.id, exhName: exh.name, exhKey: exh.key, year: p.year,
                             initialDate: p.date_of_event, initialVenue: p.venue,
                             initialObjective: p.objective || '',
                             initialBudget: p.budget.map((b: any) => ({ item: b.item, curr: b.curr, prev: b.prev || 0, currency: b.currency || 'KRW', note: b.note || '' }))

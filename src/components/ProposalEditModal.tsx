@@ -44,6 +44,7 @@ interface BudgetRow { item: string; curr: number; prev: number; currency: string
 interface Props {
   propId: string
   exhName: string
+  exhKey: string
   year: number
   initialDate: string
   initialVenue: string
@@ -54,7 +55,7 @@ interface Props {
   onDeleted: () => void
 }
 
-export default function ProposalEditModal({ propId, exhName, year, initialDate, initialVenue, initialObjective, initialBudget, onClose, onSaved, onDeleted }: Props) {
+export default function ProposalEditModal({ propId, exhName, exhKey, year, initialDate, initialVenue, initialObjective, initialBudget, onClose, onSaved, onDeleted }: Props) {
   const { showToast } = useToast()
   const { t } = useLang()
   const [date, setDate] = useState(initialDate)
@@ -86,6 +87,7 @@ export default function ProposalEditModal({ propId, exhName, year, initialDate, 
   }
 
   async function deleteProp() {
+    await supabase.from('payments').delete().eq('exhibition_key', `${exhKey}_${year}`)
     await supabase.from('proposals').delete().eq('id', propId)
     showToast(t('saved_ok'))
     onDeleted()
