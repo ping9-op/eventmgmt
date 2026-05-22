@@ -97,10 +97,12 @@ export default function Exhibitions() {
   const [apBudget, setApBudget] = useState<BudgetRow[]>(defaultBudgetRows())
 
   async function load() {
-    const [{ data: exhData }, { data: propData }] = await Promise.all([
+    const [{ data: exhData, error: exhErr }, { data: propData, error: propErr }] = await Promise.all([
       supabase.from('exhibitions').select('*').order('name'),
       supabase.from('proposals').select('*').order('year', { ascending: true }),
     ])
+    if (exhErr) { console.error('exhibitions fetch error:', exhErr); setLoading(false); return }
+    if (propErr) { console.error('proposals fetch error:', propErr); setLoading(false); return }
     const entries: ExhEntry[] = (exhData || []).map(exh => ({
       exh,
       proposals: ((propData || []) as unknown as Proposal[])
@@ -199,11 +201,11 @@ export default function Exhibitions() {
       })
     }
 
+    await load()
     setSaving(false)
     setShowAddModal(false)
     resetForm()
     showToast('✅ Proposal이 등록되었습니다.')
-    load()
   }
 
   function resetForm() {
