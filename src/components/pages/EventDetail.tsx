@@ -935,7 +935,10 @@ function PayCard({ p, onTogglePaid, onSave, onDelete, deleteConfirm, onSetDelete
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', whiteSpace: 'nowrap' }}>결제 방식</span>
           {(['lump', 'split'] as const).map(m => (
-            <button key={m} onClick={() => setMode(m)} style={{
+            <button key={m} onClick={() => {
+              setMode(m)
+              if (m === 'lump') setDepAmt(String(p.total))  // 일시불 전환 시 전체 금액으로
+            }} style={{
               padding: '5px 13px', borderRadius: 20, fontSize: 12, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', transition: 'all .15s',
               background: mode === m ? 'var(--accent)' : 'white', color: mode === m ? 'white' : 'var(--muted)',
               border: `1.5px solid ${mode === m ? 'var(--accent)' : 'var(--border2)'}`,
