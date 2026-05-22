@@ -103,12 +103,31 @@ export default function Exhibitions() {
     ])
     if (exhErr) { console.error('exhibitions fetch error:', exhErr); setLoading(false); return }
     if (propErr) { console.error('proposals fetch error:', propErr); setLoading(false); return }
-    const entries: ExhEntry[] = (exhData || []).map(exh => ({
+    const exhList = exhData || []
+    const propList = (propData || []) as unknown as Proposal[]
+    const knownExhIds = new Set(exhList.map(e => e.id))
+
+    const entries: ExhEntry[] = exhList.map(exh => ({
       exh,
-      proposals: ((propData || []) as unknown as Proposal[])
+      proposals: propList
         .filter(p => p.exhibition_id === exh.id)
         .map(p => ({ ...p, budget: (p.budget as unknown as BudgetItem[]) || [] }))
     }))
+
+    // exhibition이 없는 orphaned proposals → 가상 exhibition 카드로 표시
+    const orphaned = propList.filter(p => !knownExhIds.has(p.exhibition_id))
+    const orphanedByExhId: Record<string, Proposal[]> = {}
+    for (const p of orphaned) {
+      if (!orphanedByExhId[p.exhibition_id]) orphanedByExhId[p.exhibition_id] = []
+      orphanedByExhId[p.exhibition_id].push(p)
+    }
+    for (const [exhId, props] of Object.entries(orphanedByExhId)) {
+      entries.push({
+        exh: { id: exhId, key: '?', name: '(미연결 박람회)', recurring: false } as any,
+        proposals: props.map(p => ({ ...p, budget: (p.budget as unknown as BudgetItem[]) || [] }))
+      })
+    }
+
     setData(entries)
     setLoading(false)
   }
