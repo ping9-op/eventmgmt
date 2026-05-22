@@ -143,19 +143,33 @@ export default function Exhibitions() {
     let exhId = apExhSel
     if (!exhId) {
       const key = apName.replace(/[^a-zA-Z0-9]/g, '').substring(0, 12) || 'EXH' + Date.now()
-      const { data: newExh } = await supabase.from('exhibitions').insert({
+      const { data: newExh, error: exhErr } = await supabase.from('exhibitions').insert({
         key, name: apName, recurring: apRecurring === '1'
       }).select().single()
-      exhId = newExh!.id
+      if (exhErr || !newExh) {
+        setSaving(false)
+        showToast('⚠️ 박람회 생성 실패: ' + (exhErr?.message || '알 수 없는 오류'))
+        return
+      }
+      exhId = newExh.id
     } else {
       await supabase.from('exhibitions').update({ recurring: apRecurring === '1' }).eq('id', exhId)
+    }
+
+    // 같은 연도 Proposal이 이미 있는지 확인
+    const { data: existing } = await supabase.from('proposals')
+      .select('id').eq('exhibition_id', exhId).eq('year', parseInt(apYear)).single()
+    if (existing) {
+      setSaving(false)
+      showToast(`⚠️ ${apName} ${apYear}년 Proposal이 이미 존재합니다.`)
+      return
     }
 
     const budgetItems = apBudget.filter(b => b.item && b.curr > 0).map(b => ({
       item: b.item, curr: b.curr, prev: 0, note: b.note, currency: b.currency
     }))
 
-    await supabase.from('proposals').insert({
+    const { error: propErr } = await supabase.from('proposals').insert({
       exhibition_id: exhId,
       year: parseInt(apYear),
       proposal_date: apPdate,
@@ -168,6 +182,11 @@ export default function Exhibitions() {
       budget: budgetItems as unknown as never,
       explanations: {}
     })
+    if (propErr) {
+      setSaving(false)
+      showToast('⚠️ 저장 실패: ' + propErr.message)
+      return
+    }
 
     // 결제 항목도 자동 생성
     const dbKey = data.find(d => d.exh.id === exhId)?.exh.key || apName.replace(/[^a-zA-Z0-9]/g, '').substring(0, 12)
@@ -183,7 +202,7 @@ export default function Exhibitions() {
     setSaving(false)
     setShowAddModal(false)
     resetForm()
-    showToast('Proposal이 등록되었습니다.')
+    showToast('✅ Proposal이 등록되었습니다.')
     load()
   }
 
