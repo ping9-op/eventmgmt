@@ -16,6 +16,23 @@ interface ChecklistItem {
   detail?: string
 }
 
+const PAYMENT_METHODS = ['계좌이체', '카드결제', '세금계산서', '현금']
+
+function parseFinalDue(val: string | null): { date: string; method: string } {
+  if (!val) return { date: '', method: '' }
+  if (val.startsWith('METHOD:')) return { date: '', method: val.slice(7) }
+  const idx = val.indexOf('|METHOD:')
+  if (idx >= 0) return { date: val.slice(0, idx), method: val.slice(idx + 8) }
+  return { date: val, method: '' }
+}
+
+function encodeFinalDue(date: string, method: string): string | null {
+  if (!date && !method) return null
+  if (!date) return `METHOD:${method}`
+  if (!method) return date
+  return `${date}|METHOD:${method}`
+}
+
 const STATUS_OPTS = ['Plan', 'Progress', 'Done', 'Urgent', 'Cancel']
 const STATUS_COLORS: Record<string, string> = {
   Done: '#2E7D51', Progress: '#C47D1A', Plan: '#7B8AA0', Urgent: '#C0392B', Cancel: '#9CA3AF'
@@ -198,8 +215,8 @@ export default function EventDetail() {
     }
   }
 
-  async function savePayRow(payId: string, updates: { deposit_amount?: number; deposit_due?: string | null; final_amount?: number; final_due?: string | null; total?: number }) {
-    await supabase.from('payments').update(updates).eq('id', payId)
+  async function savePayRow(payId: string, updates: Partial<Payment>) {
+    await supabase.from('payments').update(updates as never).eq('id', payId)
     setPayments(prev => prev.map(p => p.id === payId ? { ...p, ...updates } : p))
     showToast('저장되었습니다.')
   }
@@ -659,7 +676,6 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
   onEditProposal?: () => void
 }) {
   const { t } = useLang()
-  const [editAmts, setEditAmts] = useState<Record<string, { dep?: number; fin?: number; depDue?: string; finDue?: string }>>({})
   const [deletePayConfirm, setDeletePayConfirm] = useState<string | null>(null)
 
   const budget = overview?.budget || []
@@ -670,8 +686,9 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
   const pendByCur: Record<string, number> = {}
   for (const p of payments) {
     const c = p.currency || 'KRW'
-    const paid = (p.deposit_paid ? p.deposit_amount : 0) + (p.final_paid ? p.final_amount : 0)
-    const pend = (!p.deposit_paid ? p.deposit_amount : 0) + (!p.final_paid ? p.final_amount : 0)
+    const isLump = p.final_amount === 0 && p.final_paid === true
+    const paid = isLump ? (p.deposit_paid ? p.total : 0) : (p.deposit_paid ? p.deposit_amount : 0) + (p.final_paid ? p.final_amount : 0)
+    const pend = isLump ? (p.deposit_paid ? 0 : p.total) : (!p.deposit_paid ? p.deposit_amount : 0) + (!p.final_paid ? p.final_amount : 0)
     paidByCur[c] = (paidByCur[c] || 0) + paid
     pendByCur[c] = (pendByCur[c] || 0) + pend
   }
@@ -679,9 +696,6 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
   const sumStr = (obj: Record<string, number>) =>
     Object.entries(obj).filter(([, v]) => v > 0).sort(([a], [b]) => a === 'KRW' ? -1 : 1)
       .map(([c, v]) => fmtAmt(v, c)).join(' + ') || '0'
-
-  function getEdit(id: string) { return editAmts[id] || {} }
-  function setEdit(id: string, val: object) { setEditAmts(p => ({ ...p, [id]: { ...getEdit(id), ...val } })) }
 
   return (
     <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -759,99 +773,170 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
           </div>
         ) : (
           <>
-            {payments.map((p) => {
-              const c = p.currency || 'KRW'
-              const totalPaidAmt = (p.deposit_paid ? p.deposit_amount : 0) + (p.final_paid ? p.final_amount : 0)
-              const pct2 = p.total ? Math.round(totalPaidAmt / p.total * 100) : 0
-              const ed = getEdit(p.id)
-              return (
-                <div key={p.id} style={{ borderBottom: '0.5px solid var(--border)', padding: '14px 18px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, flex: 1 }}>{p.item}</span>
-                    <CurrencyBadge cur={c} />
-                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)' }}>
-                      합계: <strong style={{ color: 'var(--accent)' }}>{fmtAmt(p.total, c)}</strong>
-                    </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div style={{ width: 80, background: '#EEE', borderRadius: 3, height: 7, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', background: '#059669', width: `${pct2}%`, borderRadius: 3 }} />
-                      </div>
-                      <span style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>{pct2}%</span>
-                    </div>
-                    <button onClick={() => onSavePayRow(p.id, {
-                      deposit_amount: ed.dep ?? p.deposit_amount,
-                      deposit_due: (ed.depDue ?? p.deposit_due) as string | null,
-                      final_amount: ed.fin ?? p.final_amount,
-                      final_due: (ed.finDue ?? p.final_due) as string | null,
-                      total: (ed.dep ?? p.deposit_amount) + (ed.fin ?? p.final_amount),
-                    })} style={{ padding: '4px 10px', borderRadius: 6, background: 'var(--accent)', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
-                      {t('save_pay')}
-                    </button>
-                    {deletePayConfirm === p.id ? (
-                      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                        <span style={{ fontSize: 11, color: '#DC2626', fontWeight: 600 }}>삭제?</span>
-                        <button onClick={() => { onDeletePayRow(p.id); setDeletePayConfirm(null) }}
-                          style={{ padding: '3px 8px', borderRadius: 5, background: '#DC2626', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>Yes</button>
-                        <button onClick={() => setDeletePayConfirm(null)}
-                          style={{ padding: '3px 8px', borderRadius: 5, background: 'white', color: 'var(--muted)', border: '1px solid var(--border2)', fontSize: 11, cursor: 'pointer' }}>No</button>
-                      </div>
-                    ) : (
-                      <button onClick={() => setDeletePayConfirm(p.id)}
-                        style={{ padding: '4px 8px', borderRadius: 6, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', fontSize: 11, cursor: 'pointer' }}>
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    {(['deposit', 'final'] as const).map((type) => {
-                      const isPaid = type === 'deposit' ? p.deposit_paid : p.final_paid
-                      const amt = type === 'deposit' ? p.deposit_amount : p.final_amount
-                      const due = type === 'deposit' ? p.deposit_due : p.final_due
-                      const label = type === 'deposit' ? t('deposit_pay') : t('final_pay_short')
-                      const bg = type === 'deposit' ? '#EEF4FF' : '#F0FFF4'
-                      const borderCol = isPaid ? '#A7F3D0' : 'var(--border2)'
-                      return (
-                        <div key={type} style={{ background: bg, border: `1px solid ${borderCol}`, borderRadius: 8, padding: '12px 14px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                            <span style={{ fontSize: 12, fontWeight: 700 }}>{label}</span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }} onClick={() => onTogglePaid(p.id, type)}>
-                              <div style={{ width: 36, height: 20, borderRadius: 99, background: isPaid ? '#059669' : '#ccc', position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
-                                <div style={{ position: 'absolute', top: 3, left: isPaid ? 18 : 3, width: 14, height: 14, background: 'white', borderRadius: '50%', transition: 'left .2s' }} />
-                              </div>
-                              <span style={{ fontSize: 12, fontWeight: 600, color: isPaid ? '#059669' : 'var(--muted)' }}>
-                                {isPaid ? t('paid_ok') : t('not_paid')}
-                              </span>
-                            </div>
-                          </div>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                            <div>
-                              <label style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3, display: 'block' }}>{t('amount_col')}</label>
-                              <input type="number" defaultValue={amt || 0}
-                                onChange={e => setEdit(p.id, type === 'deposit' ? { dep: parseInt(e.target.value) || 0 } : { fin: parseInt(e.target.value) || 0 })}
-                                style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
-                            </div>
-                            <div>
-                              <label style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3, display: 'block' }}>{t('pay_date')}</label>
-                              <input type="date" defaultValue={due || ''}
-                                onChange={e => setEdit(p.id, type === 'deposit' ? { depDue: e.target.value } : { finDue: e.target.value })}
-                                style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })}
+            {payments.map((p) => (
+              <PayCard key={p.id} p={p}
+                onTogglePaid={onTogglePaid}
+                onSave={onSavePayRow}
+                onDelete={onDeletePayRow}
+                deleteConfirm={deletePayConfirm}
+                onSetDeleteConfirm={setDeletePayConfirm}
+              />
+            ))}
             <div style={{ padding: '12px 18px', borderTop: '1px solid var(--border)' }}>
-              <button onClick={onAddPayRow} className="add-row-btn" style={{ marginTop: 0 }}>
-                + 항목 추가
-              </button>
+              <button onClick={onAddPayRow} className="add-row-btn" style={{ marginTop: 0 }}>+ 항목 추가</button>
             </div>
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+// ── 결제 카드 ──────────────────────────────────────────
+function PayCard({ p, onTogglePaid, onSave, onDelete, deleteConfirm, onSetDeleteConfirm }: {
+  p: Payment
+  onTogglePaid: (id: string, type: 'deposit' | 'final') => void
+  onSave: (id: string, updates: Partial<Payment>) => void
+  onDelete: (id: string) => void
+  deleteConfirm: string | null
+  onSetDeleteConfirm: (id: string | null) => void
+}) {
+  const c = p.currency || 'KRW'
+  const { date: finDateInit, method: methodInit } = parseFinalDue(p.final_due)
+  const isLumpInit = p.final_amount === 0 && p.final_paid === true
+
+  const [mode, setMode] = useState<'lump' | 'split'>(isLumpInit ? 'lump' : 'split')
+  const [method, setMethod] = useState(methodInit || '계좌이체')
+  const [depAmt, setDepAmt] = useState(String(isLumpInit ? p.total : (p.deposit_amount || 0)))
+  const [depDue, setDepDue] = useState(p.deposit_due || '')
+  const [finAmt, setFinAmt] = useState(String(isLumpInit ? 0 : (p.final_amount || 0)))
+  const [finDue, setFinDue] = useState(finDateInit)
+
+  const paidAmt = mode === 'lump'
+    ? (p.deposit_paid ? p.total : 0)
+    : (p.deposit_paid ? p.deposit_amount : 0) + (p.final_paid ? p.final_amount : 0)
+  const pct = p.total ? Math.round(paidAmt / p.total * 100) : 0
+  const pctColor = pct === 100 ? '#059669' : pct > 0 ? '#F59E0B' : '#DC2626'
+
+  function handleSave() {
+    if (mode === 'lump') {
+      const amt = parseInt(depAmt) || p.total
+      onSave(p.id, { deposit_amount: amt, deposit_due: depDue || null, final_amount: 0, final_paid: true, final_due: encodeFinalDue('', method), total: amt })
+    } else {
+      const dep = parseInt(depAmt) || 0
+      const fin = parseInt(finAmt) || 0
+      onSave(p.id, { deposit_amount: dep, deposit_due: depDue || null, final_amount: fin, final_due: encodeFinalDue(finDue, method), total: dep + fin })
+    }
+  }
+
+  function PaidToggle({ paid, onToggle }: { paid: boolean; onToggle: () => void }) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }} onClick={onToggle}>
+        <div style={{ width: 38, height: 21, borderRadius: 99, background: paid ? '#059669' : '#ccc', position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
+          <div style={{ position: 'absolute', top: 3, left: paid ? 19 : 3, width: 15, height: 15, background: 'white', borderRadius: '50%', transition: 'left .2s' }} />
+        </div>
+        <span style={{ fontSize: 12, fontWeight: 700, color: paid ? '#059669' : 'var(--muted)', whiteSpace: 'nowrap' }}>
+          {paid ? '납부완료 ✓' : '미납'}
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ borderBottom: '0.5px solid var(--border)', padding: '16px 18px' }}>
+      {/* 헤더 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 14, fontWeight: 700, flex: 1, minWidth: 80 }}>{p.item}</span>
+        <CurrencyBadge cur={c} />
+        <span style={{ fontSize: 12, color: 'var(--muted)' }}>합계: <strong style={{ color: 'var(--accent)' }}>{fmtAmt(p.total, c)}</strong></span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <div style={{ width: 70, background: '#EEE', borderRadius: 3, height: 7, overflow: 'hidden' }}>
+            <div style={{ height: '100%', background: pctColor, width: `${pct}%`, borderRadius: 3, transition: 'width .3s' }} />
+          </div>
+          <span style={{ fontSize: 11, color: pctColor, fontWeight: 700, minWidth: 30 }}>{pct}%</span>
+        </div>
+        <button onClick={handleSave} style={{ padding: '5px 14px', borderRadius: 6, background: 'var(--accent)', color: 'white', border: 'none', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>저장</button>
+        {deleteConfirm === p.id ? (
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <span style={{ fontSize: 11, color: '#DC2626', fontWeight: 600 }}>삭제?</span>
+            <button onClick={() => { onDelete(p.id); onSetDeleteConfirm(null) }} style={{ padding: '3px 8px', borderRadius: 5, background: '#DC2626', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>Yes</button>
+            <button onClick={() => onSetDeleteConfirm(null)} style={{ padding: '3px 8px', borderRadius: 5, background: 'white', color: 'var(--muted)', border: '1px solid var(--border2)', fontSize: 11, cursor: 'pointer' }}>No</button>
+          </div>
+        ) : (
+          <button onClick={() => onSetDeleteConfirm(p.id)} style={{ padding: '5px 8px', borderRadius: 6, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', fontSize: 11, cursor: 'pointer' }}>✕</button>
+        )}
+      </div>
+
+      {/* 결제 방식 + 결제 수단 */}
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 12, padding: '10px 14px', background: '#F8F9FA', borderRadius: 8, marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', whiteSpace: 'nowrap' }}>결제 방식</span>
+          {(['lump', 'split'] as const).map(m => (
+            <button key={m} onClick={() => setMode(m)} style={{
+              padding: '5px 13px', borderRadius: 20, fontSize: 12, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', transition: 'all .15s',
+              background: mode === m ? 'var(--accent)' : 'white', color: mode === m ? 'white' : 'var(--muted)',
+              border: `1.5px solid ${mode === m ? 'var(--accent)' : 'var(--border2)'}`,
+            }}>
+              {m === 'lump' ? '일시불' : '선금 / 잔금'}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', whiteSpace: 'nowrap' }}>결제 수단</span>
+          <select value={method} onChange={e => setMethod(e.target.value)}
+            style={{ padding: '5px 10px', border: '1.5px solid var(--border2)', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', background: 'white' }}>
+            {PAYMENT_METHODS.map(m => <option key={m}>{m}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* 납부 박스 */}
+      {mode === 'lump' ? (
+        <div style={{ background: p.deposit_paid ? '#ECFDF5' : '#FFFBEB', border: `1.5px solid ${p.deposit_paid ? '#6EE7B7' : '#FDE68A'}`, borderRadius: 8, padding: '14px 16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: 700 }}>납부</span>
+            <PaidToggle paid={p.deposit_paid} onToggle={() => onTogglePaid(p.id, 'deposit')} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>금액</label>
+              <input type="number" value={depAmt} onChange={e => setDepAmt(e.target.value)}
+                style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>납부일</label>
+              <input type="date" value={depDue} onChange={e => setDepDue(e.target.value)}
+                style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          {([
+            { type: 'deposit' as const, label: '선금', bg: '#EEF4FF', paid: p.deposit_paid, amt: depAmt, due: depDue, setAmt: setDepAmt, setDue: setDepDue },
+            { type: 'final' as const, label: '잔금', bg: '#F0FFF4', paid: p.final_paid, amt: finAmt, due: finDue, setAmt: setFinAmt, setDue: setFinDue },
+          ]).map(box => (
+            <div key={box.type} style={{ background: box.bg, border: `1.5px solid ${box.paid ? '#6EE7B7' : 'var(--border2)'}`, borderRadius: 8, padding: '12px 14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <span style={{ fontSize: 13, fontWeight: 700 }}>{box.label}</span>
+                <PaidToggle paid={box.paid} onToggle={() => onTogglePaid(p.id, box.type)} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div>
+                  <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 3 }}>금액</label>
+                  <input type="number" value={box.amt} onChange={e => box.setAmt(e.target.value)}
+                    style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 3 }}>납부일</label>
+                  <input type="date" value={box.due} onChange={e => box.setDue(e.target.value)}
+                    style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
