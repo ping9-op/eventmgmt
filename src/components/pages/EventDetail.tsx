@@ -509,7 +509,7 @@ export default function EventDetail() {
               <thead>
                 <tr>
                   <th style={{ width: 110 }}>{t('col_date')}</th><th style={{ width: 50 }}>{t('col_day')}</th>
-                  <th style={{ width: 70 }}>{t('col_time')}</th><th>{t('col_activity')}</th>
+                  <th style={{ width: 120 }}>{t('col_time')}</th><th>{t('col_activity')}</th>
                   <th>{t('col_location')}</th><th style={{ width: 90 }}>{t('col_assignee')}</th>
                   <th>{t('col_note')}</th><th style={{ width: 36 }}></th>
                 </tr>
@@ -525,7 +525,10 @@ export default function EventDetail() {
                       }} />
                     </td>
                     <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--accent)' }}>{row.day}</td>
-                    <td><input value={row.time || ''} placeholder="09:00" onChange={e => setItinerary(p => p.map((r, j) => j === i ? { ...r, time: e.target.value } : r))} /></td>
+                    <td>
+                      <input type="time" value={row.time || ''} onChange={e => setItinerary(p => p.map((r, j) => j === i ? { ...r, time: e.target.value } : r))}
+                        style={{ width: '100%', padding: '5px 8px', fontSize: 13, border: '1px solid var(--border2)', borderRadius: 6, cursor: 'pointer' }} />
+                    </td>
                     <td><input value={row.activity || ''} style={{ fontWeight: 600 }} onChange={e => setItinerary(p => p.map((r, j) => j === i ? { ...r, activity: e.target.value } : r))} /></td>
                     <td><input value={row.location || ''} onChange={e => setItinerary(p => p.map((r, j) => j === i ? { ...r, location: e.target.value } : r))} /></td>
                     <td>
