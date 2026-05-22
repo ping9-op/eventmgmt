@@ -629,6 +629,7 @@ export default function EventDetail() {
           initialDate={overview.date_of_event || ''}
           initialVenue={overview.venue || ''}
           initialObjective={overview.objective || ''}
+          initialResults={(overview.expected_results as string[]) || []}
           initialBudget={(overview.budget || []).map((b: any) => ({ item: b.item, curr: b.curr, prev: b.prev || 0, currency: b.currency || 'KRW', note: b.note || '' }))}
           onClose={() => setShowEpModal(false)}
           onSaved={() => { setShowEpModal(false); setRefreshKey(k => k + 1) }}

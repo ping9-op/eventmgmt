@@ -49,18 +49,20 @@ interface Props {
   initialDate: string
   initialVenue: string
   initialObjective: string
+  initialResults: string[]
   initialBudget: BudgetRow[]
   onClose: () => void
   onSaved: () => void
   onDeleted: () => void
 }
 
-export default function ProposalEditModal({ propId, exhName, exhKey, year, initialDate, initialVenue, initialObjective, initialBudget, onClose, onSaved, onDeleted }: Props) {
+export default function ProposalEditModal({ propId, exhName, exhKey, year, initialDate, initialVenue, initialObjective, initialResults, initialBudget, onClose, onSaved, onDeleted }: Props) {
   const { showToast } = useToast()
   const { t } = useLang()
   const [date, setDate] = useState(initialDate)
   const [venue, setVenue] = useState(initialVenue)
   const [obj, setObj] = useState(initialObjective)
+  const [results, setResults] = useState<string[]>(initialResults.length ? initialResults : [''])
   const [budget, setBudget] = useState<BudgetRow[]>(initialBudget.map(b => ({ ...b })))
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -79,6 +81,7 @@ export default function ProposalEditModal({ propId, exhName, exhKey, year, initi
       date_of_event: date,
       venue,
       objective: obj,
+      expected_results: results.filter(r => r.trim()) as unknown as never,
       budget: budget as unknown as never,
     }).eq('id', propId)
     setSaving(false)
@@ -125,7 +128,20 @@ export default function ProposalEditModal({ propId, exhName, exhKey, year, initi
         <label>{t('objective')}</label>
         <textarea value={obj} onChange={e => setObj(e.target.value)} rows={2} placeholder="To promote GME BIZ..." />
 
-        <label style={{ marginTop: 16 }}>{t('budget_items')}</label>
+        <label style={{ marginTop: 14 }}>{t('result_lbl')}</label>
+        {results.map((r, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <input style={{ flex: 1 }} value={r}
+              onChange={e => setResults(arr => arr.map((x, j) => j === i ? e.target.value : x))}
+              placeholder="예: Promote GME BIZ to potential merchants" />
+            <button onClick={() => setResults(arr => arr.filter((_, j) => j !== i))}
+              style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 4px', flexShrink: 0 }}>✕</button>
+          </div>
+        ))}
+        <button className="btn btn-muted btn-sm" style={{ marginBottom: 8 }}
+          onClick={() => setResults(r => [...r, ''])}>+ {t('add_result')}</button>
+
+        <label style={{ marginTop: 8 }}>{t('budget_items')}</label>
         <table className="budget-table" style={{ marginBottom: 8 }}>
           <thead>
             <tr><th>{t('item_col')}</th><th>{t('amount_col')}</th><th>{t('currency_col')}</th><th>{t('note_col')}</th><th></th></tr>

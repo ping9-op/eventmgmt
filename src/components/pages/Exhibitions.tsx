@@ -59,7 +59,7 @@ interface BudgetRow { item: string; curr: number; currency: string; note: string
 
 interface EpModalState {
   propId: string; exhName: string; exhKey: string; year: number
-  initialDate: string; initialVenue: string; initialObjective: string
+  initialDate: string; initialVenue: string; initialObjective: string; initialResults: string[]
   initialBudget: Array<{ item: string; curr: number; prev: number; currency: string; note: string }>
 }
 
@@ -94,6 +94,7 @@ export default function Exhibitions() {
   const [apEndDate, setApEndDate] = useState('')
   const [apVenue, setApVenue] = useState('')
   const [apObj, setApObj] = useState('')
+  const [apResults, setApResults] = useState<string[]>([''])
   const [apBudget, setApBudget] = useState<BudgetRow[]>(defaultBudgetRows())
 
   async function load() {
@@ -148,6 +149,8 @@ export default function Exhibitions() {
         setApStartDate(start); setApEndDate(end)
         setApVenue(latest.venue)
         setApObj(latest.objective || '')
+        const prevResults = (latest.expected_results as string[]) || []
+        setApResults(prevResults.length ? prevResults : [''])
         const prevBudget: BudgetRow[] = latest.budget.map(b => ({
           item: b.item, curr: b.curr,
           currency: (b as any).currency || 'KRW', note: b.note || ''
@@ -201,7 +204,7 @@ export default function Exhibitions() {
         venue: apVenue,
         objective: apObj,
         products: [],
-        expected_results: [],
+        expected_results: apResults.filter(r => r.trim()) as unknown as never,
         budget: budgetItems as unknown as never,
         explanations: {}
       })
@@ -235,6 +238,7 @@ export default function Exhibitions() {
     setApExhSel(''); setApName(''); setApYear(String(new Date().getFullYear()))
     setApAuthor('Andrew'); setApPdate(new Date().toISOString().split('T')[0])
     setApRecurring('1'); setApDate(''); setApStartDate(''); setApEndDate(''); setApVenue(''); setApObj('')
+    setApResults([''])
     setApBudget(defaultBudgetRows())
     setParseState('idle'); setUploadedFileName('')
   }
@@ -339,6 +343,7 @@ export default function Exhibitions() {
                             propId: p.id, exhName: exh.name, exhKey: exh.key, year: p.year,
                             initialDate: p.date_of_event, initialVenue: p.venue,
                             initialObjective: p.objective || '',
+                            initialResults: (p.expected_results as string[]) || [],
                             initialBudget: p.budget.map((b: any) => ({ item: b.item, curr: b.curr, prev: b.prev || 0, currency: b.currency || 'KRW', note: b.note || '' }))
                           })}>{t('edit')}</button>
                       </div>
@@ -454,7 +459,20 @@ export default function Exhibitions() {
             <label>{t('objective')}</label>
             <input value={apObj} onChange={e => setApObj(e.target.value)} placeholder={t('objective_placeholder')} />
 
-            <label style={{ marginTop: 16 }}>{t('budget_items')}</label>
+            <label style={{ marginTop: 14 }}>{t('result_lbl')}</label>
+            {apResults.map((r, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <input style={{ flex: 1 }} value={r}
+                  onChange={e => setApResults(arr => arr.map((x, j) => j === i ? e.target.value : x))}
+                  placeholder="예: Promote GME BIZ to potential merchants" />
+                <button onClick={() => setApResults(arr => arr.filter((_, j) => j !== i))}
+                  style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 4px', flexShrink: 0 }}>✕</button>
+              </div>
+            ))}
+            <button className="btn btn-muted btn-sm" style={{ marginBottom: 8 }}
+              onClick={() => setApResults(r => [...r, ''])}>+ {t('add_result')}</button>
+
+            <label style={{ marginTop: 8 }}>{t('budget_items')}</label>
             <table className="budget-table" style={{ marginBottom: 8 }}>
               <thead>
                 <tr><th>{t('item_col')}</th><th>{t('amount_col')}</th><th>{t('currency_col')}</th><th>{t('note_col')}</th><th></th></tr>
