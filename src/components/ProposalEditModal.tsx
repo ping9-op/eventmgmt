@@ -84,6 +84,42 @@ export default function ProposalEditModal({ propId, exhName, exhKey, year, initi
       expected_results: results.filter(r => r.trim()) as unknown as never,
       budget: budget as unknown as never,
     }).eq('id', propId)
+
+    // 예산 변경 시 결제 일정 동기화
+    const payKey = `${exhKey}_${year}`
+    const { data: existingPays } = await supabase.from('payments').select('*').eq('exhibition_key', payKey)
+    const pays = (existingPays || []) as any[]
+    const activeBudget = budget.filter(b => b.item && b.curr > 0)
+
+    for (const b of activeBudget) {
+      const pay = pays.find(p => p.item === b.item)
+      if (pay) {
+        if (pay.total !== b.curr) {
+          // total 변경 시 비율 유지하여 선금/잔금 재계산
+          const depRatio = pay.total > 0 ? pay.deposit_amount / pay.total : 0.5
+          const newDep = Math.round(b.curr * depRatio)
+          await supabase.from('payments').update({
+            total: b.curr, currency: b.currency || 'KRW',
+            deposit_amount: newDep, final_amount: b.curr - newDep,
+          }).eq('id', pay.id)
+        }
+      } else {
+        await supabase.from('payments').insert({
+          exhibition_key: payKey, item: b.item, total: b.curr,
+          currency: b.currency || 'KRW',
+          deposit_amount: Math.round(b.curr / 2), deposit_due: null, deposit_paid: false,
+          final_amount: Math.round(b.curr / 2), final_due: null, final_paid: false,
+        })
+      }
+    }
+    // 예산에서 삭제된 항목의 결제도 삭제
+    const activeItems = new Set(activeBudget.map(b => b.item))
+    for (const pay of pays) {
+      if (!activeItems.has(pay.item)) {
+        await supabase.from('payments').delete().eq('id', pay.id)
+      }
+    }
+
     setSaving(false)
     showToast(t('saved_ok'))
     onSaved()

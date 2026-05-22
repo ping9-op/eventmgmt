@@ -16,7 +16,7 @@ interface ChecklistItem {
   detail?: string
 }
 
-const PAYMENT_METHODS = ['계좌이체', '카드결제', '세금계산서', '현금']
+const PAYMENT_METHODS = ['계좌이체', '카드']
 
 function parseFinalDue(val: string | null): { date: string; method: string } {
   if (!val) return { date: '', method: '' }
@@ -872,6 +872,8 @@ function PayCard({ p, onTogglePaid, onSave, onDelete, deleteConfirm, onSetDelete
   const [depDue, setDepDue] = useState(p.deposit_due || '')
   const [finAmt, setFinAmt] = useState(String(isLumpInit ? 0 : (p.final_amount || 0)))
   const [finDue, setFinDue] = useState(finDateInit)
+  const initDepPct = p.total > 0 && !isLumpInit ? Math.round(p.deposit_amount / p.total * 100) : 50
+  const [depPct, setDepPct] = useState(initDepPct)
 
   const paidAmt = mode === 'lump'
     ? (p.deposit_paid ? p.total : 0)
@@ -972,7 +974,28 @@ function PayCard({ p, onTogglePaid, onSave, onDelete, deleteConfirm, onSetDelete
           </div>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <>
+          {/* 비율 조정 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#F1F5FD', borderRadius: 8, marginBottom: 10 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', whiteSpace: 'nowrap' }}>비율 설정</span>
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>선금</span>
+            <input type="number" value={depPct} min={0} max={100}
+              onChange={e => {
+                const pct = Math.min(100, Math.max(0, parseInt(e.target.value) || 0))
+                setDepPct(pct)
+                if (p.total > 0) {
+                  const dep = Math.round(p.total * pct / 100)
+                  setDepAmt(String(dep))
+                  setFinAmt(String(p.total - dep))
+                }
+              }}
+              style={{ width: 60, padding: '4px 8px', border: '1.5px solid var(--border2)', borderRadius: 6, fontSize: 13, textAlign: 'center' }} />
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>% / 잔금 <strong>{100 - depPct}%</strong></span>
+            <span style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 'auto' }}>
+              {p.total > 0 ? `선금 ${fmtAmt(Math.round(p.total * depPct / 100), p.currency || 'KRW')} · 잔금 ${fmtAmt(p.total - Math.round(p.total * depPct / 100), p.currency || 'KRW')}` : ''}
+            </span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           {([
             { type: 'deposit' as const, label: '선금', bg: '#EEF4FF', paid: p.deposit_paid, amt: depAmt, due: depDue, setAmt: setDepAmt, setDue: setDepDue },
             { type: 'final' as const, label: '잔금', bg: '#F0FFF4', paid: p.final_paid, amt: finAmt, due: finDue, setAmt: setFinAmt, setDue: setFinDue },
@@ -997,6 +1020,7 @@ function PayCard({ p, onTogglePaid, onSave, onDelete, deleteConfirm, onSetDelete
             </div>
           ))}
         </div>
+        </>
       )}
     </div>
   )
