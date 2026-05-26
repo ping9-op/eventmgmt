@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { krw, exhColor, formatEventDate, isPastEvent } from '../../lib/utils'
 import type { Exhibition, Proposal, BudgetItem } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
+import { useToast } from '../../contexts/ToastContext'
 
 interface ExhEntry {
   key: string; name: string; year: number
@@ -20,6 +21,7 @@ interface ModalState {
 export default function Schedule() {
   const navigate = useNavigate()
   const { t } = useLang()
+  const { showToast } = useToast()
   const [entries, setEntries] = useState<ExhEntry[]>([])
   const [exhMap, setExhMap] = useState<Record<string, Exhibition>>({})
   const [loading, setLoading] = useState(true)
@@ -29,10 +31,11 @@ export default function Schedule() {
   const [confirmDel, setConfirmDel] = useState(false)
 
   async function load() {
-    const [{ data: exhData }, { data: propData }] = await Promise.all([
+    const [{ data: exhData, error: ee }, { data: propData, error: pe }] = await Promise.all([
       supabase.from('exhibitions').select('*'),
       supabase.from('proposals').select('*').order('year'),
     ])
+    if (ee || pe) { showToast('⚠️ 데이터 로드 실패'); setLoading(false); return }
     const map: Record<string, Exhibition> = {}
     for (const e of (exhData || [])) map[e.id] = e
     setExhMap(map)
@@ -67,61 +70,69 @@ export default function Schedule() {
   async function save() {
     if (!form.name || !form.year) return
     setSaving(true)
+    try {
+      let exhId: string
+      const existing = Object.values(exhMap).find(e => e.name === form.name)
+      if (existing) {
+        exhId = existing.id
+      } else {
+        const { data, error } = await supabase.from('exhibitions').insert({
+          key: form.name.replace(/[^a-zA-Z]/g, '').substring(0, 10),
+          name: form.name,
+          recurring: form.recurring || false,
+        }).select().single()
+        if (error) throw error
+        exhId = data!.id
+      }
 
-    // Find or create exhibition
-    let exhId: string
-    const existing = Object.values(exhMap).find(e => e.name === form.name)
-    if (existing) {
-      exhId = existing.id
-    } else {
-      const { data } = await supabase.from('exhibitions').insert({
-        key: form.name.replace(/[^a-zA-Z]/g, '').substring(0, 10),
-        name: form.name,
-        recurring: form.recurring || false,
-      }).select().single()
-      exhId = data!.id
-    }
-
-    if (modal.isNew) {
-      await supabase.from('proposals').insert({
-        exhibition_id: exhId,
-        year: form.year!,
-        proposal_date: form.proposal_date || new Date().toISOString().split('T')[0],
-        author: form.author || '',
-        date_of_event: form.date || '',
-        venue: form.venue || '',
-        objective: '',
-        products: [],
-        expected_results: [],
-        budget: [],
-        explanations: {}
-      })
-    } else if (modal.entry) {
-      const exhEntry = Object.values(exhMap).find(e => e.key === modal.entry!.key)
-      if (exhEntry) {
-        const { data: propData } = await supabase.from('proposals')
-          .select('id').eq('exhibition_id', exhEntry.id).eq('year', modal.entry.year).single()
-        if (propData) {
-          await supabase.from('proposals').update({
-            date_of_event: form.date || '',
-            venue: form.venue || '',
-            year: form.year!,
-            proposal_date: form.proposal_date || '',
-            author: form.author || '',
-          }).eq('id', propData.id)
+      if (modal.isNew) {
+        const { error } = await supabase.from('proposals').insert({
+          exhibition_id: exhId,
+          year: form.year!,
+          proposal_date: form.proposal_date || new Date().toISOString().split('T')[0],
+          author: form.author || '',
+          date_of_event: form.date || '',
+          venue: form.venue || '',
+          objective: '',
+          products: [],
+          expected_results: [],
+          budget: [],
+          explanations: {}
+        })
+        if (error) throw error
+      } else if (modal.entry) {
+        const exhEntry = Object.values(exhMap).find(e => e.key === modal.entry!.key)
+        if (exhEntry) {
+          const { data: propData, error: findErr } = await supabase.from('proposals')
+            .select('id').eq('exhibition_id', exhEntry.id).eq('year', modal.entry.year).single()
+          if (findErr) throw findErr
+          if (propData) {
+            const { error } = await supabase.from('proposals').update({
+              date_of_event: form.date || '',
+              venue: form.venue || '',
+              year: form.year!,
+              proposal_date: form.proposal_date || '',
+              author: form.author || '',
+            }).eq('id', propData.id)
+            if (error) throw error
+          }
         }
       }
-    }
 
-    setSaving(false)
-    setModal({ open: false, isNew: false }); setConfirmDel(false)
-    load()
+      setModal({ open: false, isNew: false }); setConfirmDel(false)
+      load()
+    } catch (err: any) {
+      showToast('⚠️ 저장 실패: ' + (err?.message || '알 수 없는 오류'))
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function deleteEntry(key: string, year: number) {
     const exh = Object.values(exhMap).find(e => e.key === key)
     if (!exh) return
-    await supabase.from('proposals').delete().eq('exhibition_id', exh.id).eq('year', year)
+    const { error } = await supabase.from('proposals').delete().eq('exhibition_id', exh.id).eq('year', year)
+    if (error) { showToast('⚠️ 삭제 실패: ' + error.message); return }
     load()
   }
 

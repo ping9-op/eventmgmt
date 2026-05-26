@@ -40,6 +40,7 @@ export default function SalesFunnel() {
   const [filterStage, setFilterStage] = useState<string | null>(null)
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
   const [checked, setChecked] = useState<Set<string>>(new Set())
+  const [tableSearch, setTableSearch] = useState('')
 
   useEffect(() => {
     const state = (location.state as any)
@@ -56,23 +57,30 @@ export default function SalesFunnel() {
   }, [filterStage, tab])
 
   async function load() {
-    const [{ data: leadData }, { data: propData }] = await Promise.all([
-      supabase.from('sales_leads').select('*'),
-      supabase.from('sales_proposals').select('*'),
-    ])
-    setLeads((leadData || []) as SalesLead[])
-    setProposals((propData || []) as SalesProposal[])
-    setLoading(false)
+    try {
+      const [{ data: leadData, error: le }, { data: propData, error: pe }] = await Promise.all([
+        supabase.from('sales_leads').select('*'),
+        supabase.from('sales_proposals').select('*'),
+      ])
+      if (le) throw le
+      if (pe) throw pe
+      setLeads((leadData || []) as SalesLead[])
+      setProposals((propData || []) as SalesProposal[])
+    } catch (err: any) {
+      console.error('SalesFunnel load error:', err?.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function moveStage(leadId: string, stage: string) {
-    await supabase.from('sales_leads').update({ current_stage: stage }).eq('id', leadId)
-    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, current_stage: stage } : l))
+    const { error } = await supabase.from('sales_leads').update({ current_stage: stage }).eq('id', leadId)
+    if (!error) setLeads(prev => prev.map(l => l.id === leadId ? { ...l, current_stage: stage } : l))
   }
 
   async function updatePropField(propId: string, field: string, value: string) {
-    await supabase.from('sales_proposals').update({ [field]: value } as never).eq('id', propId)
-    setProposals(prev => prev.map(p => p.id === propId ? { ...p, [field]: value } : p))
+    const { error } = await supabase.from('sales_proposals').update({ [field]: value } as never).eq('id', propId)
+    if (!error) setProposals(prev => prev.map(p => p.id === propId ? { ...p, [field]: value } : p))
   }
 
   function toggleCheck(id: string, all?: string[]) {
@@ -114,7 +122,10 @@ export default function SalesFunnel() {
       : baseFiltered.filter(l => l.current_stage === filterStage)
     : baseFiltered
 
-  const allIds = filtered.map(l => l.id)
+  const tableFiltered = tableSearch
+    ? filtered.filter(l => `${l.company_name} ${l.contact_person} ${l.event_name}`.toLowerCase().includes(tableSearch.toLowerCase()))
+    : filtered
+  const allIds = tableFiltered.map(l => l.id)
 
   const tabs: { id: TabType; label: string }[] = [
     { id: 'board', label: t('s_board_view') },
@@ -235,13 +246,9 @@ export default function SalesFunnel() {
           <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, overflow: 'hidden' }}>
             <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
               <input type="text" placeholder="🔍 Company, Contact 검색..." style={{ flex: 1, padding: '7px 12px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13 }}
-                onChange={e => {
-                  const q = e.target.value.toLowerCase()
-                  document.querySelectorAll('#funnel-tbl tbody tr').forEach((tr) => {
-                    (tr as HTMLElement).style.display = (tr.textContent || '').toLowerCase().includes(q) ? '' : 'none'
-                  })
-                }} />
-              <span style={{ fontSize: 12, color: 'var(--muted)' }}>{filtered.length}개</span>
+                value={tableSearch}
+                onChange={e => setTableSearch(e.target.value)} />
+              <span style={{ fontSize: 12, color: 'var(--muted)' }}>{tableFiltered.length}개</span>
             </div>
             {/* 액션 바 */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid var(--border)', background: '#FAFAFA' }}>
@@ -255,7 +262,7 @@ export default function SalesFunnel() {
               </div>
             </div>
             <div style={{ overflowX: 'auto' }}>
-              <table id="funnel-tbl" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1050 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1050 }}>
                 <thead>
                   <tr style={{ background: 'var(--accent)', color: 'white' }}>
                     <th style={{ padding: '9px 10px', width: 38 }}><input type="checkbox" style={{ width: 15, height: 15, cursor: 'pointer' }} /></th>
@@ -272,7 +279,7 @@ export default function SalesFunnel() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map(l => (
+                  {tableFiltered.map(l => (
                     <tr key={l.id} style={{ borderBottom: '0.5px solid var(--border)', cursor: 'pointer', transition: 'background .1s' }}
                       onClick={() => setSelectedLeadId(l.id)}
                       onMouseOver={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = '#FDF5F5'))}
@@ -299,7 +306,7 @@ export default function SalesFunnel() {
                       <td style={{ padding: '9px 12px', fontSize: 11, color: '#DC2626' }}>{l.lost_reason || '—'}</td>
                     </tr>
                   ))}
-                  {filtered.length === 0 && <tr><td colSpan={11} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>{t('no_matching_leads')}</td></tr>}
+                  {tableFiltered.length === 0 && <tr><td colSpan={11} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>{t('no_matching_leads')}</td></tr>}
                 </tbody>
               </table>
             </div>

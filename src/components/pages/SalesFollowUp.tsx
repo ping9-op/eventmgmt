@@ -53,7 +53,7 @@ export default function SalesFollowUp() {
   // Add task form
   const [form, setForm] = useState({
     lead_id: '', task_title: '', task_type: 'Email', due_date: today,
-    status: 'Pending', priority: 'Medium', owner: 'Andrew', note: '',
+    status: 'Pending', priority: 'Medium', owner: settings.owners[0] || '', note: '',
   })
 
   useEffect(() => {
@@ -63,44 +63,73 @@ export default function SalesFollowUp() {
   }, [])
 
   async function load() {
-    const [{ data: taskData }, { data: leadData }] = await Promise.all([
-      supabase.from('sales_tasks').select('*').order('due_date'),
-      supabase.from('sales_leads').select('*'),
-    ])
-    const rawTasks = (taskData || []) as SalesTask[]
-    // Mark overdue: due_date < today (오늘 기한인 태스크는 overdue 아님)
-    const processedTasks = rawTasks.map(t => {
-      if (t.status === 'Done') return t
-      if (t.due_date < today) return { ...t, status: 'Overdue' }
-      if (t.status === 'Overdue') return { ...t, status: 'Pending' }  // DB 오류 보정
-      return t
-    })
-    setTasks(processedTasks)
-    setLeads((leadData || []) as SalesLead[])
-    setLoading(false)
+    try {
+      const [{ data: taskData, error: te }, { data: leadData, error: le }] = await Promise.all([
+        supabase.from('sales_tasks').select('*').order('due_date'),
+        supabase.from('sales_leads').select('*'),
+      ])
+      if (te) throw te
+      if (le) throw le
+      const rawTasks = (taskData || []) as SalesTask[]
+      const processedTasks = rawTasks.map(t => {
+        if (t.status === 'Done') return t
+        if (t.due_date < today) return { ...t, status: 'Overdue' }
+        if (t.status === 'Overdue') return { ...t, status: 'Pending' }
+        return t
+      })
+      setTasks(processedTasks)
+      setLeads((leadData || []) as SalesLead[])
+    } catch (err: any) {
+      showToast('⚠️ 데이터 로드 실패: ' + (err?.message || '알 수 없는 오류'))
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function markDone(taskId: string) {
-    await supabase.from('sales_tasks').update({ status: 'Done', completed_at: today }).eq('id', taskId)
+    const { error } = await supabase.from('sales_tasks').update({ status: 'Done', completed_at: today }).eq('id', taskId)
+    if (error) { showToast('⚠️ 업데이트 실패: ' + error.message); return }
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'Done', completed_at: today } : t))
     showToast('Task 완료!')
   }
 
   async function deleteTask(taskId: string) {
-    await supabase.from('sales_tasks').delete().eq('id', taskId)
+    const { error } = await supabase.from('sales_tasks').delete().eq('id', taskId)
+    if (error) { showToast('⚠️ 삭제 실패: ' + error.message); return }
     setTasks(prev => prev.filter(t => t.id !== taskId))
     showToast('🗑️ Task가 삭제되었습니다.')
   }
 
+  async function bulkMarkDone() {
+    if (checked.size === 0) return
+    const ids = Array.from(checked)
+    const { error } = await supabase.from('sales_tasks').update({ status: 'Done', completed_at: today }).in('id', ids)
+    if (error) { showToast('⚠️ 일괄 완료 실패: ' + error.message); return }
+    setTasks(prev => prev.map(t => checked.has(t.id) ? { ...t, status: 'Done', completed_at: today } : t))
+    setChecked(new Set())
+    showToast(`✅ ${ids.length}개 Task 완료 처리되었습니다.`)
+  }
+
+  async function bulkDelete() {
+    if (checked.size === 0) return
+    const ids = Array.from(checked)
+    const { error } = await supabase.from('sales_tasks').delete().in('id', ids)
+    if (error) { showToast('⚠️ 일괄 삭제 실패: ' + error.message); return }
+    setTasks(prev => prev.filter(t => !checked.has(t.id)))
+    setChecked(new Set())
+    showToast(`🗑️ ${ids.length}개 Task가 삭제되었습니다.`)
+  }
+
   async function addTask() {
     if (!form.lead_id || !form.task_title) { showToast('⚠️ Lead와 Task 제목은 필수입니다.'); return }
-    await supabase.from('sales_tasks').insert({
+    const { error } = await supabase.from('sales_tasks').insert({
       lead_id: form.lead_id, task_title: form.task_title, task_type: form.task_type,
       due_date: form.due_date, status: form.status, priority: form.priority,
       owner: form.owner, note: form.note || null,
     })
+    if (error) { showToast('⚠️ Task 추가 실패: ' + error.message); return }
     setShowAddTask(false)
-    setForm({ lead_id: '', task_title: '', task_type: 'Email', due_date: today, status: 'Pending', priority: 'Medium', owner: 'Andrew', note: '' })
+    setForm({ lead_id: '', task_title: '', task_type: 'Email', due_date: today, status: 'Pending', priority: 'Medium', owner: settings.owners[0] || '', note: '' })
     showToast('Task가 추가되었습니다.')
     load()
   }
@@ -183,6 +212,12 @@ export default function SalesFollowUp() {
             {t('select_all')}
           </label>
           <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700, minWidth: 70 }}>{checked.size > 0 ? `${checked.size}개 선택됨` : ''}</span>
+          {checked.size > 0 && (
+            <>
+              <button onClick={bulkMarkDone} style={{ padding: '4px 12px', borderRadius: 6, background: '#059669', color: 'white', border: 'none', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>✅ 일괄 완료</button>
+              <button onClick={bulkDelete} style={{ padding: '4px 12px', borderRadius: 6, background: '#FFF0F0', color: '#DC2626', border: '1px solid #FFC5C5', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>🗑️ 일괄 삭제</button>
+            </>
+          )}
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>

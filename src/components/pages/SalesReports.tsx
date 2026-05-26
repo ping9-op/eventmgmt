@@ -12,7 +12,8 @@ export default function SalesReports() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.from('sales_leads').select('*').then(({ data }) => {
+    supabase.from('sales_leads').select('*').then(({ data, error }) => {
+      if (error) console.error('SalesReports load error:', error.message)
       setLeads((data || []) as SalesLead[])
       setLoading(false)
     })

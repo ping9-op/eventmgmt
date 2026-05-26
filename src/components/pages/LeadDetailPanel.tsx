@@ -75,6 +75,7 @@ export default function LeadDetailPanel({
   async function save() {
     if (!lead || !form) return
     setSaving(true)
+    try {
     const updates: Partial<SalesLead> = {
       company_name: form.company_name || lead.company_name,
       contact_person: form.contact_person || lead.contact_person,
@@ -97,7 +98,8 @@ export default function LeadDetailPanel({
       next_action: form.next_action,
       lost_reason: form.lost_reason,
     }
-    await supabase.from('sales_leads').update(updates as never).eq('id', leadId)
+    const { error: leadErr } = await supabase.from('sales_leads').update(updates as never).eq('id', leadId)
+    if (leadErr) throw leadErr
 
     // Save proposal
     if (propForm.proposal_sent_date !== undefined || propForm.contract_status !== undefined) {
@@ -112,29 +114,36 @@ export default function LeadDetailPanel({
         remarks: propForm.remarks || null,
       }
       if (proposal) {
-        await supabase.from('sales_proposals').update(propData).eq('id', proposal.id)
+        const { error: propErr } = await supabase.from('sales_proposals').update(propData).eq('id', proposal.id)
+        if (propErr) throw propErr
       } else {
-        await supabase.from('sales_proposals').insert(propData)
+        const { error: propErr } = await supabase.from('sales_proposals').insert(propData)
+        if (propErr) throw propErr
       }
     }
 
-    setSaving(false)
     showToast(t('saved_ok'))
     onRefresh()
     // Refresh lead data
     const { data } = await supabase.from('sales_leads').select('*').eq('id', leadId).single()
     if (data) { setLead(data as SalesLead); setForm(data as SalesLead) }
+    } catch (err: any) {
+      showToast('⚠️ 저장 실패: ' + (err?.message || '알 수 없는 오류'))
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function addActivity() {
-    await supabase.from('sales_activities').insert({
+    const { error } = await supabase.from('sales_activities').insert({
       lead_id: leadId,
       activity_type: actType,
       activity_result: actResult,
       activity_date: new Date().toISOString().split('T')[0],
       note: actNote,
-      created_by: 'Andrew',
+      created_by: form.owner || lead?.owner || '',
     })
+    if (error) { showToast('⚠️ Activity 저장 실패: ' + error.message); return }
     setActNote(''); setShowActForm(false)
     // activities + tasks 동시 갱신 (task 상태가 activity 추가 후 바뀔 수 있으므로)
     const [{ data: aData }, { data: tData }] = await Promise.all([
