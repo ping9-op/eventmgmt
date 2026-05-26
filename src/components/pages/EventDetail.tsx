@@ -853,7 +853,7 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
   )
 }
 
-// ── 결제 카드 ──────────────────────────────────────────
+// ── 결제 행 (compact inline) ──────────────────────────────────────────────────
 function PayCard({ p, onTogglePaid, onSave, onDelete, deleteConfirm, onSetDeleteConfirm }: {
   p: Payment
   onTogglePaid: (id: string, type: 'deposit' | 'final') => void
@@ -894,136 +894,113 @@ function PayCard({ p, onTogglePaid, onSave, onDelete, deleteConfirm, onSetDelete
 
   function PaidToggle({ paid, onToggle }: { paid: boolean; onToggle: () => void }) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }} onClick={onToggle}>
-        <div style={{ width: 38, height: 21, borderRadius: 99, background: paid ? '#059669' : '#ccc', position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
-          <div style={{ position: 'absolute', top: 3, left: paid ? 19 : 3, width: 15, height: 15, background: 'white', borderRadius: '50%', transition: 'left .2s' }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} onClick={onToggle}>
+        <div style={{ width: 36, height: 20, borderRadius: 99, background: paid ? '#059669' : '#ccc', position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
+          <div style={{ position: 'absolute', top: 2.5, left: paid ? 17 : 2.5, width: 15, height: 15, background: 'white', borderRadius: '50%', transition: 'left .2s' }} />
         </div>
-        <span style={{ fontSize: 12, fontWeight: 700, color: paid ? '#059669' : 'var(--muted)', whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: paid ? '#059669' : 'var(--muted)', whiteSpace: 'nowrap', minWidth: 56 }}>
           {paid ? '납부완료 ✓' : '미납'}
         </span>
       </div>
     )
   }
 
+  const rowBase: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: 10,
+    padding: '7px 10px', borderRadius: 8, border: '1px solid',
+  }
+
   return (
-    <div style={{ borderBottom: '0.5px solid var(--border)', padding: '16px 18px' }}>
-      {/* 헤더 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 14, fontWeight: 700, flex: 1, minWidth: 80 }}>{p.item}</span>
+    <div style={{ borderBottom: '0.5px solid var(--border)', padding: '10px 18px' }}>
+      {/* 헤더 행 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, flex: 1, minWidth: 80 }}>{p.item}</span>
         <CurrencyBadge cur={c} />
-        <span style={{ fontSize: 12, color: 'var(--muted)' }}>합계: <strong style={{ color: 'var(--accent)' }}>{fmtAmt(p.total, c)}</strong></span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <div style={{ width: 70, background: '#EEE', borderRadius: 3, height: 7, overflow: 'hidden' }}>
+        <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+          합계 <strong style={{ color: 'var(--accent)' }}>{fmtAmt(p.total, c)}</strong>
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div style={{ width: 56, background: '#EEE', borderRadius: 3, height: 6, overflow: 'hidden' }}>
             <div style={{ height: '100%', background: pctColor, width: `${pct}%`, borderRadius: 3, transition: 'width .3s' }} />
           </div>
-          <span style={{ fontSize: 11, color: pctColor, fontWeight: 700, minWidth: 30 }}>{pct}%</span>
+          <span style={{ fontSize: 11, color: pctColor, fontWeight: 700, minWidth: 28 }}>{pct}%</span>
         </div>
-        <button onClick={handleSave} style={{ padding: '5px 14px', borderRadius: 6, background: 'var(--accent)', color: 'white', border: 'none', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>저장</button>
+        {(['lump', 'split'] as const).map(m => (
+          <button key={m} onClick={() => { setMode(m); if (m === 'lump') setDepAmt(String(p.total)) }}
+            style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap',
+              background: mode === m ? 'var(--accent)' : 'white', color: mode === m ? 'white' : 'var(--muted)',
+              border: `1.5px solid ${mode === m ? 'var(--accent)' : 'var(--border2)'}` }}>
+            {m === 'lump' ? '일시불' : '선금/잔금'}
+          </button>
+        ))}
+        <select value={method} onChange={e => setMethod(e.target.value)}
+          style={{ padding: '4px 8px', border: '1.5px solid var(--border2)', borderRadius: 6, fontSize: 12, background: 'white', cursor: 'pointer' }}>
+          {PAYMENT_METHODS.map(m => <option key={m}>{m}</option>)}
+        </select>
+        <button onClick={handleSave}
+          style={{ padding: '4px 12px', borderRadius: 6, background: 'var(--accent)', color: 'white', border: 'none', fontSize: 12, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
+          저장
+        </button>
         {deleteConfirm === p.id ? (
           <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
             <span style={{ fontSize: 11, color: '#DC2626', fontWeight: 600 }}>삭제?</span>
-            <button onClick={() => { onDelete(p.id); onSetDeleteConfirm(null) }} style={{ padding: '3px 8px', borderRadius: 5, background: '#DC2626', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>Yes</button>
-            <button onClick={() => onSetDeleteConfirm(null)} style={{ padding: '3px 8px', borderRadius: 5, background: 'white', color: 'var(--muted)', border: '1px solid var(--border2)', fontSize: 11, cursor: 'pointer' }}>No</button>
+            <button onClick={() => { onDelete(p.id); onSetDeleteConfirm(null) }}
+              style={{ padding: '3px 8px', borderRadius: 5, background: '#DC2626', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>Yes</button>
+            <button onClick={() => onSetDeleteConfirm(null)}
+              style={{ padding: '3px 8px', borderRadius: 5, background: 'white', color: 'var(--muted)', border: '1px solid var(--border2)', fontSize: 11, cursor: 'pointer' }}>No</button>
           </div>
         ) : (
-          <button onClick={() => onSetDeleteConfirm(p.id)} style={{ padding: '5px 8px', borderRadius: 6, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', fontSize: 11, cursor: 'pointer' }}>✕</button>
+          <button onClick={() => onSetDeleteConfirm(p.id)}
+            style={{ padding: '4px 8px', borderRadius: 6, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', fontSize: 11, cursor: 'pointer' }}>✕</button>
         )}
       </div>
 
-      {/* 결제 방식 + 결제 수단 */}
-      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 12, padding: '10px 14px', background: '#F8F9FA', borderRadius: 8, marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', whiteSpace: 'nowrap' }}>결제 방식</span>
-          {(['lump', 'split'] as const).map(m => (
-            <button key={m} onClick={() => {
-              setMode(m)
-              if (m === 'lump') setDepAmt(String(p.total))  // 일시불 전환 시 전체 금액으로
-            }} style={{
-              padding: '5px 13px', borderRadius: 20, fontSize: 12, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', transition: 'all .15s',
-              background: mode === m ? 'var(--accent)' : 'white', color: mode === m ? 'white' : 'var(--muted)',
-              border: `1.5px solid ${mode === m ? 'var(--accent)' : 'var(--border2)'}`,
-            }}>
-              {m === 'lump' ? '일시불' : '선금 / 잔금'}
-            </button>
-          ))}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', whiteSpace: 'nowrap' }}>결제 수단</span>
-          <select value={method} onChange={e => setMethod(e.target.value)}
-            style={{ padding: '5px 10px', border: '1.5px solid var(--border2)', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', background: 'white' }}>
-            {PAYMENT_METHODS.map(m => <option key={m}>{m}</option>)}
-          </select>
-        </div>
-      </div>
-
-      {/* 납부 박스 */}
+      {/* 납부 행 */}
       {mode === 'lump' ? (
-        <div style={{ background: p.deposit_paid ? '#ECFDF5' : '#FFFBEB', border: `1.5px solid ${p.deposit_paid ? '#6EE7B7' : '#FDE68A'}`, borderRadius: 8, padding: '14px 16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontSize: 13, fontWeight: 700 }}>납부</span>
-            <PaidToggle paid={p.deposit_paid} onToggle={() => onTogglePaid(p.id, 'deposit')} />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <div>
-              <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>금액</label>
-              <input type="number" value={depAmt} onChange={e => setDepAmt(e.target.value)}
-                style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
-            </div>
-            <div>
-              <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>납부일</label>
-              <input type="date" value={depDue} onChange={e => setDepDue(e.target.value)}
-                style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
-            </div>
-          </div>
+        <div style={{ ...rowBase, background: p.deposit_paid ? '#ECFDF5' : '#FFFBEB', borderColor: p.deposit_paid ? '#6EE7B7' : '#FDE68A' }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', width: 36 }}>납부</span>
+          <input type="number" value={depAmt} onChange={e => setDepAmt(e.target.value)}
+            style={{ width: 130, padding: '5px 8px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13, textAlign: 'right', boxSizing: 'border-box' }} />
+          <input type="date" value={depDue} onChange={e => setDepDue(e.target.value)}
+            style={{ padding: '5px 8px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13 }} />
+          <PaidToggle paid={p.deposit_paid} onToggle={() => onTogglePaid(p.id, 'deposit')} />
         </div>
       ) : (
-        <>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
           {/* 비율 조정 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#F1F5FD', borderRadius: 8, marginBottom: 10 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', whiteSpace: 'nowrap' }}>비율 설정</span>
-            <span style={{ fontSize: 12, color: 'var(--muted)' }}>선금</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px', background: '#F1F5FD', borderRadius: 6, fontSize: 12, color: 'var(--muted)' }}>
+            <span>비율 — 선금</span>
             <input type="number" value={depPct} min={0} max={100}
               onChange={e => {
-                const pct = Math.min(100, Math.max(0, parseInt(e.target.value) || 0))
-                setDepPct(pct)
-                if (p.total > 0) {
-                  const dep = Math.round(p.total * pct / 100)
-                  setDepAmt(String(dep))
-                  setFinAmt(String(p.total - dep))
-                }
+                const v = Math.min(100, Math.max(0, parseInt(e.target.value) || 0))
+                setDepPct(v)
+                if (p.total > 0) { const d = Math.round(p.total * v / 100); setDepAmt(String(d)); setFinAmt(String(p.total - d)) }
               }}
-              style={{ width: 60, padding: '4px 8px', border: '1.5px solid var(--border2)', borderRadius: 6, fontSize: 13, textAlign: 'center' }} />
-            <span style={{ fontSize: 12, color: 'var(--muted)' }}>% / 잔금 <strong>{100 - depPct}%</strong></span>
-            <span style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 'auto' }}>
-              {p.total > 0 ? `선금 ${fmtAmt(Math.round(p.total * depPct / 100), p.currency || 'KRW')} · 잔금 ${fmtAmt(p.total - Math.round(p.total * depPct / 100), p.currency || 'KRW')}` : ''}
-            </span>
+              style={{ width: 50, padding: '3px 6px', border: '1.5px solid var(--border2)', borderRadius: 6, fontSize: 12, textAlign: 'center' }} />
+            <span>% / 잔금 <strong>{100 - depPct}%</strong></span>
+            {p.total > 0 && (
+              <span style={{ marginLeft: 6, color: 'var(--accent)', fontSize: 11 }}>
+                선금 {fmtAmt(Math.round(p.total * depPct / 100), c)} · 잔금 {fmtAmt(p.total - Math.round(p.total * depPct / 100), c)}
+              </span>
+            )}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           {([
-            { type: 'deposit' as const, label: '선금', bg: '#EEF4FF', paid: p.deposit_paid, amt: depAmt, due: depDue, setAmt: setDepAmt, setDue: setDepDue },
-            { type: 'final' as const, label: '잔금', bg: '#F0FFF4', paid: p.final_paid, amt: finAmt, due: finDue, setAmt: setFinAmt, setDue: setFinDue },
+            { type: 'deposit' as const, label: '선금', paid: p.deposit_paid, amt: depAmt, due: depDue, setAmt: setDepAmt, setDue: setDepDue },
+            { type: 'final' as const, label: '잔금', paid: p.final_paid, amt: finAmt, due: finDue, setAmt: setFinAmt, setDue: setFinDue },
           ]).map(box => (
-            <div key={box.type} style={{ background: box.bg, border: `1.5px solid ${box.paid ? '#6EE7B7' : 'var(--border2)'}`, borderRadius: 8, padding: '12px 14px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <span style={{ fontSize: 13, fontWeight: 700 }}>{box.label}</span>
-                <PaidToggle paid={box.paid} onToggle={() => onTogglePaid(p.id, box.type)} />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 3 }}>금액</label>
-                  <input type="number" value={box.amt} onChange={e => box.setAmt(e.target.value)}
-                    style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 3 }}>납부일</label>
-                  <input type="date" value={box.due} onChange={e => box.setDue(e.target.value)}
-                    style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
-                </div>
-              </div>
+            <div key={box.type} style={{ ...rowBase,
+              background: box.paid ? '#ECFDF5' : box.type === 'deposit' ? '#EEF4FF' : '#F0FFF4',
+              borderColor: box.paid ? '#6EE7B7' : box.type === 'deposit' ? '#C7D7F8' : '#A7F3D0',
+            }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', width: 36 }}>{box.label}</span>
+              <input type="number" value={box.amt} onChange={e => box.setAmt(e.target.value)}
+                style={{ width: 130, padding: '5px 8px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13, textAlign: 'right', boxSizing: 'border-box' }} />
+              <input type="date" value={box.due} onChange={e => box.setDue(e.target.value)}
+                style={{ padding: '5px 8px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13 }} />
+              <PaidToggle paid={box.paid} onToggle={() => onTogglePaid(p.id, box.type)} />
             </div>
           ))}
         </div>
-        </>
       )}
     </div>
   )
