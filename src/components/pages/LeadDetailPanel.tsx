@@ -136,8 +136,13 @@ export default function LeadDetailPanel({
       created_by: 'Andrew',
     })
     setActNote(''); setShowActForm(false)
-    const { data } = await supabase.from('sales_activities').select('*').eq('lead_id', leadId).order('activity_date', { ascending: false })
-    setActivities((data || []) as SalesActivity[])
+    // activities + tasks 동시 갱신 (task 상태가 activity 추가 후 바뀔 수 있으므로)
+    const [{ data: aData }, { data: tData }] = await Promise.all([
+      supabase.from('sales_activities').select('*').eq('lead_id', leadId).order('activity_date', { ascending: false }),
+      supabase.from('sales_tasks').select('*').eq('lead_id', leadId).order('due_date'),
+    ])
+    setActivities((aData || []) as SalesActivity[])
+    setTasks((tData || []) as SalesTask[])
     onRefresh()
   }
 
