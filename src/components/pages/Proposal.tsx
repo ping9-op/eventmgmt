@@ -149,12 +149,12 @@ export default function Proposal() {
     }
   }
 
-  function loadFromSaved(p: SavedProposal) {
+  function loadFromSaved(p: SavedProposal, isCopy = false) {
     const propEntry = proposals.find(pr => pr.exhibition_id === p.exhId && pr.year === p.year)
     if (!propEntry) return
     setExhId(p.exhId)
     setIsNewExh(false)
-    setYear(p.year + 1)
+    setYear(isCopy ? p.year + 1 : p.year)
     setAuthor(propEntry.author || 'Andrew')
     setDateOfEvent(propEntry.date_of_event)
     const { start, end } = parseDateRange(propEntry.date_of_event)
@@ -166,8 +166,12 @@ export default function Proposal() {
     const newBudget = ((propEntry.budget as BudgetItem[]) || []).map(b => ({ ...b, prev: b.curr, curr: b.curr }))
     setBudget(newBudget.length ? newBudget : [{ item: 'Booth Fee', curr: 0, prev: 0, note: '', currency: 'KRW' }])
     setSaved(false)
+    setAiOutput('AI 생성 결과가 여기에 표시됩니다.\n\n"AI 변동 사유 생성" 버튼을 눌러주세요.')
     setStep(1)
     window.scrollTo(0, 0)
+    showToast(isCopy
+      ? `✅ ${p.name} ${p.year} 기준 복사 완료 — ${p.year + 1}년도 내용을 수정 후 저장하세요.`
+      : `✏️ ${p.name} ${p.year} 불러왔습니다.`)
   }
 
   async function save() {
@@ -817,8 +821,8 @@ export default function Proposal() {
                 <div className="pli-meta">{p.year} &nbsp;·&nbsp; {formatEventDate(p.date, p.year)} &nbsp;·&nbsp; {t('total')} {krw(p.total)}</div>
               </div>
               <div className="pli-actions">
-                <button className="btn btn-outline btn-sm" onClick={() => loadFromSaved(p)}>✏️ {t('edit')}</button>
-                <button className="btn btn-muted btn-sm" onClick={() => { loadFromSaved(p); setYear(p.year + 1) }}>{t('copy_create')}</button>
+                <button className="btn btn-outline btn-sm" onClick={() => loadFromSaved(p, false)}>✏️ {t('edit')}</button>
+                <button className="btn btn-muted btn-sm" onClick={() => loadFromSaved(p, true)}>{t('copy_create')}</button>
               </div>
             </div>
           ))

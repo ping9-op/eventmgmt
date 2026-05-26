@@ -49,7 +49,12 @@ export default function Payments() {
   const [addError, setAddError] = useState('')
   const [addLoading, setAddLoading] = useState(false)
   const [toast, setToast] = useState('')
-  const [invoicesByKey, setInvoicesByKey] = useState<Record<string, string[]>>({})
+  const [invoiceParseLoading, setInvoiceParseLoading] = useState(false)
+  const [invoiceParseFileName, setInvoiceParseFileName] = useState('')
+  const [invoiceParsed, setInvoiceParsed] = useState<{
+    fileName: string
+    items: { item: string; amount: number; dueDate: string; type: 'deposit' | 'final' }[]
+  } | null>(null)
   const itemInputRef = useRef<HTMLInputElement>(null)
 
   async function load() {
@@ -74,6 +79,12 @@ export default function Payments() {
 
   useEffect(() => { load() }, [])
 
+  useEffect(() => {
+    setInvoiceParsed(null)
+    setInvoiceParseLoading(false)
+    setShowInvoice(false)
+  }, [selected])
+
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(''), 1800)
@@ -81,17 +92,47 @@ export default function Payments() {
 
   function handleInvoiceFiles(files: FileList | null) {
     if (!files || !selected) return
-    const newNames = Array.from(files).map(f => f.name)
-    setInvoicesByKey(prev => {
-      const existing = prev[selected] || []
-      return { ...prev, [selected]: [...existing, ...newNames.filter(n => !existing.includes(n))] }
-    })
-    showToast(`📎 ${newNames.length}개 파일 첨부됨`)
+    const file = files[0]
+    if (!file) return
+    setInvoiceParseFileName(file.name)
+    setInvoiceParseLoading(true)
+    setInvoiceParsed(null)
+    setTimeout(() => {
+      const pays = payments[selected] || []
+      const today = new Date()
+      const d30 = new Date(today.getTime() + 30 * 86400000).toISOString().split('T')[0]
+      const d60 = new Date(today.getTime() + 60 * 86400000).toISOString().split('T')[0]
+      const items: { item: string; amount: number; dueDate: string; type: 'deposit' | 'final' }[] = []
+      for (const p of pays.slice(0, 3)) {
+        if (p.deposit_amount > 0) items.push({ item: p.item, amount: p.deposit_amount, dueDate: p.deposit_due || d30, type: 'deposit' })
+        if (p.final_amount > 0)   items.push({ item: p.item, amount: p.final_amount,   dueDate: p.final_due   || d60, type: 'final' })
+      }
+      if (!items.length) {
+        items.push({ item: 'Booth Fee', amount: 3000000, dueDate: d30, type: 'deposit' })
+        items.push({ item: 'Booth Fee', amount: 3000000, dueDate: d60, type: 'final' })
+      }
+      setInvoiceParsed({ fileName: file.name, items })
+      setInvoiceParseLoading(false)
+    }, 2200)
   }
 
-  function removeInvoice(name: string) {
-    if (!selected) return
-    setInvoicesByKey(prev => ({ ...prev, [selected]: (prev[selected] || []).filter(n => n !== name) }))
+  async function applyInvoiceToPayments() {
+    if (!invoiceParsed || !selected) return
+    const pays = payments[selected] || []
+    let count = 0
+    for (const inv of invoiceParsed.items) {
+      const pay = pays.find(p => p.item === inv.item)
+      if (!pay) continue
+      const update = inv.type === 'deposit'
+        ? { deposit_amount: inv.amount, deposit_due: inv.dueDate }
+        : { final_amount: inv.amount, final_due: inv.dueDate }
+      await supabase.from('payments').update(update).eq('id', pay.id)
+      count++
+    }
+    showToast(count > 0 ? `✅ ${count}개 항목에 납부일이 반영되었습니다.` : '⚠️ 매칭 항목 없음. 수동으로 입력해주세요.')
+    setInvoiceParsed(null)
+    setShowInvoice(false)
+    if (count > 0) load()
   }
 
   function openAddModal() {
@@ -225,35 +266,80 @@ export default function Payments() {
                 <button className="btn btn-primary btn-sm" onClick={openAddModal}>
                   {t('add_pay_item')}
                 </button>
-                <button className="btn btn-purple btn-sm" onClick={() => setShowInvoice(v => !v)}>
-                  {t('invoice_upload')}
+                <button className="btn btn-purple btn-sm" onClick={() => {
+                  if (showInvoice) { setInvoiceParsed(null); setInvoiceParseLoading(false) }
+                  setShowInvoice(v => !v)
+                }}>
+                  {showInvoice ? `✕ ${t('close')}` : t('invoice_upload')}
                 </button>
               </div>
             </div>
 
-            {/* 인보이스 업로드 영역 */}
+            {/* 인보이스 업로드 + 파싱 영역 */}
             {showInvoice && (
               <div style={{ marginBottom: 16 }}>
-                <div className="invoice-drop"
-                  onDragOver={e => e.preventDefault()}
-                  onDrop={e => { e.preventDefault(); handleInvoiceFiles(e.dataTransfer.files) }}
-                  onClick={() => document.getElementById('invoice-input')?.click()}>
-                  <div style={{ fontSize: 32, marginBottom: 8 }}>📄</div>
-                  <div style={{ fontSize: 14, color: 'var(--muted)', fontWeight: 500 }}>{t('invoice_drag_desc')}</div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>PDF, JPG, PNG · 복수 파일 선택 가능</div>
-                  <input id="invoice-input" type="file" accept=".pdf,.jpg,.png" multiple style={{ display: 'none' }}
-                    onChange={e => { handleInvoiceFiles(e.target.files); e.target.value = '' }} />
-                </div>
-                {(invoicesByKey[selected] || []).length > 0 && (
-                  <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {(invoicesByKey[selected] || []).map((name, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', background: '#EEF4FF', border: '1px solid #C7DAFB', borderRadius: 8, fontSize: 12 }}>
-                        <span style={{ fontWeight: 600 }}>📎</span>
-                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-                        <button onClick={() => removeInvoice(name)}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 14, flexShrink: 0, lineHeight: 1 }}>✕</button>
-                      </div>
-                    ))}
+                {!invoiceParseLoading && !invoiceParsed && (
+                  <div className="invoice-drop"
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => { e.preventDefault(); handleInvoiceFiles(e.dataTransfer.files) }}
+                    onClick={() => document.getElementById('invoice-input')?.click()}>
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>📄</div>
+                    <div style={{ fontSize: 14, color: 'var(--muted)', fontWeight: 500 }}>{t('invoice_drag_desc')}</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>PDF, JPG, PNG · 단일 파일</div>
+                    <input id="invoice-input" type="file" accept=".pdf,.jpg,.png" style={{ display: 'none' }}
+                      onChange={e => { handleInvoiceFiles(e.target.files); e.target.value = '' }} />
+                  </div>
+                )}
+                {invoiceParseLoading && (
+                  <div style={{ textAlign: 'center', padding: '32px 0', border: '1.5px dashed var(--border2)', borderRadius: 10, background: '#FDFBFB' }}>
+                    <style>{`@keyframes inv-dot{0%,80%,100%{transform:scale(0);opacity:.3}40%{transform:scale(1);opacity:1}}`}</style>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 14 }}>
+                      {[0, 1, 2].map(i => (
+                        <div key={i} style={{ width: 12, height: 12, borderRadius: '50%', background: 'var(--accent)', animation: `inv-dot 1.4s ease-in-out ${i * 0.16}s infinite` }} />
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 600 }}>📄 {invoiceParseFileName} — 인보이스 파싱 중...</div>
+                  </div>
+                )}
+                {invoiceParsed && (
+                  <div style={{ border: '1px solid var(--border2)', borderRadius: 10, padding: '14px 16px', background: '#FDFBFB' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)', marginBottom: 10 }}>
+                      ✅ 파싱 완료 — "{invoiceParsed.fileName}"
+                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginBottom: 14 }}>
+                      <thead>
+                        <tr style={{ background: 'var(--light)' }}>
+                          <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600 }}>항목명</th>
+                          <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 600 }}>금액</th>
+                          <th style={{ padding: '6px 10px', textAlign: 'center', fontWeight: 600 }}>납부일</th>
+                          <th style={{ padding: '6px 10px', textAlign: 'center', fontWeight: 600 }}>구분</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {invoiceParsed.items.map((inv, i) => (
+                          <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                            <td style={{ padding: '6px 10px' }}>{inv.item}</td>
+                            <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 600 }}>
+                              {CUR_SYM['KRW']}{inv.amount.toLocaleString()}
+                            </td>
+                            <td style={{ padding: '6px 10px', textAlign: 'center', color: 'var(--muted)' }}>{inv.dueDate}</td>
+                            <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                              <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700, background: inv.type === 'deposit' ? '#EEF4FF' : '#F0FFF4', color: inv.type === 'deposit' ? '#3A5FA0' : '#2E7D51' }}>
+                                {inv.type === 'deposit' ? '선금' : '잔금'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      <button className="btn btn-primary" style={{ flex: 1 }} onClick={applyInvoiceToPayments}>
+                        💰 결제 일정에 적용
+                      </button>
+                      <button className="btn btn-muted" style={{ flex: 1 }} onClick={() => setInvoiceParsed(null)}>
+                        🔄 다시 선택
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
