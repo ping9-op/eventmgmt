@@ -42,6 +42,13 @@ function parseDateRange(str: string): { start: string; end: string } {
   }
 }
 
+interface ParsedProposal {
+  exhName: string; year: number
+  venue: string; eventStart: string; eventEnd: string; dateOfEvent: string
+  objective: string
+  budget: { item: string; amount: number; currency: string }[]
+}
+
 interface SavedProposal {
   key: string; exhId: string; name: string; year: number; date: string; total: number; color: string
 }
@@ -89,6 +96,8 @@ export default function Proposal() {
   const [aiLoading, setAiLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [parseLoading, setParseLoading] = useState(false)
+  const [parseResult, setParseResult] = useState<ParsedProposal | null>(null)
 
   useEffect(() => {
     load()
@@ -227,6 +236,44 @@ export default function Proposal() {
     reader.readAsArrayBuffer(file)
   }
 
+  function simulateParse(file: File) {
+    setUploadFileName(file.name)
+    setParseLoading(true)
+    setParseResult(null)
+    setTimeout(() => {
+      setParseResult({
+        exhName: 'Korea International Trade Show (KITS)',
+        year: 2026,
+        venue: 'COEX, Seoul',
+        eventStart: '2026-08-12',
+        eventEnd: '2026-08-15',
+        dateOfEvent: '2026 Aug 12-15',
+        objective: 'Promote GME remittance and BIZ services to Korean-based importers and business owners.',
+        budget: [
+          { item: 'Booth Fee', amount: 5000000, currency: 'KRW' },
+          { item: 'Design', amount: 1200000, currency: 'KRW' },
+          { item: 'Gift', amount: 800000, currency: 'KRW' },
+          { item: 'Part Timer', amount: 600000, currency: 'KRW' },
+        ],
+      })
+      setParseLoading(false)
+    }, 2200)
+  }
+
+  function applyParsedToForm(r: ParsedProposal) {
+    setYear(r.year)
+    setVenue(r.venue)
+    setEventStartDate(r.eventStart)
+    setEventEndDate(r.eventEnd)
+    setDateOfEvent(r.dateOfEvent)
+    setObjective(r.objective)
+    setBudget(r.budget.map(b => ({ item: b.item, curr: b.amount, prev: 0, note: '', currency: b.currency })))
+    setParseResult(null)
+    setShowUpload(false)
+    setStep(1)
+    window.scrollTo(0, 0)
+  }
+
   function runAI() {
     setAiLoading(true)
     setAiOutput('🤖 AI 생성 중...')
@@ -277,22 +324,99 @@ export default function Proposal() {
               {t('prop_upload_desc')}
             </div>
           </div>
-          <button className="btn btn-purple btn-sm" onClick={() => setShowUpload(v => !v)}>
+          <button className="btn btn-purple btn-sm" onClick={() => {
+            if (showUpload) { setParseResult(null); setParseLoading(false); setUploadFileName('') }
+            setShowUpload(v => !v)
+          }}>
             {showUpload ? `✕ ${t('close')}` : t('prop_upload_btn')}
           </button>
         </div>
         {showUpload && (
-          <div className="invoice-drop"
-            onClick={() => document.getElementById('proposal-file-input')?.click()}
-            onDragOver={e => e.preventDefault()}
-            onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) setUploadFileName(f.name) }}>
-            <div className="icon">📄</div>
-            <div className="txt">Proposal 파일을 여기에 드래그하거나 클릭하여 선택</div>
-            <div className="sub">PDF · Word (.docx) · 이미지 (JPG, PNG) · 최대 20MB</div>
-            {uploadFileName && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>📎 "{uploadFileName}" 첨부됨</div>}
-            <input id="proposal-file-input" type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" style={{ display: 'none' }}
-              onChange={e => { const f = e.target.files?.[0]; if (f) setUploadFileName(f.name) }} />
-          </div>
+          <>
+            {!parseLoading && !parseResult && (
+              <div className="invoice-drop"
+                onClick={() => document.getElementById('proposal-file-input')?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) simulateParse(f) }}>
+                <div className="icon">📄</div>
+                <div className="txt">Proposal 파일을 여기에 드래그하거나 클릭하여 선택</div>
+                <div className="sub">PDF · Word (.docx) · 이미지 (JPG, PNG) · 최대 20MB</div>
+                <input id="proposal-file-input" type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" style={{ display: 'none' }}
+                  onChange={e => { const f = e.target.files?.[0]; if (f) simulateParse(f); e.target.value = '' }} />
+              </div>
+            )}
+            {parseLoading && (
+              <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                <style>{`@keyframes prop-dot{0%,80%,100%{transform:scale(0);opacity:.3}40%{transform:scale(1);opacity:1}}`}</style>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 14 }}>
+                  {[0, 1, 2].map(i => (
+                    <div key={i} style={{
+                      width: 12, height: 12, borderRadius: '50%', background: 'var(--accent)',
+                      animation: `prop-dot 1.4s ease-in-out ${i * 0.16}s infinite`,
+                    }} />
+                  ))}
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 600 }}>
+                  📄 {uploadFileName} — AI 파싱 중...
+                </div>
+              </div>
+            )}
+            {parseResult && (
+              <div style={{ marginTop: 4 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)', marginBottom: 10 }}>
+                  ✅ 파싱 완료 — "{uploadFileName}"
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginBottom: 12 }}>
+                  <tbody>
+                    {([
+                      ['박람회명', parseResult.exhName],
+                      ['연도', String(parseResult.year)],
+                      ['장소', parseResult.venue],
+                      ['행사 기간', parseResult.dateOfEvent],
+                      ['목적', parseResult.objective],
+                    ] as [string, string][]).map(([label, value]) => (
+                      <tr key={label} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '6px 10px', color: 'var(--muted)', fontWeight: 600, width: 90, whiteSpace: 'nowrap' }}>{label}</td>
+                        <td style={{ padding: '6px 10px' }}>{value}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginBottom: 6 }}>예산 항목</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 16 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--light)' }}>
+                      <th style={{ padding: '5px 10px', textAlign: 'left', fontWeight: 600 }}>항목</th>
+                      <th style={{ padding: '5px 10px', textAlign: 'right', fontWeight: 600 }}>금액</th>
+                      <th style={{ padding: '5px 10px', textAlign: 'center', fontWeight: 600 }}>통화</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parseResult.budget.map((b, i) => (
+                      <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '5px 10px' }}>{b.item}</td>
+                        <td style={{ padding: '5px 10px', textAlign: 'right' }}>{b.amount.toLocaleString()}</td>
+                        <td style={{ padding: '5px 10px', textAlign: 'center', color: 'var(--muted)' }}>{b.currency}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => {
+                    applyParsedToForm(parseResult)
+                    showToast('✅ 폼에 내용을 채웠습니다.')
+                  }}>
+                    ✏️ 직접 입력 폼에 채우기
+                  </button>
+                  <button className="btn btn-green" style={{ flex: 1 }} onClick={() => {
+                    showToast('🚧 준비 중 — 현재는 "직접 입력 폼에 채우기"를 사용하세요.')
+                  }}>
+                    🚀 이 내용으로 등록
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
