@@ -138,15 +138,16 @@ export default function SalesLeads() {
     })
   }
 
-  function downloadTemplate() {
-    const headers = ['company_name', 'contact_person', 'phone', 'email', 'lead_source', 'event_name', 'owner', 'priority', 'country_corridor', 'business_type', 'expected_monthly_volume', 'volume_currency', 'address', 'remarks']
-    const sample = ['Sample Co.', 'John Kim', '+81-90-1234-5678', 'john@sample.com', 'Expo', 'KIF 2026', 'Andrew', 'Medium', 'Korea → Japan', 'Korean Restaurant', '10000', 'USD', 'Tokyo, Japan', 'Met at booth #12']
-    const csv = [headers, sample].map(r => r.map(v => `"${v}"`).join(',')).join('\n')
-    const a = Object.assign(document.createElement('a'), {
-      href: 'data:text/csv;charset=utf-8,﻿' + encodeURIComponent(csv),
-      download: 'GME_Leads_Template.csv',
-    })
-    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+  async function downloadTemplate() {
+    const XLSX = await import('xlsx')
+    const headers = ['회사명', '담당자', '연락처', '이메일', '행사명', 'Owner', 'Stage', 'Priority', 'Corridor', 'Business Type', 'Volume', 'Currency', 'Address', 'Remarks']
+    const sample  = ['Sample Co.', '김철수', '+81-90-1234-5678', 'john@sample.com', 'KIF 2026', 'Andrew', 'New Lead', 'Medium', 'Korea → Japan', 'Korean Restaurant', '10000', 'USD', 'Tokyo, Japan', 'Booth에서 만남']
+    const stageNote = ['※ Stage 유효값 →', ...STAGE_ORDER, ...Array(headers.length - 1 - STAGE_ORDER.length).fill('')]
+    const ws = XLSX.utils.aoa_to_sheet([headers, sample, stageNote])
+    ws['!cols'] = [22, 16, 18, 24, 16, 12, 22, 10, 18, 18, 10, 10, 18, 20].map(wch => ({ wch }))
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Leads')
+    XLSX.writeFile(wb, 'GME_Leads_Template.xlsx')
     showToast('📋 템플릿이 다운로드되었습니다.')
   }
 
@@ -158,22 +159,26 @@ export default function SalesLeads() {
       const wb = XLSX.read(data, { type: 'array' })
       const ws = wb.Sheets[wb.SheetNames[0]]
       const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '' })
-      const parsed: Partial<SalesLead>[] = rows.map(r => ({
-        company_name: String(r.company_name || r['Company'] || r['회사명'] || ''),
-        contact_person: String(r.contact_person || r['Contact'] || r['담당자'] || ''),
-        phone: String(r.phone || r['Phone'] || r['전화'] || '') || null,
-        email: String(r.email || r['Email'] || r['이메일'] || '') || null,
-        lead_source: String(r.lead_source || r['Source'] || 'Expo'),
-        event_name: String(r.event_name || r['Event'] || r['행사명'] || ''),
-        owner: String(r.owner || r['Owner'] || 'Andrew'),
-        priority: String(r.priority || r['Priority'] || 'Medium'),
-        country_corridor: String(r.country_corridor || r['Corridor'] || 'Korea → Japan'),
-        business_type: String(r.business_type || r['Business Type'] || r['business_type'] || 'Korean Restaurant'),
-        expected_monthly_volume: parseInt(String(r.expected_monthly_volume || r['Volume'] || '').replace(/[^0-9]/g, '')) || null,
-        volume_currency: String(r.volume_currency || r['Currency'] || 'USD'),
-        address: String(r.address || r['Address'] || '') || null,
-        remarks: String(r.remarks || r['Remarks'] || '') || null,
-      })).filter(r => r.company_name)
+      const parsed: Partial<SalesLead>[] = rows.map(r => {
+        const rawStage = String(r.current_stage || r['Stage'] || r['스테이지'] || '')
+        return {
+          company_name: String(r.company_name || r['Company'] || r['회사명'] || ''),
+          contact_person: String(r.contact_person || r['Contact'] || r['담당자'] || ''),
+          phone: String(r.phone || r['Phone'] || r['연락처'] || r['전화'] || '') || null,
+          email: String(r.email || r['Email'] || r['이메일'] || '') || null,
+          lead_source: String(r.lead_source || r['Source'] || 'Expo'),
+          event_name: String(r.event_name || r['Event'] || r['행사명'] || ''),
+          owner: String(r.owner || r['Owner'] || 'Andrew'),
+          priority: String(r.priority || r['Priority'] || 'Medium'),
+          current_stage: STAGE_ORDER.includes(rawStage) ? rawStage : 'New Lead',
+          country_corridor: String(r.country_corridor || r['Corridor'] || 'Korea → Japan'),
+          business_type: String(r.business_type || r['Business Type'] || r['business_type'] || 'Korean Restaurant'),
+          expected_monthly_volume: parseInt(String(r.expected_monthly_volume || r['Volume'] || '').replace(/[^0-9]/g, '')) || null,
+          volume_currency: String(r.volume_currency || r['Currency'] || 'USD'),
+          address: String(r.address || r['Address'] || '') || null,
+          remarks: String(r.remarks || r['Remarks'] || '') || null,
+        }
+      }).filter(r => r.company_name)
       if (!parsed.length) { showToast('⚠️ 유효한 데이터가 없습니다. 템플릿을 확인해주세요.'); return }
       setExcelPreview({ rows: parsed, fileName: file.name })
     }
@@ -196,7 +201,7 @@ export default function SalesLeads() {
       event_name: r.event_name || '',
       owner: r.owner || 'Andrew',
       priority: r.priority || 'Medium',
-      current_stage: 'New Lead',
+      current_stage: (r.current_stage && STAGE_ORDER.includes(r.current_stage)) ? r.current_stage : 'New Lead',
       country_corridor: r.country_corridor || 'Korea → Japan',
       business_type: r.business_type || 'Korean Restaurant',
       expected_monthly_volume: r.expected_monthly_volume || null,
@@ -504,14 +509,16 @@ export default function SalesLeads() {
                       <td style={{ padding: '6px 10px', fontSize: 11 }}>{r.event_name || '—'}</td>
                       <td style={{ padding: '6px 10px', textAlign: 'center' }}>{r.owner}</td>
                       <td style={{ padding: '6px 10px', textAlign: 'center' }}>{r.priority}</td>
-                      <td style={{ padding: '6px 10px', textAlign: 'center', fontSize: 11, color: 'var(--muted)' }}>New Lead</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                        <StageBadge stage={r.current_stage || 'New Lead'} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
             <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 10, padding: '8px 12px', background: 'var(--light)', borderRadius: 7 }}>
-              ⚠️ company_name이 비어 있는 행은 자동으로 제외됩니다. Stage는 모두 "New Lead"로 시작합니다.
+              ⚠️ 회사명이 비어 있는 행은 자동 제외됩니다. &nbsp;·&nbsp; Stage 컬럼이 비어 있으면 "New Lead"로 등록됩니다. &nbsp;·&nbsp; 유효하지 않은 Stage 값도 "New Lead"로 처리됩니다.
             </div>
             <div className="modal-footer">
               <button className="btn btn-muted" onClick={() => setExcelPreview(null)}>취소</button>
