@@ -136,6 +136,7 @@ export default function Dashboard() {
   const budgetEntries = Object.entries(budgetByCur).sort(([a], [b]) => a === 'KRW' ? -1 : b === 'KRW' ? 1 : a.localeCompare(b))
   const recentExh = [...entries].sort((a, b) => b.year - a.year).slice(0, 4)
   const nextExpo = upcoming.find(u => u.kind === 'expo')
+  const uniqueExhCount = new Set(entries.map(e => e.key)).size
 
   // Sales stats
   const total = leads.length
@@ -175,33 +176,43 @@ export default function Dashboard() {
           </div>
           <div style={{ padding: '14px 20px' }}>
             {/* 요약 3칸 */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10, marginBottom: 14 }}>
-              <div style={{ textAlign: 'center', padding: '10px 6px', background: '#F9F5F5', borderRadius: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 14 }}>
+              <div style={{ textAlign: 'center', padding: '10px 8px', background: '#F9F5F5', borderRadius: 10 }}>
                 <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 3 }}>{t('total_hist_label')}</div>
-                <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--accent)' }}>{exhCount}</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--accent)' }}>{exhCount}</div>
+                <div style={{ fontSize: 10, color: 'var(--muted)' }}>건</div>
               </div>
-              <div style={{ textAlign: 'center', padding: '10px 6px', background: '#F9F5F5', borderRadius: 10 }}>
+              <div style={{ textAlign: 'center', padding: '10px 8px', background: '#F9F5F5', borderRadius: 10 }}>
                 <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 4 }}>{t('budget_lbl')}</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 4 }}>
-                  {budgetEntries.map(([cur, amt]) => (
-                    <span key={cur} style={{ display: 'inline-block', marginRight: 4, whiteSpace: 'nowrap' }}>
-                      <span style={{ fontSize: 10, color: 'var(--muted)' }}>{cur}</span>&nbsp;
-                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)' }}>{fmtCur(amt, cur, lang)}</span>
-                    </span>
-                  ))}
-                </div>
+                {budgetEntries.map(([cur, amt]) => (
+                  <div key={cur} style={{ whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: 9, color: 'var(--muted)' }}>{cur} </span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{fmtCur(amt, cur, lang)}</span>
+                  </div>
+                ))}
+                {budgetEntries.length === 0 && <div style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 600 }}>-</div>}
+              </div>
+              <div
+                style={{ textAlign: 'center', padding: '10px 8px', background: nextExpo ? '#FFF8F0' : '#F9F5F5', borderRadius: 10, cursor: nextExpo ? 'pointer' : 'default', border: nextExpo ? '1px solid #FDE68A' : 'none' }}
+                onClick={nextExpo ? () => navigate('/expo/schedule') : undefined}>
+                <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 3 }}>{t('next_expo_label')}</div>
+                {nextExpo ? (
+                  <>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: '#D97706' }}>
+                      {nextExpo.days === 0 ? 'D-Day' : nextExpo.days > 0 ? `D-${nextExpo.days}` : `D+${Math.abs(nextExpo.days)}`}
+                    </div>
+                    <div style={{ fontSize: 9, color: '#D97706', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nextExpo.name}</div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--muted)' }}>없음</div>
+                )}
               </div>
             </div>
-            {/* 다음 박람회 */}
-            {nextExpo && (
-              <div style={{ background: '#FFF8F0', border: '1px solid #FDE68A', borderRadius: 8, padding: '11px 14px', cursor: 'pointer', marginBottom: 12 }} onClick={() => navigate('/expo/schedule')}>
-                <div style={{ fontSize: 10, color: '#D97706', fontWeight: 600, marginBottom: 3 }}>{t('next_expo_label')}</div>
-                <div style={{ fontSize: 13, fontWeight: 700 }}>{nextExpo.name}</div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{nextExpo.date}{nextExpo.detail ? ' · ' + nextExpo.detail : ''}</div>
-              </div>
-            )}
             {/* 최근 박람회 */}
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>{t('recent_exh')}</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>
+              {t('recent_exh')}
+              <span style={{ marginLeft: 6, fontWeight: 400 }}>({uniqueExhCount}종)</span>
+            </div>
             {recentExh.map((e, i) => (
               <div key={i} onClick={() => navigate('/expo/overview')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '0.5px solid var(--border)', cursor: 'pointer' }}
                 onMouseOver={ev => (ev.currentTarget as HTMLDivElement).style.opacity = '.7'}
@@ -223,30 +234,20 @@ export default function Dashboard() {
             <button onClick={() => navigate('/sales/dashboard')} style={{ marginLeft: 'auto', background: 'rgba(255,255,255,.2)', border: 'none', color: 'white', padding: '4px 12px', borderRadius: 6, fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>{t('view_detail')}</button>
           </div>
           <div style={{ padding: '14px 20px' }}>
-            {/* KPI 3칸 */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 14 }}>
+            {/* KPI 2×2 */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 10, marginBottom: 14 }}>
               {[
-                { lbl: t('all_leads_lbl'), val: total, col: '#1E3A5F', fn: () => navigate('/sales/funnel', { state: { filter: null, view: 'table' } }) },
-                { lbl: t('in_progress_lbl'), val: active, col: '#4F46E5', fn: () => navigate('/sales/funnel', { state: { filter: '__active__', view: 'table' } }) },
-                { lbl: t('s_conv'), val: convRate + '%', col: '#059669', fn: null as (() => void) | null },
+                { lbl: t('all_leads_lbl'), val: total, col: '#1E3A5F', bg: '#F5F8FF', fn: (() => navigate('/sales/funnel', { state: { filter: null, view: 'table' } })) as (() => void) | null },
+                { lbl: t('in_progress_lbl'), val: active, col: '#4F46E5', bg: '#F5F8FF', fn: (() => navigate('/sales/funnel', { state: { filter: '__active__', view: 'table' } })) as (() => void) | null },
+                { lbl: t('s_conv'), val: convRate + '%', col: '#059669', bg: '#F0FDF4', fn: null as (() => void) | null },
+                { lbl: t('overdue_short'), val: overdue, col: overdue > 0 ? '#DC2626' : '#6B7280', bg: overdue > 0 ? '#FEF2F2' : '#F9F5F5', fn: (() => navigate('/sales/followup', { state: { filter: 'overdue' } })) as (() => void) | null },
               ].map((k, i) => (
                 <div key={i} onClick={k.fn || undefined}
-                  style={{ textAlign: 'center', padding: '10px 6px', background: '#F5F8FF', borderRadius: 10, cursor: k.fn ? 'pointer' : 'default' }}>
+                  style={{ textAlign: 'center', padding: '10px 8px', background: k.bg, borderRadius: 10, cursor: k.fn ? 'pointer' : 'default' }}>
                   <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 3 }}>{k.lbl}</div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: k.col }}>{k.val}</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: k.col }}>{k.val}</div>
                 </div>
               ))}
-            </div>
-            {/* 알림 */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
-              <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 12px', cursor: 'pointer' }} onClick={() => navigate('/sales/followup', { state: { filter: 'overdue' } })}>
-                <div style={{ fontSize: 10, color: '#DC2626', fontWeight: 600 }}>{t('overdue_short')}</div>
-                <div style={{ fontSize: 22, fontWeight: 800, color: '#DC2626' }}>{overdue}</div>
-              </div>
-              <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '10px 12px', cursor: 'pointer' }} onClick={() => navigate('/sales/followup', { state: { filter: 'today' } })}>
-                <div style={{ fontSize: 10, color: '#D97706', fontWeight: 600 }}>{t('today_tasks_short')}</div>
-                <div style={{ fontSize: 22, fontWeight: 800, color: '#D97706' }}>{todayTasks}</div>
-              </div>
             </div>
             {/* Top Leads */}
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>🏆 Top Leads</div>
