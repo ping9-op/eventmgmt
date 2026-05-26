@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { krw, exhColor } from '../../lib/utils'
 import type { Exhibition, Proposal, Result, ActualCost, MarketingActivity } from '../../types/database'
@@ -42,6 +42,7 @@ function buildDefaultFromProposal(key: string, prop: Proposal, exhName: string):
 export default function Report() {
   const { showToast } = useToast()
   const { t } = useLang()
+  const navigate = useNavigate()
   const location = useLocation()
   const initKey = (location.state as any)?.key || null
   const [reportKeys, setReportKeys] = useState<ReportKey[]>([])
@@ -119,6 +120,8 @@ export default function Report() {
     }
     setSaving(false)
     showToast('보고서가 저장되었습니다.')
+    // ExpoOverview가 mount될 때 fresh 데이터를 fetching하도록 overview로 이동
+    if (initKey) navigate('/expo/overview', { state: { from: 'report', key: selected } })
   }
 
   async function exportPPT() {

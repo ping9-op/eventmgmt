@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLang } from '../../contexts/LangContext'
 import { Chart, ArcElement, Tooltip, DoughnutController } from 'chart.js'
@@ -38,6 +38,13 @@ export default function ExpoOverview() {
   const [payments, setPayments] = useState<Record<string, any[]>>({})
   const [loading, setLoading] = useState(true)
 
+  const reloadResults = useCallback(async () => {
+    const { data } = await supabase.from('results').select('exhibition_key,actual_costs')
+    const map: Record<string, { actual_costs: ActualCost[] }> = {}
+    for (const r of (data || []) as any[]) map[r.exhibition_key] = r
+    setResults(map)
+  }, [])
+
   useEffect(() => {
     async function load() {
       const [{ data: exhData }, { data: propData }, { data: resultData }, { data: payData }] = await Promise.all([
@@ -76,6 +83,21 @@ export default function ExpoOverview() {
     }
     load()
   }, [])
+
+  // results 실시간 동기화 — Supabase Realtime + visibilitychange 폴백
+  useEffect(() => {
+    const ch = supabase.channel('expo_results_sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'results' }, reloadResults)
+      .subscribe()
+
+    const handleVisibility = () => { if (!document.hidden) reloadResults() }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      supabase.removeChannel(ch)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [reloadResults])
 
   const today = new Date()
 
