@@ -127,7 +127,6 @@ export default function Report() {
   async function exportPPT() {
     if (!r || !selected) return
 
-    // GME 템플릿 배경 이미지를 base64로 로드
     async function imgToBase64(url: string): Promise<string> {
       const res = await fetch(url)
       const blob = await res.blob()
@@ -146,17 +145,17 @@ export default function Report() {
     const costs = r.actual_costs || []
     const totalB = costs.reduce((s, a) => s + (a.budgeted || 0), 0)
     const totalA = costs.reduce((s, a) => s + (a.actual || 0), 0)
+    const regR = r.reg_remittance || 0, regC = r.reg_card || 0
+    const regB = r.reg_biz || 0, regO = r.reg_onboard || 0, regM = r.new_merchants || 0
 
     const pptx = new pptxgen()
     pptx.layout = 'LAYOUT_WIDE'
 
     const RED = 'CC1F1F', WHITE = 'FFFFFF', DARK = '1A1A1A', GRAY = 'F2F2F2', LGRAY = 'E8E8E8'
 
-    // 콘텐츠 슬라이드 생성 헬퍼 (GME 콘텐츠 배경 + 섹션 번호 타이틀)
     const newSlide = (num: number, title: string) => {
       const sl = pptx.addSlide()
       sl.addImage({ data: `image/png;base64,${contentB64}`, x: 0, y: 0, w: 13.33, h: 7.5 })
-      // 상단 빨간 아크 아래 제목 텍스트
       sl.addText(`${num}.  ${title}`, {
         x: 0.6, y: 0.15, w: 12, h: 0.6,
         fontSize: 26, bold: true, color: WHITE, fontFace: 'Calibri', valign: 'middle'
@@ -164,7 +163,6 @@ export default function Report() {
       return sl
     }
 
-    // 불릿 리스트 헬퍼
     const addBullets = (sl: ReturnType<typeof pptx.addSlide>, items: string[], x = 0.7, y = 1.1, w = 11.8, h = 5.8) => {
       const valid = items.filter(s => s && s.trim())
       if (!valid.length) return
@@ -176,64 +174,72 @@ export default function Report() {
       sl.addText(runs, { x, y, w, h, fontFace: 'Calibri', valign: 'top', paraSpaceAfter: 14, lineSpacingMultiple: 1.35 })
     }
 
+    // ── 활성 섹션 계산 ─────────────────────────────────────
+    // sections_enabled[key] !== false (undefined → true) AND 데이터 존재 → 순차 번호 부여
+    const se = r.sections_enabled || {}
+    const on = (key: string) => se[key] !== false
+
+    const sectionDefs = [
+      { key: '1',  title: 'Objective',                   hasContent: !!r.objective },
+      { key: '2',  title: 'Event Overview',              hasContent: !!(r.event_date || r.event_venue) },
+      { key: '3',  title: 'Cost — Budget vs Actual',     hasContent: costs.length > 0 },
+      { key: '4',  title: 'Marketing Activities',        hasContent: (r.marketing_activities || []).length > 0 },
+      { key: '5',  title: 'Registration Results',        hasContent: !!(regR || regC || regB || regO || regM) },
+      { key: '6',  title: 'Shortcomings',                hasContent: (r.shortcomings || []).length > 0 },
+      { key: '7',  title: 'Improvements',                hasContent: (r.improvements || []).length > 0 },
+      { key: '8',  title: 'Recommendations & Follow-up', hasContent: (r.recommendations || []).length > 0 },
+      { key: '9',  title: 'Requests',                    hasContent: (r.requests || []).length > 0 },
+      { key: '10', title: 'Conclusion',                  hasContent: !!r.conclusion },
+    ]
+
+    // enabled=true && 데이터 있음 → 1부터 순차 번호
+    const activeSections = sectionDefs
+      .filter(s => on(s.key) && s.hasContent)
+      .map((s, i) => ({ ...s, num: i + 1 }))
+
+    // key로 순번 조회 (없으면 undefined → 슬라이드 생략)
+    const sNum = (key: string) => activeSections.find(s => s.key === key)?.num
+
     // ── Cover Slide ──────────────────────────────────────
     const cv = pptx.addSlide()
     cv.addImage({ data: `image/png;base64,${coverB64}`, x: 0, y: 0, w: 13.33, h: 7.5 })
-    // 제목 — GME 원형 워터마크(y:1~4.5) 아래, 우하단 레드 웨이브 위 공간
     cv.addText(r.cover_title || selected, {
       x: 0.7, y: 4.2, w: 7.5, h: 1.5,
-      fontSize: 36, bold: true, color: DARK, fontFace: 'Calibri', valign: 'middle',
-      wrap: true,
+      fontSize: 36, bold: true, color: DARK, fontFace: 'Calibri', valign: 'middle', wrap: true,
     })
-    // 날짜 & 작성자
     cv.addText(`${r.cover_date || ''}   ·   By ${r.cover_author || 'Andrew'}`, {
-      x: 0.7, y: 5.8, w: 7.5, h: 0.5,
-      fontSize: 15, color: '444444', fontFace: 'Calibri'
+      x: 0.7, y: 5.8, w: 7.5, h: 0.5, fontSize: 15, color: '444444', fontFace: 'Calibri'
     })
 
-    // ── TOC Slide ─────────────────────────────────────────
-    {
+    // ── TOC Slide (활성 섹션만 · 순차 번호) ───────────────
+    if (activeSections.length > 0) {
       const tocSl = pptx.addSlide()
       tocSl.addImage({ data: `image/png;base64,${contentB64}`, x: 0, y: 0, w: 13.33, h: 7.5 })
       tocSl.addText('Table of Contents', {
         x: 0.6, y: 0.15, w: 12, h: 0.6,
         fontSize: 26, bold: true, color: WHITE, fontFace: 'Calibri', valign: 'middle'
       })
-      const tocItems = [
-        { num: 1, title: 'Objective', key: '1', show: !!r.objective },
-        { num: 2, title: 'Event Overview', key: '2', show: !!(r.event_date || r.event_venue) },
-        { num: 3, title: 'Cost — Budget vs Actual', key: '3', show: costs.length > 0 },
-        { num: 4, title: 'Marketing Activities', key: '4', show: (r.marketing_activities || []).length > 0 },
-        { num: 5, title: 'Registration Results', key: '5', show: !!(r.reg_remittance || r.reg_card || r.reg_biz || r.reg_onboard || r.new_merchants) },
-        { num: 6, title: 'Shortcomings', key: '6', show: (r.shortcomings || []).length > 0 },
-        { num: 7, title: 'Improvements', key: '7', show: (r.improvements || []).length > 0 },
-        { num: 8, title: 'Recommendations & Follow-up', key: '8', show: (r.recommendations || []).length > 0 },
-        { num: 9, title: 'Requests', key: '9', show: (r.requests || []).length > 0 },
-        { num: 10, title: 'Conclusion', key: '10', show: !!r.conclusion },
-      ].filter(s => r.sections_enabled?.[s.key] !== false && s.show)
       const tocRuns: any[] = []
-      tocItems.forEach((s, i) => {
+      activeSections.forEach((s, i) => {
         tocRuns.push({ text: `${s.num}.  `, options: { bold: true, color: RED, fontSize: 18 } })
-        tocRuns.push({ text: s.title, options: { color: DARK, fontSize: 18, breakLine: i < tocItems.length - 1 } })
+        tocRuns.push({ text: s.title, options: { color: DARK, fontSize: 18, breakLine: i < activeSections.length - 1 } })
       })
-      if (tocRuns.length) {
-        tocSl.addText(tocRuns, { x: 1.0, y: 1.2, w: 11.0, h: 5.8, fontFace: 'Calibri', valign: 'top', paraSpaceAfter: 16, lineSpacingMultiple: 1.4 })
-      }
+      tocSl.addText(tocRuns, { x: 1.0, y: 1.2, w: 11.0, h: 5.8, fontFace: 'Calibri', valign: 'top', paraSpaceAfter: 16, lineSpacingMultiple: 1.4 })
     }
 
     // ── 1. Objective ──────────────────────────────────────
-    if (r.objective) {
-      const sl = newSlide(1, 'Objective')
+    if (sNum('1') !== undefined) {
+      const sl = newSlide(sNum('1')!, 'Objective')
       sl.addText(r.objective, {
         x: 0.7, y: 1.1, w: 11.8, h: 5.8,
-        fontSize: 22, bold: false, color: DARK, fontFace: 'Calibri', valign: 'middle',
+        fontSize: 22, color: DARK, fontFace: 'Calibri', valign: 'middle',
         paraSpaceAfter: 8, lineSpacingMultiple: 1.5
       })
     }
 
     // ── 2. Event Overview ─────────────────────────────────
-    if (r.event_date || r.event_venue) {
-      const sl = newSlide(2, 'Event Overview')
+    if (sNum('2') !== undefined) {
+      const sl = newSlide(sNum('2')!, 'Event Overview')
       const rows: any[] = [
         [
           { text: 'Date', options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 14, align: 'center' as any } },
@@ -244,64 +250,60 @@ export default function Report() {
           { text: r.event_venue || '-', options: { color: DARK, fill: { color: GRAY }, fontSize: 14 } },
         ],
       ]
-      if (r.event_target) {
-        rows.push([
-          { text: 'Target', options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 14, align: 'center' as any } },
-          { text: r.event_target, options: { color: DARK, fill: { color: GRAY }, fontSize: 14 } },
-        ])
-      }
+      if (r.event_target) rows.push([
+        { text: 'Target', options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 14, align: 'center' as any } },
+        { text: r.event_target, options: { color: DARK, fill: { color: GRAY }, fontSize: 14 } },
+      ])
       sl.addTable(rows, { x: 1.5, y: 2.0, w: 10.3, rowH: 0.9, colW: [2.5, 7.8], border: { pt: 1, color: 'DDDDDD' } })
     }
 
     // ── 3. Cost — Budget vs Actual ────────────────────────
-    if (costs.length) {
-      const sl = newSlide(3, 'Cost — Budget vs Actual')
+    if (sNum('3') !== undefined) {
+      const sl = newSlide(sNum('3')!, 'Cost — Budget vs Actual')
       const hdr = [
-        { text: 'Item', options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'center' as any } },
+        { text: 'Item',            options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'center' as any } },
         { text: 'Approved Budget', options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'right' as any } },
-        { text: 'Actual Spend', options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'right' as any } },
-        { text: 'Difference', options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'right' as any } },
+        { text: 'Actual Spend',    options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'right' as any } },
+        { text: 'Difference',      options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'right' as any } },
       ]
-      const rows = costs.map((a, ri) => {
+      const costRows = costs.map((a, ri) => {
         const d = (a.actual || 0) - (a.budgeted || 0)
         const bg = ri % 2 === 0 ? GRAY : WHITE
         const cur = (a as any).currency || 'KRW'
         const sym = cur === 'JPY' ? '¥' : '₩'
         return [
-          { text: a.item || '', options: { color: DARK, fill: { color: bg }, fontSize: 12 } },
-          { text: a.budgeted ? sym + a.budgeted.toLocaleString() : '-', options: { color: '444444', align: 'right' as any, fill: { color: bg }, fontSize: 12 } },
-          { text: a.actual ? sym + a.actual.toLocaleString() : '-', options: { color: DARK, align: 'right' as any, fill: { color: bg }, fontSize: 12 } },
-          { text: a.actual ? (d > 0 ? `▲ ${sym}${d.toLocaleString()}` : d < 0 ? `▼ ${sym}${Math.abs(d).toLocaleString()}` : '—') : '-', options: { color: d > 0 ? 'C00000' : d < 0 ? '2E7D51' : '888888', align: 'right' as any, bold: !!a.actual, fill: { color: bg }, fontSize: 12 } },
+          { text: a.item || '',                                                                                                            options: { color: DARK,    fill: { color: bg }, fontSize: 12 } },
+          { text: a.budgeted ? sym + a.budgeted.toLocaleString() : '-',                                                                   options: { color: '444444', align: 'right' as any, fill: { color: bg }, fontSize: 12 } },
+          { text: a.actual   ? sym + a.actual.toLocaleString()   : '-',                                                                   options: { color: DARK,    align: 'right' as any, fill: { color: bg }, fontSize: 12 } },
+          { text: a.actual   ? (d > 0 ? `▲ ${sym}${d.toLocaleString()}` : d < 0 ? `▼ ${sym}${Math.abs(d).toLocaleString()}` : '—') : '-', options: { color: d > 0 ? 'C00000' : d < 0 ? '2E7D51' : '888888', align: 'right' as any, bold: !!a.actual, fill: { color: bg }, fontSize: 12 } },
         ]
       })
       const tD = totalA - totalB
       const totalRow = [
-        { text: 'Total', options: { bold: true, color: DARK, fill: { color: LGRAY }, fontSize: 13 } },
-        { text: '₩' + totalB.toLocaleString(), options: { bold: true, align: 'right' as any, fill: { color: LGRAY }, fontSize: 13, color: DARK } },
-        { text: totalA ? '₩' + totalA.toLocaleString() : '-', options: { bold: true, align: 'right' as any, fill: { color: LGRAY }, fontSize: 13, color: DARK } },
+        { text: 'Total',                                                                                                                      options: { bold: true, color: DARK, fill: { color: LGRAY }, fontSize: 13 } },
+        { text: '₩' + totalB.toLocaleString(),                                                                                               options: { bold: true, align: 'right' as any, fill: { color: LGRAY }, fontSize: 13, color: DARK } },
+        { text: totalA ? '₩' + totalA.toLocaleString() : '-',                                                                               options: { bold: true, align: 'right' as any, fill: { color: LGRAY }, fontSize: 13, color: DARK } },
         { text: totalA ? (tD > 0 ? `▲ ₩${tD.toLocaleString()} over` : tD < 0 ? `▼ ₩${Math.abs(tD).toLocaleString()} saved` : 'same') : '-', options: { bold: true, color: tD > 0 ? 'C00000' : tD < 0 ? '2E7D51' : DARK, align: 'right' as any, fill: { color: LGRAY }, fontSize: 13 } },
       ]
-      sl.addTable([hdr, ...rows, totalRow], { x: 0.4, y: 1.0, w: 12.5, rowH: 0.48, colW: [3.8, 2.8, 2.8, 2.8], border: { pt: 0.5, color: 'DDDDDD' }, autoPage: false })
+      sl.addTable([hdr, ...costRows, totalRow], { x: 0.4, y: 1.0, w: 12.5, rowH: 0.48, colW: [3.8, 2.8, 2.8, 2.8], border: { pt: 0.5, color: 'DDDDDD' }, autoPage: false })
     }
 
     // ── 4. Marketing Activities ───────────────────────────
-    if ((r.marketing_activities || []).length) {
-      const sl = newSlide(4, 'Marketing Activities')
+    if (sNum('4') !== undefined) {
+      const sl = newSlide(sNum('4')!, 'Marketing Activities')
       addBullets(sl, (r.marketing_activities as any[]).map((a: any) =>
         `[${a.type || ''}]  ${a.description || ''}${a.result ? '  →  ' + a.result : ''}`
       ))
     }
 
     // ── 5. Registration Results ───────────────────────────
-    const regR = r.reg_remittance || 0, regC = r.reg_card || 0, regB = r.reg_biz || 0, regO = r.reg_onboard || 0
-    const regM = r.new_merchants || 0
-    if (regR || regC || regB || regO || regM) {
-      const sl = newSlide(5, 'Registration Results')
+    if (sNum('5') !== undefined) {
+      const sl = newSlide(sNum('5')!, 'Registration Results')
       const kpis = [
-        { lbl: 'Remittance', val: regR, col: RED },
-        { lbl: 'Premium Card', val: regC, col: '7B2D8B' },
-        { lbl: 'BIZ Reg.', val: regB, col: '2E7D51' },
-        { lbl: 'Onboarded', val: regO, col: 'C47D1A' },
+        { lbl: 'Remittance',    val: regR, col: RED },
+        { lbl: 'Premium Card',  val: regC, col: '7B2D8B' },
+        { lbl: 'BIZ Reg.',      val: regB, col: '2E7D51' },
+        { lbl: 'Onboarded',     val: regO, col: 'C47D1A' },
         { lbl: 'New Merchants', val: regM, col: 'C47D1A' },
       ].filter(k => k.val > 0)
       const gap = 0.3, cardW = (12.5 - gap * (kpis.length - 1)) / kpis.length
@@ -309,30 +311,28 @@ export default function Report() {
         const x = 0.4 + i * (cardW + gap)
         sl.addShape('rect' as any, { x, y: 1.5, w: cardW, h: 3.5, fill: { color: 'FAFAFA' }, line: { color: 'DDDDDD', width: 1 } })
         sl.addText(String(k.val), { x, y: 2.0, w: cardW, h: 1.8, fontSize: 64, bold: true, color: k.col, fontFace: 'Calibri', align: 'center' as any, valign: 'middle' })
-        sl.addText(k.lbl, { x, y: 4.0, w: cardW, h: 0.6, fontSize: 14, color: '555555', fontFace: 'Calibri', align: 'center' as any })
+        sl.addText(k.lbl,         { x, y: 4.0, w: cardW, h: 0.6, fontSize: 14, color: '555555', fontFace: 'Calibri', align: 'center' as any })
       })
-      if (r.reg_followup) {
-        sl.addText(`Follow-up: ${r.reg_followup}`, {
-          x: 0.7, y: 5.3, w: 11.8, h: 0.9,
-          fontSize: 14, italic: true, color: DARK, fontFace: 'Calibri', valign: 'middle'
-        })
-      }
+      if (r.reg_followup) sl.addText(`Follow-up: ${r.reg_followup}`, {
+        x: 0.7, y: 5.3, w: 11.8, h: 0.9, fontSize: 14, italic: true, color: DARK, fontFace: 'Calibri', valign: 'middle'
+      })
     }
 
     // ── 6–9. Bullet sections ──────────────────────────────
-    const sections: [number, string, string[]][] = [
-      [6, 'Shortcomings', r.shortcomings || []],
-      [7, 'Improvements', r.improvements || []],
-      [8, 'Recommendations & Follow-up', r.recommendations || []],
-      [9, 'Requests', r.requests || []],
+    const bulletDefs: [string, string, string[]][] = [
+      ['6', 'Shortcomings',                r.shortcomings    || []],
+      ['7', 'Improvements',                r.improvements    || []],
+      ['8', 'Recommendations & Follow-up', r.recommendations || []],
+      ['9', 'Requests',                    r.requests        || []],
     ]
-    for (const [num, title, items] of sections) {
-      if (items.length) { const sl = newSlide(num, title); addBullets(sl, items) }
+    for (const [key, title, items] of bulletDefs) {
+      const n = sNum(key)
+      if (n !== undefined && items.length) { const sl = newSlide(n, title); addBullets(sl, items) }
     }
 
     // ── 10. Conclusion ────────────────────────────────────
-    if (r.conclusion) {
-      const sl = newSlide(10, 'Conclusion')
+    if (sNum('10') !== undefined) {
+      const sl = newSlide(sNum('10')!, 'Conclusion')
       sl.addText(r.conclusion, {
         x: 0.7, y: 1.1, w: 11.8, h: 5.8,
         fontSize: 18, color: DARK, fontFace: 'Calibri', valign: 'top',
