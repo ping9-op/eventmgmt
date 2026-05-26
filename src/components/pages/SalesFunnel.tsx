@@ -50,6 +50,11 @@ export default function SalesFunnel() {
     load()
   }, [])
 
+  // '__active__' 필터는 여러 스테이지에 걸쳐 있어 Board View와 맞지 않으므로 자동으로 Table View로 전환
+  useEffect(() => {
+    if (filterStage === '__active__' && tab === 'board') setTab('table')
+  }, [filterStage, tab])
+
   async function load() {
     const [{ data: leadData }, { data: propData }] = await Promise.all([
       supabase.from('sales_leads').select('*'),
