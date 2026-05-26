@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import Anthropic from '@anthropic-ai/sdk'
 import { supabase } from '../../lib/supabase'
 import { krw, exhColor, formatEventDate } from '../../lib/utils'
 import type { Exhibition, Proposal as ProposalType, BudgetItem, ProductTarget } from '../../types/database'
@@ -327,21 +326,49 @@ export default function Proposal() {
       `[EN] Reason for change (1–2 sentences, business writing style)`
 
     try {
-      const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true })
-      const stream = client.messages.stream({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1024,
-        system: 'GME(Global Money Express) 박람회 예산 담당자로서 간결하고 전문적인 비즈니스 문서 문체로 작성합니다.',
-        messages: [{ role: 'user', content: userMsg }],
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-allow-browser': 'true',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 1024,
+          stream: true,
+          system: 'GME(Global Money Express) 박람회 예산 담당자로서 간결하고 전문적인 비즈니스 문서 문체로 작성합니다.',
+          messages: [{ role: 'user', content: userMsg }],
+        }),
       })
-
+      if (!res.ok) {
+        const txt = await res.text()
+        throw new Error(`API ${res.status}: ${txt}`)
+      }
+      const reader = res.body!.getReader()
+      const decoder = new TextDecoder()
       let accumulated = ''
-      stream.on('text', chunk => {
-        accumulated += chunk
-        setAiOutput('🤖 AI 생성 중...\n\n' + accumulated)
-      })
-
-      await stream.finalMessage()
+      let buf = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const lines = buf.split('\n')
+        buf = lines.pop() || ''
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const data = line.slice(6).trim()
+          if (data === '[DONE]') continue
+          try {
+            const parsed = JSON.parse(data)
+            if (parsed.type === 'content_block_delta' && parsed.delta?.type === 'text_delta') {
+              accumulated += parsed.delta.text
+              setAiOutput('🤖 AI 생성 중...\n\n' + accumulated)
+            }
+          } catch { /* skip malformed SSE chunk */ }
+        }
+      }
       setAiOutput('✅ AI 변동 사유 생성 완료\n\n' + accumulated)
     } catch (err) {
       setAiOutput('⚠️ AI 생성 오류: ' + (err instanceof Error ? err.message : String(err)))
