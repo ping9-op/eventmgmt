@@ -31,7 +31,7 @@ function buildDefaultFromProposal(key: string, prop: Proposal, exhName: string):
     })),
     marketing_activities: [],
     marketing_photos: [],
-    reg_remittance: 0, reg_card: 0, reg_biz: 0, reg_onboard: 0,
+    reg_remittance: 0, reg_card: 0, reg_biz: 0, reg_onboard: 0, reg_followup: '',
     cost_per_person: 0, visitors: 0, new_merchants: 0, new_registrations: 0,
     shortcomings: [], improvements: [], recommendations: [], requests: [],
     conclusion: '',
@@ -188,6 +188,36 @@ export default function Report() {
       fontSize: 15, color: '444444', fontFace: 'Calibri'
     })
 
+    // ── TOC Slide ─────────────────────────────────────────
+    {
+      const tocSl = pptx.addSlide()
+      tocSl.addImage({ data: `image/png;base64,${contentB64}`, x: 0, y: 0, w: 13.33, h: 7.5 })
+      tocSl.addText('Table of Contents', {
+        x: 0.6, y: 0.15, w: 12, h: 0.6,
+        fontSize: 26, bold: true, color: WHITE, fontFace: 'Calibri', valign: 'middle'
+      })
+      const tocItems = [
+        { num: 1, title: 'Objective', key: '1', show: !!r.objective },
+        { num: 2, title: 'Event Overview', key: '2', show: !!(r.event_date || r.event_venue) },
+        { num: 3, title: 'Cost — Budget vs Actual', key: '3', show: costs.length > 0 },
+        { num: 4, title: 'Marketing Activities', key: '4', show: (r.marketing_activities || []).length > 0 },
+        { num: 5, title: 'Registration Results', key: '5', show: !!(r.reg_remittance || r.reg_card || r.reg_biz || r.reg_onboard || r.new_merchants) },
+        { num: 6, title: 'Shortcomings', key: '6', show: (r.shortcomings || []).length > 0 },
+        { num: 7, title: 'Improvements', key: '7', show: (r.improvements || []).length > 0 },
+        { num: 8, title: 'Recommendations & Follow-up', key: '8', show: (r.recommendations || []).length > 0 },
+        { num: 9, title: 'Requests', key: '9', show: (r.requests || []).length > 0 },
+        { num: 10, title: 'Conclusion', key: '10', show: !!r.conclusion },
+      ].filter(s => r.sections_enabled?.[s.key] !== false && s.show)
+      const tocRuns: any[] = []
+      tocItems.forEach((s, i) => {
+        tocRuns.push({ text: `${s.num}.  `, options: { bold: true, color: RED, fontSize: 18 } })
+        tocRuns.push({ text: s.title, options: { color: DARK, fontSize: 18, breakLine: i < tocItems.length - 1 } })
+      })
+      if (tocRuns.length) {
+        tocSl.addText(tocRuns, { x: 1.0, y: 1.2, w: 11.0, h: 5.8, fontFace: 'Calibri', valign: 'top', paraSpaceAfter: 16, lineSpacingMultiple: 1.4 })
+      }
+    }
+
     // ── 1. Objective ──────────────────────────────────────
     if (r.objective) {
       const sl = newSlide(1, 'Objective')
@@ -278,6 +308,12 @@ export default function Report() {
         sl.addText(String(k.val), { x, y: 2.0, w: cardW, h: 1.8, fontSize: 64, bold: true, color: k.col, fontFace: 'Calibri', align: 'center' as any, valign: 'middle' })
         sl.addText(k.lbl, { x, y: 4.0, w: cardW, h: 0.6, fontSize: 14, color: '555555', fontFace: 'Calibri', align: 'center' as any })
       })
+      if (r.reg_followup) {
+        sl.addText(`Follow-up: ${r.reg_followup}`, {
+          x: 0.7, y: 5.3, w: 11.8, h: 0.9,
+          fontSize: 14, italic: true, color: DARK, fontFace: 'Calibri', valign: 'middle'
+        })
+      }
     }
 
     // ── 6–9. Bullet sections ──────────────────────────────
@@ -311,7 +347,7 @@ export default function Report() {
       id: '', exhibition_key: selected || '',
       objective: '', event_date: '', event_venue: '', event_target: '',
       actual_costs: [], marketing_activities: [], marketing_photos: [],
-      reg_remittance: 0, reg_card: 0, reg_biz: 0, reg_onboard: 0,
+      reg_remittance: 0, reg_card: 0, reg_biz: 0, reg_onboard: 0, reg_followup: '',
       cost_per_person: 0, visitors: 0, new_merchants: 0, new_registrations: 0,
       shortcomings: [], improvements: [], recommendations: [], requests: [],
       conclusion: '', cover_title: selected || '', cover_date: '', cover_author: '',
@@ -499,7 +535,7 @@ export default function Report() {
                 </div>
               ))}
             </div>
-            <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 16, display: 'flex', alignItems: 'flex-start', gap: 16 }}>
               <div className="card-sm" style={{ textAlign: 'center', maxWidth: 280 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 6 }}>{t('per_person_cost')}</div>
                 <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--accent)' }}>
@@ -509,6 +545,15 @@ export default function Report() {
                   })()}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{t('per_person_calc')}</div>
+              </div>
+              <div className="card-sm" style={{ flex: 1 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 6 }}>Follow-up 계획</div>
+                <input
+                  value={r.reg_followup || ''}
+                  onChange={e => updateField('reg_followup', e.target.value)}
+                  placeholder="후속 조치 계획을 입력하세요"
+                  style={{ width: '100%', fontSize: 13, boxSizing: 'border-box' }}
+                />
               </div>
             </div>
 

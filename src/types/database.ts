@@ -53,6 +53,7 @@ export type Database = {
           event_venue: string | null; event_target: string | null; actual_costs: Json
           marketing_activities: Json; marketing_photos: Json
           reg_remittance: number; reg_card: number; reg_biz: number; reg_onboard: number
+          reg_followup: string | null
           cost_per_person: number; visitors: number; new_merchants: number; new_registrations: number
           shortcomings: Json; improvements: Json; recommendations: Json; requests: Json
           conclusion: string | null; cover_title: string | null; cover_date: string | null
@@ -63,6 +64,7 @@ export type Database = {
           event_venue?: string | null; event_target?: string | null; actual_costs?: Json
           marketing_activities?: Json; marketing_photos?: Json
           reg_remittance?: number; reg_card?: number; reg_biz?: number; reg_onboard?: number
+          reg_followup?: string | null
           cost_per_person?: number; visitors?: number; new_merchants?: number; new_registrations?: number
           shortcomings?: Json; improvements?: Json; recommendations?: Json; requests?: Json
           conclusion?: string | null; cover_title?: string | null; cover_date?: string | null
@@ -73,6 +75,7 @@ export type Database = {
           event_venue?: string | null; event_target?: string | null; actual_costs?: Json
           marketing_activities?: Json; marketing_photos?: Json
           reg_remittance?: number; reg_card?: number; reg_biz?: number; reg_onboard?: number
+          reg_followup?: string | null
           cost_per_person?: number; visitors?: number; new_merchants?: number; new_registrations?: number
           shortcomings?: Json; improvements?: Json; recommendations?: Json; requests?: Json
           conclusion?: string | null; cover_title?: string | null; cover_date?: string | null
@@ -247,6 +250,7 @@ export interface Result {
   event_venue: string; event_target: string; actual_costs: ActualCost[]
   marketing_activities: MarketingActivity[]; marketing_photos: string[]
   reg_remittance: number; reg_card: number; reg_biz: number; reg_onboard: number
+  reg_followup?: string
   cost_per_person: number; visitors: number; new_merchants: number; new_registrations: number
   shortcomings: string[]; improvements: string[]; recommendations: string[]
   requests: string[]; conclusion: string; cover_title: string; cover_date: string
