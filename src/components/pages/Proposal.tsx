@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import Anthropic from '@anthropic-ai/sdk'
 import { supabase } from '../../lib/supabase'
 import { krw, exhColor, formatEventDate } from '../../lib/utils'
 import type { Exhibition, Proposal as ProposalType, BudgetItem, ProductTarget } from '../../types/database'
@@ -274,22 +275,64 @@ export default function Proposal() {
     window.scrollTo(0, 0)
   }
 
-  function runAI() {
+  async function runAI() {
+    if (changedItems.length === 0) {
+      setAiOutput('변동 항목이 없습니다. Step 3에서 예산을 입력해주세요.')
+      return
+    }
+
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY as string | undefined
+    if (!apiKey) {
+      setAiOutput(
+        '⚠️ VITE_ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다.\n' +
+        '.env.local 파일에 아래 줄을 추가해주세요:\n\n' +
+        'VITE_ANTHROPIC_API_KEY=sk-ant-...'
+      )
+      return
+    }
+
     setAiLoading(true)
-    setAiOutput('🤖 AI 생성 중...')
-    setTimeout(() => {
-      const changed = budget.filter(r => (r.prev && r.curr !== r.prev) || (!r.prev && r.curr > 0))
-      let txt = '✅ AI 변동 사유 생성 완료\n\n'
-      for (const r of changed) {
-        const memo = aiMemos[r.item] || ''
-        txt += `── ${r.item} ──\n`
-        txt += `[KO] ${r.curr > (r.prev || 0) ? '비용 증가에 따른 예산 조정이 필요합니다.' : !r.prev ? '신규 항목이 추가되었습니다.' : '협상을 통해 비용을 절감했습니다.'}`
-        if (memo) txt += ` (${memo})`
-        txt += '\n\n'
-      }
-      setAiOutput(txt)
+    setAiOutput('🤖 AI 생성 중...\n')
+
+    const exhName = isNewExh ? newExhName : (exhibitions.find(e => e.id === exhId)?.name || '박람회')
+
+    const itemLines = changedItems.map(r => {
+      const dir = r.curr > (r.prev || 0) ? '증가' : !r.prev ? '신규' : '감소'
+      const memo = aiMemos[r.item] ? ` / 참고: ${aiMemos[r.item]}` : ''
+      return `- ${r.item}: ${r.prev ? krw(r.prev) + ' → ' : '(신규) '}${krw(r.curr)} (${dir})${memo}`
+    }).join('\n')
+
+    const userMsg =
+      `아래 박람회 예산 변동 내역을 바탕으로 각 항목별 변동 사유를 작성해주세요.\n\n` +
+      `박람회: ${exhName} ${year}\n\n` +
+      `예산 변동 항목:\n${itemLines}\n\n` +
+      `반드시 아래 형식으로만 응답하세요 (추가 설명 없이):\n` +
+      `── [항목명] ──\n` +
+      `[KO] 한국어 변동 사유 (1–2문장, 비즈니스 문서 문체)\n` +
+      `[EN] Reason for change (1–2 sentences, business writing style)`
+
+    try {
+      const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true })
+      const stream = client.messages.stream({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1024,
+        system: 'GME(Global Money Express) 박람회 예산 담당자로서 간결하고 전문적인 비즈니스 문서 문체로 작성합니다.',
+        messages: [{ role: 'user', content: userMsg }],
+      })
+
+      let accumulated = ''
+      stream.on('text', chunk => {
+        accumulated += chunk
+        setAiOutput('🤖 AI 생성 중...\n\n' + accumulated)
+      })
+
+      await stream.finalMessage()
+      setAiOutput('✅ AI 변동 사유 생성 완료\n\n' + accumulated)
+    } catch (err) {
+      setAiOutput('⚠️ AI 생성 오류: ' + (err instanceof Error ? err.message : String(err)))
+    } finally {
       setAiLoading(false)
-    }, 1500)
+    }
   }
 
   const prevBudgetMap: Record<string, number> = {}
