@@ -97,6 +97,7 @@ export default function Proposal() {
   const [aiLoading, setAiLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [editingProposalId, setEditingProposalId] = useState<string | null>(null)
   const [parseLoading, setParseLoading] = useState(false)
   const [parseResult, setParseResult] = useState<ParsedProposal | null>(null)
 
@@ -155,6 +156,8 @@ export default function Proposal() {
     setExhId(p.exhId)
     setIsNewExh(false)
     setYear(isCopy ? p.year + 1 : p.year)
+    setPropDate(isCopy ? new Date().toISOString().split('T')[0] : (propEntry.proposal_date || new Date().toISOString().split('T')[0]))
+    setEditingProposalId(isCopy ? null : propEntry.id)
     setAuthor(propEntry.author || 'Andrew')
     setDateOfEvent(propEntry.date_of_event)
     const { start, end } = parseDateRange(propEntry.date_of_event)
@@ -183,25 +186,33 @@ export default function Proposal() {
       const { data } = await supabase.from('exhibitions').insert({ key, name: newExhName, recurring: newExhRecurring }).select().single()
       finalExhId = data!.id
     }
-    await supabase.from('proposals').insert({
+    const proposalData = {
       exhibition_id: finalExhId, year, proposal_date: propDate, author,
       date_of_event: dateOfEvent, venue, objective,
       products: products.filter(p => p.product) as unknown as never,
       expected_results: expectedResults.filter(r => r) as unknown as never,
       budget: budget.filter(b => b.curr > 0) as unknown as never,
       explanations: {}
-    })
-    const exh = exhibitions.find(e => e.id === finalExhId)
-    const dbKey = (exh?.key || newExhName.replace(/[^a-zA-Z]/g, '').substring(0, 10)) + '_' + year
-    for (const b of budget.filter(b => b.curr > 0)) {
-      await supabase.from('payments').insert({
-        exhibition_key: dbKey, item: b.item, total: b.curr, currency: (b as any).currency || 'KRW',
-        deposit_amount: Math.round(b.curr / 2), deposit_due: null, deposit_paid: false,
-        final_amount: Math.round(b.curr / 2), final_due: null, final_paid: false,
-      })
+    }
+    if (editingProposalId) {
+      // 기존 제안서 수정 — payments는 그대로 유지
+      await supabase.from('proposals').update(proposalData).eq('id', editingProposalId)
+    } else {
+      // 신규 또는 복사 — 제안서 + 결제 항목 모두 새로 생성
+      await supabase.from('proposals').insert(proposalData)
+      const exh = exhibitions.find(e => e.id === finalExhId)
+      const dbKey = (exh?.key || newExhName.replace(/[^a-zA-Z]/g, '').substring(0, 10)) + '_' + year
+      for (const b of budget.filter(b => b.curr > 0)) {
+        await supabase.from('payments').insert({
+          exhibition_key: dbKey, item: b.item, total: b.curr, currency: (b as any).currency || 'KRW',
+          deposit_amount: Math.round(b.curr / 2), deposit_due: null, deposit_paid: false,
+          final_amount: Math.round(b.curr / 2), final_due: null, final_paid: false,
+        })
+      }
     }
     setSaving(false)
     setSaved(true)
+    setEditingProposalId(null)
     await load()
     setTimeout(() => { setSaved(false); setStep(1) }, 1500)
   }

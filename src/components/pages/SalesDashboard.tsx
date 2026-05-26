@@ -32,13 +32,20 @@ export default function SalesDashboard() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: leadData }, { data: taskData }] = await Promise.all([
-        supabase.from('sales_leads').select('*'),
-        supabase.from('sales_tasks').select('*'),
-      ])
-      setLeads((leadData || []) as SalesLead[])
-      setTasks((taskData || []) as SalesTask[])
-      setLoading(false)
+      try {
+        const [{ data: leadData, error: le }, { data: taskData, error: te }] = await Promise.all([
+          supabase.from('sales_leads').select('*'),
+          supabase.from('sales_tasks').select('*'),
+        ])
+        if (le) throw le
+        if (te) throw te
+        setLeads((leadData || []) as SalesLead[])
+        setTasks((taskData || []) as SalesTask[])
+      } catch (err: any) {
+        console.error('SalesDashboard load error:', err?.message)
+      } finally {
+        setLoading(false)
+      }
     }
     load()
   }, [])

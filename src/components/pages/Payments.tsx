@@ -53,7 +53,7 @@ export default function Payments() {
   const [invoiceParseFileName, setInvoiceParseFileName] = useState('')
   const [invoiceParsed, setInvoiceParsed] = useState<{
     fileName: string
-    items: { item: string; amount: number; dueDate: string; type: 'deposit' | 'final' }[]
+    items: { item: string; amount: number; dueDate: string; type: 'deposit' | 'final'; currency: string }[]
   } | null>(null)
   const itemInputRef = useRef<HTMLInputElement>(null)
 
@@ -102,14 +102,15 @@ export default function Payments() {
       const today = new Date()
       const d30 = new Date(today.getTime() + 30 * 86400000).toISOString().split('T')[0]
       const d60 = new Date(today.getTime() + 60 * 86400000).toISOString().split('T')[0]
-      const items: { item: string; amount: number; dueDate: string; type: 'deposit' | 'final' }[] = []
-      for (const p of pays.slice(0, 3)) {
-        if (p.deposit_amount > 0) items.push({ item: p.item, amount: p.deposit_amount, dueDate: p.deposit_due || d30, type: 'deposit' })
-        if (p.final_amount > 0)   items.push({ item: p.item, amount: p.final_amount,   dueDate: p.final_due   || d60, type: 'final' })
+      const items: { item: string; amount: number; dueDate: string; type: 'deposit' | 'final'; currency: string }[] = []
+      for (const p of pays) {
+        const cur = p.currency || 'KRW'
+        if (p.deposit_amount > 0) items.push({ item: p.item, amount: p.deposit_amount, dueDate: p.deposit_due || d30, type: 'deposit', currency: cur })
+        if (p.final_amount > 0)   items.push({ item: p.item, amount: p.final_amount,   dueDate: p.final_due   || d60, type: 'final',   currency: cur })
       }
       if (!items.length) {
-        items.push({ item: 'Booth Fee', amount: 3000000, dueDate: d30, type: 'deposit' })
-        items.push({ item: 'Booth Fee', amount: 3000000, dueDate: d60, type: 'final' })
+        items.push({ item: 'Booth Fee', amount: 3000000, dueDate: d30, type: 'deposit', currency: 'KRW' })
+        items.push({ item: 'Booth Fee', amount: 3000000, dueDate: d60, type: 'final',   currency: 'KRW' })
       }
       setInvoiceParsed({ fileName: file.name, items })
       setInvoiceParseLoading(false)
@@ -320,7 +321,7 @@ export default function Payments() {
                           <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
                             <td style={{ padding: '6px 10px' }}>{inv.item}</td>
                             <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 600 }}>
-                              {CUR_SYM['KRW']}{inv.amount.toLocaleString()}
+                              {CUR_SYM[inv.currency] || inv.currency}{inv.amount.toLocaleString()}
                             </td>
                             <td style={{ padding: '6px 10px', textAlign: 'center', color: 'var(--muted)' }}>{inv.dueDate}</td>
                             <td style={{ padding: '6px 10px', textAlign: 'center' }}>

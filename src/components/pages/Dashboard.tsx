@@ -36,32 +36,37 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: exhData }, { data: propData }, { data: payData }, { data: leadData }, { data: taskData }] = await Promise.all([
-        supabase.from('exhibitions').select('*'),
-        supabase.from('proposals').select('*').order('year', { ascending: true }),
-        supabase.from('payments').select('*'),
-        supabase.from('sales_leads').select('*'),
-        supabase.from('sales_tasks').select('id,due_date,status,owner').neq('status', 'Done'),
-      ])
-      const exhMap: Record<string, Exhibition> = {}
-      for (const e of (exhData || [])) exhMap[e.id] = e
-      const allEntries: ExhEntry[] = []
-      for (const p of (propData || [])) {
-        const exh = exhMap[p.exhibition_id]
-        if (!exh) continue
-        const budget = (p.budget as unknown as BudgetItem[]) || []
-        allEntries.push({ key: exh.key, name: exh.name, year: p.year, date: p.date_of_event, venue: p.venue, budget, total: budget.reduce((s, b) => s + (b.curr || 0), 0), recurring: exh.recurring })
+      try {
+        const [{ data: exhData }, { data: propData }, { data: payData }, { data: leadData }, { data: taskData }] = await Promise.all([
+          supabase.from('exhibitions').select('*'),
+          supabase.from('proposals').select('*').order('year', { ascending: true }),
+          supabase.from('payments').select('*'),
+          supabase.from('sales_leads').select('*'),
+          supabase.from('sales_tasks').select('id,due_date,status,owner').neq('status', 'Done'),
+        ])
+        const exhMap: Record<string, Exhibition> = {}
+        for (const e of (exhData || [])) exhMap[e.id] = e
+        const allEntries: ExhEntry[] = []
+        for (const p of (propData || [])) {
+          const exh = exhMap[p.exhibition_id]
+          if (!exh) continue
+          const budget = (p.budget as unknown as BudgetItem[]) || []
+          allEntries.push({ key: exh.key, name: exh.name, year: p.year, date: p.date_of_event, venue: p.venue, budget, total: budget.reduce((s, b) => s + (b.curr || 0), 0), recurring: exh.recurring })
+        }
+        setEntries(allEntries)
+        const payMap: Record<string, Payment[]> = {}
+        for (const p of (payData || []) as Payment[]) {
+          if (!payMap[p.exhibition_key]) payMap[p.exhibition_key] = []
+          payMap[p.exhibition_key].push(p)
+        }
+        setPayments(payMap)
+        setLeads((leadData || []) as SalesLead[])
+        setTasks((taskData || []) as SalesTask[])
+      } catch (err: any) {
+        console.error('Dashboard load error:', err?.message)
+      } finally {
+        setLoading(false)
       }
-      setEntries(allEntries)
-      const payMap: Record<string, Payment[]> = {}
-      for (const p of (payData || []) as Payment[]) {
-        if (!payMap[p.exhibition_key]) payMap[p.exhibition_key] = []
-        payMap[p.exhibition_key].push(p)
-      }
-      setPayments(payMap)
-      setLeads((leadData || []) as SalesLead[])
-      setTasks((taskData || []) as SalesTask[])
-      setLoading(false)
     }
     load()
   }, [])

@@ -213,24 +213,31 @@ export default function EventDetail() {
 
   async function save() {
     setSaving(true)
-    const payload = {
-      exhibition_key: dbKey, tab,
-      checklist: checklist as unknown as never,
-      design: design as unknown as never,
-      gifts_onboard: giftsOnboard as unknown as never,
-      gifts_event: giftsEvent as unknown as never,
-      equipment: equipment as unknown as never,
-      itinerary: itinerary as unknown as never,
+    try {
+      const payload = {
+        exhibition_key: dbKey, tab,
+        checklist: checklist as unknown as never,
+        design: design as unknown as never,
+        gifts_onboard: giftsOnboard as unknown as never,
+        gifts_event: giftsEvent as unknown as never,
+        equipment: equipment as unknown as never,
+        itinerary: itinerary as unknown as never,
+      }
+      if (dataId) {
+        const { error } = await supabase.from('event_data').update(payload).eq('id', dataId)
+        if (error) throw error
+      } else {
+        const { data, error } = await supabase.from('event_data').insert(payload).select().single()
+        if (error) throw error
+        if (data) setDataId((data as any).id)
+      }
+      setIsDirty(false)
+      showToast('저장되었습니다.')
+    } catch (err: any) {
+      showToast('⚠️ 저장 실패: ' + (err?.message || '알 수 없는 오류'))
+    } finally {
+      setSaving(false)
     }
-    if (dataId) {
-      await supabase.from('event_data').update(payload).eq('id', dataId)
-    } else {
-      const { data } = await supabase.from('event_data').insert(payload).select().single()
-      if (data) setDataId((data as any).id)
-    }
-    setSaving(false)
-    setIsDirty(false)
-    showToast('저장되었습니다.')
   }
 
   async function togglePaid(payId: string, type: 'deposit' | 'final') {
@@ -238,17 +245,18 @@ export default function EventDetail() {
     if (!pay) return
     if (type === 'deposit') {
       const newVal = !pay.deposit_paid
-      await supabase.from('payments').update({ deposit_paid: newVal }).eq('id', payId)
-      setPayments(prev => prev.map(p => p.id === payId ? { ...p, deposit_paid: newVal } : p))
+      const { error } = await supabase.from('payments').update({ deposit_paid: newVal }).eq('id', payId)
+      if (!error) setPayments(prev => prev.map(p => p.id === payId ? { ...p, deposit_paid: newVal } : p))
     } else {
       const newVal = !pay.final_paid
-      await supabase.from('payments').update({ final_paid: newVal }).eq('id', payId)
-      setPayments(prev => prev.map(p => p.id === payId ? { ...p, final_paid: newVal } : p))
+      const { error } = await supabase.from('payments').update({ final_paid: newVal }).eq('id', payId)
+      if (!error) setPayments(prev => prev.map(p => p.id === payId ? { ...p, final_paid: newVal } : p))
     }
   }
 
   async function savePayRow(payId: string, updates: Partial<Payment>) {
-    await supabase.from('payments').update(updates as never).eq('id', payId)
+    const { error } = await supabase.from('payments').update(updates as never).eq('id', payId)
+    if (error) { showToast('⚠️ 저장 실패: ' + error.message); return }
     setPayments(prev => prev.map(p => p.id === payId ? { ...p, ...updates } : p))
     showToast('저장되었습니다.')
   }
@@ -259,12 +267,14 @@ export default function EventDetail() {
       deposit_amount: 0, deposit_due: null, deposit_paid: false,
       final_amount: 0, final_due: null, final_paid: false,
     }
-    const { data } = await supabase.from('payments').insert(newPay).select().single()
+    const { data, error } = await supabase.from('payments').insert(newPay).select().single()
+    if (error) { showToast('⚠️ 항목 추가 실패: ' + error.message); return }
     if (data) setPayments(prev => [...prev, data as unknown as Payment])
   }
 
   async function deletePayRow(payId: string) {
-    await supabase.from('payments').delete().eq('id', payId)
+    const { error } = await supabase.from('payments').delete().eq('id', payId)
+    if (error) { showToast('⚠️ 삭제 실패: ' + error.message); return }
     setPayments(prev => prev.filter(p => p.id !== payId))
   }
 
