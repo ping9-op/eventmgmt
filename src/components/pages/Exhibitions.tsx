@@ -312,7 +312,7 @@ export default function Exhibitions() {
                 <div className="ec-hdr">
                   <div className="ec-name" style={{ color, cursor: latest ? 'pointer' : 'default', textDecoration: latest ? 'underline' : 'none', textUnderlineOffset: 3 }}
                     onClick={() => latest && navigate(`/expo/event/${exh.key}/${latest.year}`)}>
-                    {exh.name}
+                    {exh.name}{exh.key ? ` (${exh.key})` : ''}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
                     <span className="badge" style={{ background: exh.recurring ? '#2E7D51' : 'var(--amber)' }}>

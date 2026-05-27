@@ -171,7 +171,7 @@ export default function Proposal() {
     setAiOutput('AI 생성 결과가 여기에 표시됩니다.\n\n"AI 변동 사유 생성" 버튼을 눌러주세요.')
     setStep(1)
     window.scrollTo(0, 0)
-    const displayName = p.key ? `${p.key}: ${p.name}` : p.name
+    const displayName = p.key ? `${p.name} (${p.key})` : p.name
     showToast(isCopy
       ? `✅ ${displayName} ${p.year} 기준 복사 완료 — ${p.year + 1}년도 내용을 수정 후 저장하세요.`
       : `✏️ ${displayName} ${p.year} 불러왔습니다.`)
@@ -531,7 +531,7 @@ export default function Proposal() {
             else { setIsNewExh(false); setExhId(e.target.value) }
           }}>
             <option value="">{t('exh_select_placeholder')}</option>
-            {exhibitions.map(e => <option key={e.id} value={e.id}>{e.key}: {e.name}</option>)}
+            {exhibitions.map(e => <option key={e.id} value={e.id}>{e.name}{e.key ? ` (${e.key})` : ''}</option>)}
             <option value="__new__">{t('add_new_exh')}</option>
           </select>
           {/* 새 박람회 입력 영역 */}
@@ -856,7 +856,7 @@ export default function Proposal() {
               </div>
               <div className="pli-color" style={{ background: p.color }} />
               <div className="pli-body">
-                <div className="pli-name">{p.key ? `${p.key}: ` : ''}{p.name} {p.year}</div>
+                <div className="pli-name">{p.name}{p.key ? ` (${p.key})` : ''} {p.year}</div>
                 <div className="pli-meta">{p.year} &nbsp;·&nbsp; {formatEventDate(p.date, p.year)} &nbsp;·&nbsp; {t('total')} {krw(p.total)}</div>
               </div>
               <div className="pli-actions">
