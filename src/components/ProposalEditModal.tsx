@@ -107,8 +107,8 @@ export default function ProposalEditModal({ propId, exhName, exhKey, year, initi
         await supabase.from('payments').insert({
           exhibition_key: payKey, item: b.item, total: b.curr,
           currency: b.currency || 'KRW',
-          deposit_amount: Math.round(b.curr / 2), deposit_due: null, deposit_paid: false,
-          final_amount: Math.round(b.curr / 2), final_due: null, final_paid: false,
+          deposit_amount: 0, deposit_due: null, deposit_paid: false,
+          final_amount: 0, final_due: null, final_paid: false,
         })
       }
     }

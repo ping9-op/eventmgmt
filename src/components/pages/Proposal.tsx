@@ -171,9 +171,10 @@ export default function Proposal() {
     setAiOutput('AI 생성 결과가 여기에 표시됩니다.\n\n"AI 변동 사유 생성" 버튼을 눌러주세요.')
     setStep(1)
     window.scrollTo(0, 0)
+    const displayName = p.key ? `${p.key}: ${p.name}` : p.name
     showToast(isCopy
-      ? `✅ ${p.name} ${p.year} 기준 복사 완료 — ${p.year + 1}년도 내용을 수정 후 저장하세요.`
-      : `✏️ ${p.name} ${p.year} 불러왔습니다.`)
+      ? `✅ ${displayName} ${p.year} 기준 복사 완료 — ${p.year + 1}년도 내용을 수정 후 저장하세요.`
+      : `✏️ ${displayName} ${p.year} 불러왔습니다.`)
   }
 
   async function save() {
@@ -204,8 +205,8 @@ export default function Proposal() {
       for (const b of budget.filter(b => b.curr > 0)) {
         await supabase.from('payments').insert({
           exhibition_key: dbKey, item: b.item, total: b.curr, currency: (b as any).currency || 'KRW',
-          deposit_amount: Math.round(b.curr / 2), deposit_due: null, deposit_paid: false,
-          final_amount: Math.round(b.curr / 2), final_due: null, final_paid: false,
+          deposit_amount: 0, deposit_due: null, deposit_paid: false,
+          final_amount: 0, final_due: null, final_paid: false,
         })
       }
     }
@@ -855,7 +856,7 @@ export default function Proposal() {
               </div>
               <div className="pli-color" style={{ background: p.color }} />
               <div className="pli-body">
-                <div className="pli-name">{p.name} {p.year}</div>
+                <div className="pli-name">{p.key ? `${p.key}: ` : ''}{p.name} {p.year}</div>
                 <div className="pli-meta">{p.year} &nbsp;·&nbsp; {formatEventDate(p.date, p.year)} &nbsp;·&nbsp; {t('total')} {krw(p.total)}</div>
               </div>
               <div className="pli-actions">

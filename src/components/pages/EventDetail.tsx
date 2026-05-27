@@ -156,6 +156,7 @@ export default function EventDetail() {
         supabase.from('event_data').select('*').eq('exhibition_key', dbKey).single(),
         supabase.from('payments').select('*').eq('exhibition_key', dbKey),
       ])
+      let paymentsToSet = (payData || []) as unknown as Payment[]
       if (exhData) {
         setExhName(exhData.name)
         setColor(exhColor(exhData.name))
@@ -164,8 +165,26 @@ export default function EventDetail() {
         const prev = [...props].filter((p: any) => p.year < yearNum).sort((a: any, b: any) => b.year - a.year)[0]
         if (cur) setOverview({ ...cur, budget: (cur.budget as any) || [] })
         if (prev) setPrevOverview({ ...prev, budget: (prev.budget as any) || [] })
+
+        // 결제 일정이 없고 Proposal 예산 항목이 있으면 자동 생성
+        if (paymentsToSet.length === 0 && cur) {
+          const budgetItems = ((cur.budget as any[]) || []).filter((b: any) => b.item && b.curr > 0)
+          if (budgetItems.length > 0) {
+            const created: Payment[] = []
+            for (const b of budgetItems) {
+              const { data: newPay } = await supabase.from('payments').insert({
+                exhibition_key: dbKey, item: b.item, total: b.curr,
+                currency: b.currency || 'KRW',
+                deposit_amount: 0, deposit_due: null, deposit_paid: false,
+                final_amount: 0, final_due: null, final_paid: false,
+              }).select().single()
+              if (newPay) created.push(newPay as unknown as Payment)
+            }
+            if (created.length > 0) paymentsToSet = created
+          }
+        }
       }
-      setPayments((payData || []) as unknown as Payment[])
+      setPayments(paymentsToSet)
       if (evData) {
         setDataId(evData.id)
         setChecklist(migrateChecklist((evData.checklist as any) || DEFAULT_CHECKLIST))
@@ -876,6 +895,7 @@ function PayCard({ p, onTogglePaid, onSave, onDelete, deleteConfirm, onSetDelete
   const { date: finDateInit, method: methodInit } = parseFinalDue(p.final_due)
   const isLumpInit = p.final_amount === 0 && p.final_paid === true
 
+  const [itemName, setItemName] = useState(p.item)
   const [mode, setMode] = useState<'lump' | 'split'>(isLumpInit ? 'lump' : 'split')
   const [method, setMethod] = useState(methodInit || '계좌이체')
   const [depAmt, setDepAmt] = useState(String(isLumpInit ? p.total : (p.deposit_amount || 0)))
@@ -924,7 +944,12 @@ function PayCard({ p, onTogglePaid, onSave, onDelete, deleteConfirm, onSetDelete
     <div style={{ borderBottom: '0.5px solid var(--border)', padding: '10px 18px' }}>
       {/* 헤더 행 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-        <span style={{ fontSize: 13, fontWeight: 700, flex: 1, minWidth: 80 }}>{p.item}</span>
+        <input
+          value={itemName}
+          onChange={e => setItemName(e.target.value)}
+          onBlur={() => { if (itemName !== p.item) onSave(p.id, { item: itemName }) }}
+          style={{ fontSize: 13, fontWeight: 700, flex: 1, minWidth: 80, border: 'none', outline: 'none', background: 'transparent', color: 'var(--text)', fontFamily: 'inherit', padding: 0, cursor: 'text' }}
+        />
         <CurrencyBadge cur={c} />
         <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
           합계 <strong style={{ color: 'var(--accent)' }}>{fmtAmt(p.total, c)}</strong>
@@ -1086,7 +1111,9 @@ function ChecklistCard({ row, idx, onUpdate, onDelete }: {
             </span>
             <textarea value={s.text || ''} rows={1}
               onChange={e => onUpdate({ ...row, subitems: subs.map((si, k) => k === j ? { ...si, text: e.target.value } : si) })}
-              style={{ flex: 1, fontSize: 13, color: 'var(--text)', lineHeight: 1.6, border: 'none', outline: 'none', background: 'transparent', resize: 'none', fontFamily: 'inherit', width: '100%', minHeight: 36, padding: '2px 0' }} />
+              onInput={(e) => { const el = e.currentTarget; el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px' }}
+              ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px' } }}
+              style={{ flex: 1, fontSize: 13, color: 'var(--text)', lineHeight: 1.6, border: 'none', outline: 'none', background: 'transparent', resize: 'none', fontFamily: 'inherit', width: '100%', minHeight: 36, padding: '2px 0', overflow: 'hidden' }} />
             <button onClick={() => onUpdate({ ...row, subitems: subs.filter((_, k) => k !== j) })}
               style={{ background: 'none', border: 'none', color: '#CCC', cursor: 'pointer', fontSize: 15, padding: '0 4px', flexShrink: 0 }}>✕</button>
           </div>
