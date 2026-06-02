@@ -166,22 +166,41 @@ export default function EventDetail() {
         if (cur) setOverview({ ...cur, budget: (cur.budget as any) || [] })
         if (prev) setPrevOverview({ ...prev, budget: (prev.budget as any) || [] })
 
-        // 결제 일정이 없고 Proposal 예산 항목이 있으면 자동 생성
-        if (paymentsToSet.length === 0 && cur) {
+        // Proposal 예산 항목 → 결제 일정 자동 동기화
+        // - payments에 없는 예산 항목은 신규 추가
+        // - 금액이 변경된 항목은 total 업데이트 (입금/잔금 비율 유지)
+        // - 이미 납부 완료된 항목은 건드리지 않음
+        if (cur) {
           const budgetItems = ((cur.budget as any[]) || []).filter((b: any) => b.item && b.curr > 0)
-          if (budgetItems.length > 0) {
-            const created: Payment[] = []
-            for (const b of budgetItems) {
+          const addedPays: Payment[] = []
+          for (const b of budgetItems) {
+            const existing = paymentsToSet.find((p: any) => p.item === b.item)
+            if (!existing) {
+              // 새 예산 항목 — 결제 행 추가
               const { data: newPay } = await supabase.from('payments').insert({
                 exhibition_key: dbKey, item: b.item, total: b.curr,
                 currency: b.currency || 'KRW',
                 deposit_amount: 0, deposit_due: null, deposit_paid: false,
                 final_amount: 0, final_due: null, final_paid: false,
               }).select().single()
-              if (newPay) created.push(newPay as unknown as Payment)
+              if (newPay) addedPays.push(newPay as unknown as Payment)
+            } else if (existing.total !== b.curr && !existing.deposit_paid && !existing.final_paid) {
+              // 금액 변경 + 미납 상태 → total 업데이트
+              const depRatio = existing.total > 0 ? existing.deposit_amount / existing.total : 0.5
+              const newDep = Math.round(b.curr * depRatio)
+              await supabase.from('payments').update({
+                total: b.curr,
+                deposit_amount: newDep,
+                final_amount: b.curr - newDep,
+                currency: b.currency || 'KRW',
+              }).eq('id', existing.id)
+              // 로컬 상태도 반영
+              paymentsToSet = paymentsToSet.map((p: any) =>
+                p.id === existing.id ? { ...p, total: b.curr, deposit_amount: newDep, final_amount: b.curr - newDep } : p
+              ) as unknown as Payment[]
             }
-            if (created.length > 0) paymentsToSet = created
           }
+          if (addedPays.length > 0) paymentsToSet = [...paymentsToSet, ...addedPays]
         }
       }
       setPayments(paymentsToSet)
