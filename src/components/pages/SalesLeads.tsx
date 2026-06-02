@@ -47,6 +47,7 @@ export default function SalesLeads() {
   const [filterOwner, setFilterOwner] = useState<string | null>(null)
   const [filterStage, setFilterStage] = useState<string | null>(null)
   const [filterCorridor, setFilterCorridor] = useState<string | null>(null)
+  const [detailPage, setDetailPage] = useState(0)
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
   const [showRegister, setShowRegister] = useState(false)
   const [checked, setChecked] = useState<Set<string>>(new Set())
@@ -285,7 +286,11 @@ export default function SalesLeads() {
     )
     : groups
 
-  const allDetailIds = detailLeads.map(l => l.id)
+  // 페이지네이션 (50건/페이지)
+  const DETAIL_PER_PAGE = 50
+  const totalDetailPages = Math.ceil(detailLeads.length / DETAIL_PER_PAGE)
+  const pagedDetailLeads = detailLeads.slice(detailPage * DETAIL_PER_PAGE, (detailPage + 1) * DETAIL_PER_PAGE)
+  const allDetailIds = pagedDetailLeads.map(l => l.id)
 
   if (loading) return <div className="view wide"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
 
@@ -434,7 +439,7 @@ export default function SalesLeads() {
             </div>
           </div>
 
-          <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: '0 0 12px 12px', overflow: 'hidden' }}>
+          <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: totalDetailPages > 1 ? '12px 12px 0 0' : 12, overflow: 'hidden' }}>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1180 }}>
                 <thead>
@@ -455,7 +460,7 @@ export default function SalesLeads() {
                   </tr>
                 </thead>
                 <tbody>
-                  {detailLeads.map(l => (
+                  {pagedDetailLeads.map(l => (
                     <tr key={l.id} style={{ borderBottom: '0.5px solid var(--border)', cursor: 'pointer', transition: 'background .1s' }}
                       onClick={() => setSelectedLeadId(l.id)}
                       onMouseOver={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = '#FDF5F5'))}
@@ -486,6 +491,30 @@ export default function SalesLeads() {
               </table>
             </div>
           </div>
+          {/* 페이지네이션 */}
+          {totalDetailPages > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 16px', background: 'white', border: '0.5px solid var(--border2)', borderTop: '1px solid var(--border)', borderRadius: '0 0 12px 12px' }}>
+              <button onClick={() => setDetailPage(0)} disabled={detailPage === 0}
+                style={{ padding: '5px 10px', borderRadius: 6, border: '1.5px solid var(--border2)', background: detailPage === 0 ? 'var(--light)' : 'white', cursor: detailPage === 0 ? 'default' : 'pointer', fontSize: 12, opacity: detailPage === 0 ? 0.4 : 1 }}>
+                «
+              </button>
+              <button onClick={() => setDetailPage(p => Math.max(0, p - 1))} disabled={detailPage === 0}
+                style={{ padding: '5px 12px', borderRadius: 6, border: '1.5px solid var(--border2)', background: detailPage === 0 ? 'var(--light)' : 'white', cursor: detailPage === 0 ? 'default' : 'pointer', fontSize: 12, opacity: detailPage === 0 ? 0.4 : 1 }}>
+                ‹ 이전
+              </button>
+              <span style={{ fontSize: 12, color: 'var(--muted)', minWidth: 100, textAlign: 'center' }}>
+                {detailPage * DETAIL_PER_PAGE + 1}–{Math.min((detailPage + 1) * DETAIL_PER_PAGE, detailLeads.length)} / {detailLeads.length}개
+              </span>
+              <button onClick={() => setDetailPage(p => Math.min(totalDetailPages - 1, p + 1))} disabled={detailPage >= totalDetailPages - 1}
+                style={{ padding: '5px 12px', borderRadius: 6, border: '1.5px solid var(--border2)', background: detailPage >= totalDetailPages - 1 ? 'var(--light)' : 'white', cursor: detailPage >= totalDetailPages - 1 ? 'default' : 'pointer', fontSize: 12, opacity: detailPage >= totalDetailPages - 1 ? 0.4 : 1 }}>
+                다음 ›
+              </button>
+              <button onClick={() => setDetailPage(totalDetailPages - 1)} disabled={detailPage >= totalDetailPages - 1}
+                style={{ padding: '5px 10px', borderRadius: 6, border: '1.5px solid var(--border2)', background: detailPage >= totalDetailPages - 1 ? 'var(--light)' : 'white', cursor: detailPage >= totalDetailPages - 1 ? 'default' : 'pointer', fontSize: 12, opacity: detailPage >= totalDetailPages - 1 ? 0.4 : 1 }}>
+                »
+              </button>
+            </div>
+          )}
         </>
       )}
 

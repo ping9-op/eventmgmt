@@ -15,12 +15,24 @@ export const COST_COLORS: Record<string, string> = {
   'Meal':'#E74C3C','Item Delivery':'#1ABC9C'
 }
 
+// DB에서 로드된 동적 색상 (name → color)
+const _dynamicExhColors: Record<string, string> = {}
+
+export function initExhColors(exhibitions: { name: string; color?: string | null }[]) {
+  for (const e of exhibitions) {
+    if (e.name && e.color) _dynamicExhColors[e.name] = e.color
+  }
+}
+
 export function exhDisplayName(name: string, key: string): string {
   if (!key) return name
   return name.includes(`(${key})`) ? name : `${name} (${key})`
 }
 
 export function exhColor(name: string): string {
+  // DB에서 로드된 동적 색상 우선
+  if (name && _dynamicExhColors[name]) return _dynamicExhColors[name]
+  // 하드코딩 fallback
   for (const [k, v] of Object.entries(EXH_COLORS))
     if (name && (name.includes(k) || k.includes(name))) return v
   return '#8A8A9A'

@@ -1,4 +1,4 @@
-export type Lang = 'ko' | 'en'
+export type Lang = 'ko' | 'en' | 'ja'
 
 const translations: Record<Lang, Record<string, string>> = {
   ko: {
@@ -1061,7 +1061,69 @@ const translations: Record<Lang, Record<string, string>> = {
     contract_desc: 'Proposal/contract status (fixed)',
     onboard_label: 'Onboarding Status',
     onboard_desc: 'Onboarding progress status (fixed)',
-  }
+  },
+
+  ja: {
+    // ── ナビゲーション ─────────────────────────────────────────────────────
+    dashboard: 'ダッシュボード',
+    expo_group: '🏛  展示会',
+    expo_overview: '📊  展示会ダッシュボード',
+    exhibitions: '🏢  展示会一覧',
+    schedule: '📅  スケジュール管理',
+    payments: '💰  支払いスケジュール',
+    create: '✏️  新規Proposal作成',
+    report: '📋  結果レポート',
+    sales_group: '💼  セールス',
+    sales_dashboard: '📊  セールスダッシュボード',
+    sales_leads: '👥  リード管理',
+    sales_funnel: '🔀  セールスファネル',
+    sales_followup: '📞  フォローアップ管理',
+    sales_reports: '📈  セールスレポート',
+    sales_settings: '⚙️  セールス設定',
+    settings: '⚙️  設定',
+    // ── 共通 ────────────────────────────────────────────────────────────
+    loading: '読み込み中...',
+    save: '保存',
+    saving: '保存中...',
+    cancel: 'キャンセル',
+    delete: '削除',
+    add: '追加',
+    edit: '編集',
+    total: '合計',
+    search_placeholder: '検索...',
+    select_placeholder: '選択してください',
+    no_data: 'データがありません',
+    view_all: 'すべて表示',
+    view_detail: '詳細表示 →',
+    saved_ok: '保存しました ✓',
+    // ── 대시보드 ─────────────────────────────────────────────────────────
+    dashboard_sub: '展示会・セールス統合状況',
+    exh_status_card: '🏛 展示会状況',
+    sales_status_card: '💼 セールス状況',
+    upcoming: '📅 直近スケジュール',
+    sales_funnel_card: '🔀 セールスファネル状況',
+    no_upcoming: '今後60日以内の予定はありません',
+    // ── 박람회 ───────────────────────────────────────────────────────────
+    budget_lbl: '総予算',
+    next_expo_label: '次の展示会',
+    total_hist_label: '参加実績',
+    recent_exh: '最近の展示会',
+    // ── 결제 ──────────────────────────────────────────────────────────
+    deposit_pay: '前払い',
+    final_pay_short: '残金',
+    paid_done: '支払済',
+    not_paid: '未払い',
+    // ── 공통 버튼/레이블 ─────────────────────────────────────────────────
+    s_total: '総リード',
+    s_active: 'アクティブ',
+    s_won: '成約',
+    s_lost: '失注',
+    s_conv: '転換率',
+    all_leads_lbl: '全リード',
+    in_progress_lbl: '進行中',
+    overdue_short: '期限超過',
+    no_leads_short: 'リードなし',
+  },
 }
 
 let currentLang: Lang = 'ko'

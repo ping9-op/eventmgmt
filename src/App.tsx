@@ -1,6 +1,9 @@
+import { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import { ToastProvider } from './contexts/ToastContext'
+import { supabase } from './lib/supabase'
+import { initExhColors } from './lib/utils'
 import Layout from './components/layout/Layout'
 import LoginPage from './components/auth/LoginPage'
 import Dashboard from './components/pages/Dashboard'
@@ -27,6 +30,14 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const { user, loading } = useAuth()
+
+  // 앱 시작 시 박람회 색상을 DB에서 로드해 동적 색상 캐시 초기화
+  useEffect(() => {
+    if (!user) return
+    supabase.from('exhibitions').select('name, color').then(({ data }) => {
+      if (data) initExhColors(data as { name: string; color?: string | null }[])
+    })
+  }, [user])
 
   if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: 'var(--muted)' }}>로딩 중...</div>
 

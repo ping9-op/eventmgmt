@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useLang } from '../../contexts/LangContext'
 
-export default function Sidebar() {
+export default function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => void }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { t } = useLang()
@@ -15,7 +15,7 @@ export default function Sidebar() {
     return (
       <div
         className={`nav-item${sub ? ' sub' : ''}${active(path) ? ' active' : ''}`}
-        onClick={() => navigate(path)}
+        onClick={() => { navigate(path); onClose?.() }}
       >
         <div className="ind" />
         <div className="nm">{label}</div>
@@ -24,8 +24,12 @@ export default function Sidebar() {
   }
 
   return (
-    <div className="sidebar">
-      <div className="sb-logo" onClick={() => navigate('/')}>● GME EM</div>
+    <div className={`sidebar${open ? ' sidebar-mobile-open' : ''}`}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="sb-logo" onClick={() => { navigate('/'); onClose?.() }}>● GME EM</div>
+        {/* 모바일 닫기 버튼 */}
+        <button className="sidebar-close-btn" onClick={onClose} aria-label="사이드바 닫기">✕</button>
+      </div>
 
       <NavItem path="/" label={`📊  ${t('dashboard')}`} />
 

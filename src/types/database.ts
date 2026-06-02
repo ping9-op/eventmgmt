@@ -6,9 +6,9 @@ export type Database = {
   public: {
     Tables: {
       exhibitions: {
-        Row: { id: string; key: string; name: string; recurring: boolean; created_at: string }
-        Insert: { key: string; name: string; recurring?: boolean }
-        Update: { key?: string; name?: string; recurring?: boolean }
+        Row: { id: string; key: string; name: string; recurring: boolean; color: string | null; created_at: string }
+        Insert: { key: string; name: string; recurring?: boolean; color?: string | null }
+        Update: { key?: string; name?: string; recurring?: boolean; color?: string | null }
         Relationships: []
       }
       proposals: {
@@ -225,7 +225,7 @@ export type Database = {
 // --- App-level types ---
 
 export interface Exhibition {
-  id: string; key: string; name: string; recurring: boolean
+  id: string; key: string; name: string; recurring: boolean; color?: string | null
 }
 
 export interface BudgetItem {
