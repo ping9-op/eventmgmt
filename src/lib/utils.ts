@@ -15,6 +15,11 @@ export const COST_COLORS: Record<string, string> = {
   'Meal':'#E74C3C','Item Delivery':'#1ABC9C'
 }
 
+export function exhDisplayName(name: string, key: string): string {
+  if (!key) return name
+  return name.includes(`(${key})`) ? name : `${name} (${key})`
+}
+
 export function exhColor(name: string): string {
   for (const [k, v] of Object.entries(EXH_COLORS))
     if (name && (name.includes(k) || k.includes(name))) return v

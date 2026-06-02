@@ -4,7 +4,7 @@ import { useLang } from '../../contexts/LangContext'
 import { Chart, ArcElement, Tooltip, DoughnutController } from 'chart.js'
 Chart.register(ArcElement, Tooltip, DoughnutController)
 import { supabase } from '../../lib/supabase'
-import { krw, exhColor, costColor, formatEventDate, isPastEvent, daysUntil } from '../../lib/utils'
+import { krw, exhColor, costColor, formatEventDate, isPastEvent, daysUntil, exhDisplayName } from '../../lib/utils'
 import type { Exhibition, BudgetItem, ActualCost } from '../../types/database'
 
 const CUR_SYM: Record<string, string> = { KRW: '₩', JPY: '¥', USD: '$', EUR: '€', SGD: 'S$' }
@@ -126,7 +126,7 @@ export default function ExpoOverview() {
       if (!d) continue
       const diff = Math.round((d.getTime() - today.getTime()) / 86400000)
       if (diff >= -7 && diff <= 60) {
-        items.push({ days: diff, kind: 'expo', name: e.name + ' ' + e.year, date: formatEventDate(e.date, e.year), color: exhColor(e.name), detail: e.venue, icon: '📅' })
+        items.push({ days: diff, kind: 'expo', name: exhDisplayName(e.name, e.key) + ' ' + e.year, date: formatEventDate(e.date, e.year), color: exhColor(e.name), detail: e.venue, icon: '📅' })
       }
     }
     for (const [dbKey, pays] of Object.entries(payments)) {
@@ -231,7 +231,7 @@ export default function ExpoOverview() {
         </div>
         <div className="metric" onClick={() => biggest && navigate(`/expo/event/${biggest.key}/${biggest.year || maxYear}`)} style={{ cursor: 'pointer' }}>
           <div className="lbl">{t('top_lbl')}</div>
-          <div className="val" style={{ color: 'var(--danger)', fontSize: 15 }}>{biggest?.name} {biggest?.year}</div>
+          <div className="val" style={{ color: 'var(--danger)', fontSize: 15 }}>{biggest ? exhDisplayName(biggest.name, biggest.key) : ''} {biggest?.year}</div>
           <div className="sub">{krw(biggest?.total || 0)}</div>
         </div>
       </div>
@@ -261,7 +261,7 @@ export default function ExpoOverview() {
               <div className="top-bar" style={{ background: topColor }} />
               <div className="ec-body" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
                 <div className="ec-hdr">
-                  <span className="ec-name" style={{ color: past ? '#5A6878' : 'var(--text)' }}>{e.name} {e.year}</span>
+                  <span className="ec-name" style={{ color: past ? '#5A6878' : 'var(--text)' }}>{exhDisplayName(e.name, e.key)} {e.year}</span>
                   <div className="ec-badges" style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
                     <span className="badge" style={{ background: past ? 'var(--muted)' : 'var(--green)' }}>{past ? t('badge_done') : t('badge_scheduled')}</span>
                     <span className="badge" style={{ background: e.recurring ? '#2E7D51' : 'var(--amber)' }}>{e.recurring ? t('badge_existing') : t('badge_new')}</span>
@@ -328,7 +328,7 @@ export default function ExpoOverview() {
           <div key={`${e.key}_${e.year}`} className="hbar-row" style={{ cursor: 'pointer' }}
             onClick={() => navigate(`/expo/event/${e.key}/${e.year}`)}>
             <span className="hbar-label" style={{ textAlign: 'right' }}>
-              {(e.name + ' ' + e.year).length > 18 ? (e.name + ' ' + e.year).slice(0, 17) + '…' : e.name + ' ' + e.year}
+              {(exhDisplayName(e.name, e.key) + ' ' + e.year).length > 18 ? (exhDisplayName(e.name, e.key) + ' ' + e.year).slice(0, 17) + '…' : exhDisplayName(e.name, e.key) + ' ' + e.year}
             </span>
             <div className="hbar-track">
               {e.budget.map((b, i) => (
@@ -359,7 +359,7 @@ export default function ExpoOverview() {
             <tr key={`${e.key}_${e.year}`} style={{ cursor: 'pointer', ...(i === 0 ? { color: 'var(--accent)', fontWeight: 700 } : {}) }}
               onClick={() => navigate(`/expo/event/${e.key}/${e.year}`)}>
               <td>{i + 1}</td>
-              <td>{e.name} {e.year}</td>
+              <td>{exhDisplayName(e.name, e.key)} {e.year}</td>
               <td>{e.year}</td>
               <td>{formatEventDate(e.date, e.year)}</td>
               <td style={{ color: 'var(--muted)' }}>{e.venue}</td>
@@ -462,7 +462,7 @@ function YearDonutSection({ entries, latestSorted }: { entries: ExhEntry[]; late
                 <div className="donut-legend">
                   {yEntries.map((e, i) => {
                     const past = isPastEvent(e.date, e.year)
-                    const label = (e.name + ' ' + e.year)
+                    const label = (exhDisplayName(e.name, e.key) + ' ' + e.year)
                     const displayLabel = label.length > 22 ? label.slice(0, 21) + '…' : label
                     return (
                       <div key={i} className="dl"

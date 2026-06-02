@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { krw, exhColor, formatEventDate, isPastEvent } from '../../lib/utils'
+import { krw, exhColor, formatEventDate, isPastEvent, exhDisplayName } from '../../lib/utils'
 import type { Exhibition, Proposal, BudgetItem } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
@@ -190,7 +190,7 @@ export default function Schedule() {
                           <span style={{ fontWeight: 700, color, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3 }}
                             onClick={() => navigate(`/expo/event/${e.key}/${e.year}`)}
                             title={`${e.name} ${e.year} 이벤트 상세 보기`}>
-                            {e.name} {e.year}
+                            {exhDisplayName(e.name, e.key)} {e.year}
                           </span>
                         </div>
                       </td>

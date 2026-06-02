@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { exhColor, formatEventDate, isPastEvent, STAGE_ORDER, STAGE_COLORS } from '../../lib/utils'
+import { exhColor, formatEventDate, isPastEvent, STAGE_ORDER, STAGE_COLORS, exhDisplayName } from '../../lib/utils'
 import type { Exhibition, Payment, SalesLead, SalesTask, BudgetItem } from '../../types/database'
 import LeadDetailPanel from './LeadDetailPanel'
 import { useLang } from '../../contexts/LangContext'
@@ -223,7 +223,7 @@ export default function Dashboard() {
                 onMouseOver={ev => (ev.currentTarget as HTMLDivElement).style.opacity = '.7'}
                 onMouseOut={ev => (ev.currentTarget as HTMLDivElement).style.opacity = '1'}>
                 <div>
-                  <span style={{ fontSize: 12, fontWeight: 600 }}>{e.name}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600 }}>{exhDisplayName(e.name, e.key)}</span>
                   <span style={{ fontSize: 10, color: 'var(--muted)', marginLeft: 5 }}>{e.year}</span>
                 </div>
                 <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)' }}>{recentExhBudgetStr(e)}</span>
