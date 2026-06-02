@@ -5,6 +5,7 @@ export default function LoginPage() {
   const { signIn } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPw, setShowPw] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -36,13 +37,29 @@ export default function LoginPage() {
             autoFocus
           />
           <label>비밀번호</label>
-          <input
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            placeholder="••••••••"
-            required
-          />
+          <div style={{ position: 'relative' }}>
+            <input
+              type={showPw ? 'text' : 'password'}
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+              style={{ paddingRight: 44 }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPw(v => !v)}
+              style={{
+                position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 16, color: 'var(--muted)', padding: '0 2px', lineHeight: 1,
+              }}
+              tabIndex={-1}
+              title={showPw ? '비밀번호 숨기기' : '비밀번호 보기'}
+            >
+              {showPw ? '🙈' : '👁️'}
+            </button>
+          </div>
           <button
             type="submit"
             className="btn btn-primary"
@@ -54,7 +71,7 @@ export default function LoginPage() {
         </form>
 
         <p style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center', marginTop: 20 }}>
-          계정 문의: Supabase 대시보드에서 관리자에게 요청하세요
+          계정 문의: 관리자(andrewc@gmeremit.com)에게 요청하세요
         </p>
       </div>
     </div>
