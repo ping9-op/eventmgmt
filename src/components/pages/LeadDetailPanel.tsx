@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { STAGE_ORDER, STAGE_COLORS } from '../../lib/utils'
+import { logStageChange } from '../../lib/stageHistory'
 import { loadAllSettings, CONTRACT_STATUSES as SYSTEM_CONTRACT_STATUSES, ONBOARD_STATUSES as SYSTEM_ONBOARD_STATUSES, type SalesSettingsData } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
 import type { SalesLead, SalesActivity, SalesTask, SalesProposal } from '../../types/database'
@@ -163,8 +164,10 @@ export default function LeadDetailPanel({
   }
 
   async function updateStageInline(stage: string) {
+    const prev = lead?.current_stage || null
     setForm(f => ({ ...f, current_stage: stage }))
     await supabase.from('sales_leads').update({ current_stage: stage }).eq('id', leadId)
+    logStageChange(leadId, prev, stage)
     onRefresh()
   }
 

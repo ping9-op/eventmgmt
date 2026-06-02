@@ -7,6 +7,7 @@ import { loadAllSettings, type SalesSettingsData } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
 import LeadDetailPanel from './LeadDetailPanel'
 import { useLang } from '../../contexts/LangContext'
+import { logStageChange } from '../../lib/stageHistory'
 
 type GroupBy = 'event' | 'date' | 'source'
 type ViewMode = 'group' | 'detail'
@@ -97,8 +98,10 @@ export default function SalesLeads() {
   }
 
   async function updateStage(leadId: string, stage: string) {
+    const prev = leads.find(l => l.id === leadId)?.current_stage || null
     await supabase.from('sales_leads').update({ current_stage: stage }).eq('id', leadId)
-    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, current_stage: stage } : l))
+    setLeads(p => p.map(l => l.id === leadId ? { ...l, current_stage: stage } : l))
+    logStageChange(leadId, prev, stage)
   }
 
   async function register() {

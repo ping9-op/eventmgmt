@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { STAGE_ORDER, STAGE_COLORS } from '../../lib/utils'
 import type { SalesLead } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
+import { computeAvgDaysPerStage, type StageHistoryRow } from '../../lib/stageHistory'
 
 type PeriodFilter = 'all' | 'month' | '3months' | 'year'
 
@@ -22,17 +23,42 @@ function filterByPeriod(leads: SalesLead[], period: PeriodFilter): SalesLead[] {
   return leads.filter(l => (l.registered_date || '') >= cutoffStr)
 }
 
+// 현재 스테이지별 리드 평균 체류 기간(일) — registered_date 기준 근사값
+function computeCurrentStageDays(leads: SalesLead[]): Record<string, { avgDays: number; count: number }> {
+  const today = new Date()
+  const byStage: Record<string, number[]> = {}
+  for (const l of leads) {
+    if (!l.registered_date) continue
+    const days = Math.round((today.getTime() - new Date(l.registered_date).getTime()) / 86400000)
+    if (!byStage[l.current_stage]) byStage[l.current_stage] = []
+    byStage[l.current_stage].push(days)
+  }
+  const result: Record<string, { avgDays: number; count: number }> = {}
+  for (const [stage, days] of Object.entries(byStage)) {
+    result[stage] = {
+      avgDays: Math.round(days.reduce((s, d) => s + d, 0) / days.length),
+      count: days.length,
+    }
+  }
+  return result
+}
+
 export default function SalesReports() {
   const { t } = useLang()
   const navigate = useNavigate()
   const [allLeads, setAllLeads] = useState<SalesLead[]>([])
+  const [stageHistory, setStageHistory] = useState<StageHistoryRow[]>([])
   const [loading, setLoading] = useState(true)
   const [period, setPeriod] = useState<PeriodFilter>('all')
 
   useEffect(() => {
-    supabase.from('sales_leads').select('*').then(({ data, error }) => {
-      if (error) console.error('SalesReports load error:', error.message)
-      setAllLeads((data || []) as SalesLead[])
+    Promise.all([
+      supabase.from('sales_leads').select('*'),
+      supabase.from('sales_stage_history').select('*').order('changed_at'),
+    ]).then(([{ data: leadData, error: le }, { data: histData }]) => {
+      if (le) console.error('SalesReports load error:', le.message)
+      setAllLeads((leadData || []) as SalesLead[])
+      setStageHistory((histData || []) as StageHistoryRow[])
       setLoading(false)
     })
   }, [])
@@ -119,6 +145,11 @@ export default function SalesReports() {
   const lostLeads = leads.filter(l => l.current_stage === 'Lost' && l.lost_reason)
   const lostCounts: Record<string, number> = {}
   lostLeads.forEach(l => { if (l.lost_reason) lostCounts[l.lost_reason] = (lostCounts[l.lost_reason] || 0) + 1 })
+
+  // 단계 전환 소요일 계산
+  const avgDaysFromHistory = computeAvgDaysPerStage(stageHistory)
+  const currentStageDays = computeCurrentStageDays(leads)
+  const hasHistoryData = stageHistory.length > 0
 
   const corridorStats = corridors.map(c => {
     const cl = leads.filter(l => l.country_corridor === c)
@@ -247,6 +278,69 @@ export default function SalesReports() {
               {events.length === 0 && (
                 <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>{t('no_report_data')}</td></tr>
               )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 단계 전환 소요일 분석 */}
+      <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px', marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>⏱ {t('s_stage_duration')}</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
+              {hasHistoryData
+                ? t('s_stage_duration_real')
+                : t('s_stage_duration_approx')}
+            </div>
+          </div>
+          {!hasHistoryData && (
+            <span style={{ fontSize: 11, background: '#FFF8F0', color: '#D97706', border: '1px solid #FDE68A', borderRadius: 99, padding: '3px 10px', fontWeight: 600 }}>
+              📌 {t('s_stage_duration_notice')}
+            </span>
+          )}
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: 'var(--accent)', color: 'white' }}>
+                <th style={{ padding: '9px 14px', textAlign: 'left', fontWeight: 600 }}>Stage</th>
+                <th style={{ padding: '9px 10px', textAlign: 'center', fontWeight: 600 }}>{t('s_stage_leads_cnt')}</th>
+                <th style={{ padding: '9px 10px', textAlign: 'center', fontWeight: 600 }}>
+                  {hasHistoryData ? t('s_avg_days_real') : t('s_avg_days_approx')}
+                </th>
+                <th style={{ padding: '9px 14px', textAlign: 'left', fontWeight: 600 }}>{t('s_stage_bar')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {STAGE_ORDER.map(stage => {
+                const c = STAGE_COLORS[stage] || { bg: '#6B7280' }
+                const hist = avgDaysFromHistory[stage]
+                const cur = currentStageDays[stage]
+                const days = hasHistoryData ? hist?.avgDays : cur?.avgDays
+                const count = cur?.count || 0
+                const maxDays = hasHistoryData
+                  ? Math.max(...Object.values(avgDaysFromHistory).map(v => v.avgDays), 1)
+                  : Math.max(...Object.values(currentStageDays).map(v => v.avgDays), 1)
+                const pct = days != null ? Math.min(Math.round(days / maxDays * 100), 100) : 0
+                return (
+                  <tr key={stage} style={{ borderBottom: '0.5px solid var(--border)' }}>
+                    <td style={{ padding: '9px 14px' }}>
+                      <span style={{ display: 'inline-block', padding: '3px 9px', borderRadius: 99, fontSize: 11, fontWeight: 700, color: 'white', background: c.bg }}>{stage}</span>
+                    </td>
+                    <td style={{ padding: '9px 10px', textAlign: 'center', fontWeight: 700, color: c.bg }}>{count || '—'}</td>
+                    <td style={{ padding: '9px 10px', textAlign: 'center', fontWeight: 700, color: days != null && days > 30 ? '#DC2626' : days != null && days > 14 ? '#D97706' : 'var(--text)' }}>
+                      {days != null ? `${days}일` : '—'}
+                      {hasHistoryData && hist && <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 400 }}>n={hist.sampleCount}</div>}
+                    </td>
+                    <td style={{ padding: '9px 14px' }}>
+                      <div style={{ height: 8, background: '#EEE', borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', background: c.bg, width: `${pct}%`, borderRadius: 4, transition: 'width .3s' }} />
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

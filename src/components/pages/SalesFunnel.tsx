@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { STAGE_ORDER, STAGE_COLORS, priorityColor } from '../../lib/utils'
+import { logStageChange } from '../../lib/stageHistory'
 import type { SalesLead, SalesProposal } from '../../types/database'
 import { loadSalesSettings } from '../../lib/settings'
 import LeadDetailPanel from './LeadDetailPanel'
@@ -74,8 +75,12 @@ export default function SalesFunnel() {
   }
 
   async function moveStage(leadId: string, stage: string) {
+    const prev = leads.find(l => l.id === leadId)?.current_stage || null
     const { error } = await supabase.from('sales_leads').update({ current_stage: stage }).eq('id', leadId)
-    if (!error) setLeads(prev => prev.map(l => l.id === leadId ? { ...l, current_stage: stage } : l))
+    if (!error) {
+      setLeads(p => p.map(l => l.id === leadId ? { ...l, current_stage: stage } : l))
+      logStageChange(leadId, prev, stage)
+    }
   }
 
   async function updatePropField(propId: string, field: string, value: string) {

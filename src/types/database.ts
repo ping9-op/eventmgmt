@@ -170,6 +170,18 @@ export type Database = {
         Update: { key?: string; value?: Json; updated_at?: string }
         Relationships: []
       }
+      sales_stage_history: {
+        Row: {
+          id: string; lead_id: string; from_stage: string | null
+          to_stage: string; changed_at: string; changed_by: string | null
+        }
+        Insert: {
+          lead_id: string; from_stage?: string | null
+          to_stage: string; changed_by?: string | null
+        }
+        Update: never
+        Relationships: []
+      }
       sales_proposals: {
         Row: {
           id: string; lead_id: string; proposal_sent_date: string | null
