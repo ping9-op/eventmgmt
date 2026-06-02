@@ -331,8 +331,22 @@ export default function Proposal() {
         body: JSON.stringify({ prompt: userMsg }),
       })
       if (!res.ok) {
-        const txt = await res.text()
-        throw new Error(`API ${res.status}: ${txt}`)
+        let errMsg = ''
+        try { const j = await res.json(); errMsg = j.error || '' } catch { errMsg = await res.text() }
+        if (res.status === 500 && errMsg.includes('ANTHROPIC_API_KEY not configured')) {
+          setAiOutput(
+            '🔑 AI 기능을 사용하려면 Anthropic API 키 설정이 필요합니다.\n\n' +
+            '설정 방법:\n' +
+            '1. https://console.anthropic.com 에서 API 키 발급\n' +
+            '2. Supabase Dashboard → Project Settings → Edge Functions → Secrets\n' +
+            '   Name: ANTHROPIC_API_KEY  /  Value: sk-ant-...\n\n' +
+            '⚡ API 키 없이도 나머지 모든 기능은 정상 사용 가능합니다.\n' +
+            '   변동 사유는 아래 메모 칸에 직접 입력하거나, 키 등록 후 이용하세요.'
+          )
+          setAiLoading(false)
+          return
+        }
+        throw new Error(`API ${res.status}: ${errMsg}`)
       }
       const reader = res.body!.getReader()
       const decoder = new TextDecoder()
