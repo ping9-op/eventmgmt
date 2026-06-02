@@ -18,6 +18,26 @@ const TASK_TYPE_MAP: Record<string, string> = {
 }
 function taskTypeEn(type: string): string { return TASK_TYPE_MAP[type] || type }
 
+const ACTIVITY_ICONS: Record<string, { icon: string; color: string }> = {
+  Email: { icon: '📧', color: '#4F46E5' },
+  Call:  { icon: '📞', color: '#059669' },
+  SMS:   { icon: '💬', color: '#0EA5E9' },
+  Kakao: { icon: '💛', color: '#F59E0B' },
+  KakaoTalk: { icon: '💛', color: '#F59E0B' },
+  Visit: { icon: '🤝', color: '#7C3AED' },
+  Meeting: { icon: '🗓', color: '#DC2626' },
+  'Send Proposal': { icon: '📄', color: '#B5363A' },
+  'Request Docs': { icon: '📋', color: '#6B7280' },
+}
+
+const RESULT_COLORS: Record<string, string> = {
+  Interested: '#059669',
+  'No Response': '#9CA3AF',
+  'Not Interested': '#DC2626',
+  'Requested Info': '#D97706',
+  'Scheduled Meeting': '#7C3AED',
+}
+
 type TabId = 'basic' | 'funnel' | 'activity' | 'proposal'
 
 export default function LeadDetailPanel({
@@ -41,6 +61,7 @@ export default function LeadDetailPanel({
   const [showActForm, setShowActForm] = useState(false)
   const [actType, setActType] = useState('Email')
   const [actResult, setActResult] = useState('Interested')
+  const [actDate, setActDate] = useState(new Date().toISOString().split('T')[0])
   const [actNote, setActNote] = useState('')
 
   // Lead edit state
@@ -77,57 +98,64 @@ export default function LeadDetailPanel({
     if (!lead || !form) return
     setSaving(true)
     try {
-    const updates: Partial<SalesLead> = {
-      company_name: form.company_name || lead.company_name,
-      contact_person: form.contact_person || lead.contact_person,
-      phone: form.phone,
-      email: form.email,
-      lead_source: form.lead_source || lead.lead_source,
-      event_name: form.event_name || lead.event_name,
-      owner: form.owner || lead.owner,
-      priority: form.priority || lead.priority,
-      country_corridor: form.country_corridor || lead.country_corridor,
-      business_type: form.business_type || lead.business_type,
-      expected_monthly_volume: form.expected_monthly_volume,
-      volume_currency: form.volume_currency || lead.volume_currency,
-      address: form.address,
-      remarks: form.remarks,
-      current_stage: form.current_stage || lead.current_stage,
-      first_contact_done: form.first_contact_done,
-      last_contact_date: form.last_contact_date,
-      next_follow_up_date: form.next_follow_up_date,
-      next_action: form.next_action,
-      lost_reason: form.lost_reason,
-    }
-    const { error: leadErr } = await supabase.from('sales_leads').update(updates as never).eq('id', leadId)
-    if (leadErr) throw leadErr
+      const newStage = form.current_stage || lead.current_stage
+      const stageChanged = newStage !== lead.current_stage
 
-    // Save proposal
-    if (propForm.proposal_sent_date !== undefined || propForm.contract_status !== undefined) {
-      const propData = {
-        lead_id: leadId,
-        proposal_sent_date: propForm.proposal_sent_date || null,
-        proposed_fee_rate: propForm.proposed_fee_rate || null,
-        expected_monthly_volume: propForm.expected_monthly_volume || null,
-        volume_currency: propForm.volume_currency || 'USD',
-        contract_status: propForm.contract_status || 'Not Sent',
-        onboarding_status: propForm.onboarding_status || 'Not Started',
-        remarks: propForm.remarks || null,
+      const updates: Partial<SalesLead> = {
+        company_name: form.company_name || lead.company_name,
+        contact_person: form.contact_person || lead.contact_person,
+        phone: form.phone,
+        email: form.email,
+        lead_source: form.lead_source || lead.lead_source,
+        event_name: form.event_name || lead.event_name,
+        owner: form.owner || lead.owner,
+        priority: form.priority || lead.priority,
+        country_corridor: form.country_corridor || lead.country_corridor,
+        business_type: form.business_type || lead.business_type,
+        expected_monthly_volume: form.expected_monthly_volume,
+        volume_currency: form.volume_currency || lead.volume_currency,
+        address: form.address,
+        remarks: form.remarks,
+        current_stage: newStage,
+        first_contact_done: form.first_contact_done,
+        last_contact_date: form.last_contact_date,
+        next_follow_up_date: form.next_follow_up_date,
+        next_action: form.next_action,
+        lost_reason: form.lost_reason,
       }
-      if (proposal) {
-        const { error: propErr } = await supabase.from('sales_proposals').update(propData).eq('id', proposal.id)
-        if (propErr) throw propErr
-      } else {
-        const { error: propErr } = await supabase.from('sales_proposals').insert(propData)
-        if (propErr) throw propErr
-      }
-    }
+      const { error: leadErr } = await supabase.from('sales_leads').update(updates as never).eq('id', leadId)
+      if (leadErr) throw leadErr
 
-    showToast(t('saved_ok'))
-    onRefresh()
-    // Refresh lead data
-    const { data } = await supabase.from('sales_leads').select('*').eq('id', leadId).single()
-    if (data) { setLead(data as SalesLead); setForm(data as SalesLead) }
+      // 스테이지 변경 시 이력 기록
+      if (stageChanged) {
+        logStageChange(leadId, lead.current_stage, newStage, form.owner || lead.owner || undefined)
+      }
+
+      // Save proposal
+      if (propForm.proposal_sent_date !== undefined || propForm.contract_status !== undefined) {
+        const propData = {
+          lead_id: leadId,
+          proposal_sent_date: propForm.proposal_sent_date || null,
+          proposed_fee_rate: propForm.proposed_fee_rate || null,
+          expected_monthly_volume: propForm.expected_monthly_volume || null,
+          volume_currency: propForm.volume_currency || 'USD',
+          contract_status: propForm.contract_status || 'Not Sent',
+          onboarding_status: propForm.onboarding_status || 'Not Started',
+          remarks: propForm.remarks || null,
+        }
+        if (proposal) {
+          const { error: propErr } = await supabase.from('sales_proposals').update(propData).eq('id', proposal.id)
+          if (propErr) throw propErr
+        } else {
+          const { error: propErr } = await supabase.from('sales_proposals').insert(propData)
+          if (propErr) throw propErr
+        }
+      }
+
+      showToast(t('saved_ok'))
+      onRefresh()
+      const { data } = await supabase.from('sales_leads').select('*').eq('id', leadId).single()
+      if (data) { setLead(data as SalesLead); setForm(data as SalesLead) }
     } catch (err: any) {
       showToast('⚠️ 저장 실패: ' + (err?.message || '알 수 없는 오류'))
     } finally {
@@ -140,13 +168,12 @@ export default function LeadDetailPanel({
       lead_id: leadId,
       activity_type: actType,
       activity_result: actResult,
-      activity_date: new Date().toISOString().split('T')[0],
+      activity_date: actDate,
       note: actNote,
       created_by: form.owner || lead?.owner || '',
     })
     if (error) { showToast('⚠️ Activity 저장 실패: ' + error.message); return }
-    setActNote(''); setShowActForm(false)
-    // activities + tasks 동시 갱신 (task 상태가 activity 추가 후 바뀔 수 있으므로)
+    setActNote(''); setShowActForm(false); setActDate(new Date().toISOString().split('T')[0])
     const [{ data: aData }, { data: tData }] = await Promise.all([
       supabase.from('sales_activities').select('*').eq('lead_id', leadId).order('activity_date', { ascending: false }),
       supabase.from('sales_tasks').select('*').eq('lead_id', leadId).order('due_date'),
@@ -154,6 +181,12 @@ export default function LeadDetailPanel({
     setActivities((aData || []) as SalesActivity[])
     setTasks((tData || []) as SalesTask[])
     onRefresh()
+  }
+
+  async function deleteActivity(actId: string) {
+    const { error } = await supabase.from('sales_activities').delete().eq('id', actId)
+    if (error) { showToast('⚠️ 삭제 실패: ' + error.message); return }
+    setActivities(prev => prev.filter(a => a.id !== actId))
   }
 
   async function markTaskDone(taskId: string) {
@@ -167,7 +200,9 @@ export default function LeadDetailPanel({
     const prev = lead?.current_stage || null
     setForm(f => ({ ...f, current_stage: stage }))
     await supabase.from('sales_leads').update({ current_stage: stage }).eq('id', leadId)
-    logStageChange(leadId, prev, stage)
+    logStageChange(leadId, prev, stage, lead?.owner || undefined)
+    const { data } = await supabase.from('sales_leads').select('*').eq('id', leadId).single()
+    if (data) { setLead(data as SalesLead); setForm(data as SalesLead) }
     onRefresh()
   }
 
@@ -176,7 +211,7 @@ export default function LeadDetailPanel({
   const tabs: { id: TabId; label: string }[] = [
     { id: 'basic', label: '📋 기본 정보' },
     { id: 'funnel', label: '🔀 Funnel / Stage' },
-    { id: 'activity', label: '📝 Activity' },
+    { id: 'activity', label: `📝 Activity ${activities.length > 0 ? `(${activities.length})` : ''}` },
     { id: 'proposal', label: '📄 Proposal/Contract' },
   ]
 
@@ -184,21 +219,19 @@ export default function LeadDetailPanel({
 
   return (
     <>
-      {/* Overlay backdrop */}
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 9999, display: 'flex', justifyContent: 'flex-end' }}
         onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-        {/* Panel */}
         <div style={{ width: 700, background: 'white', height: '100%', display: 'flex', flexDirection: 'column', boxShadow: '-6px 0 30px rgba(0,0,0,.2)', overflow: 'hidden' }}
           onClick={e => e.stopPropagation()}>
 
           {/* Header */}
           <div style={{ background: 'var(--sb)', padding: '16px 22px', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
-            <div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'white' }}>{lead.company_name}</div>
-              <div style={{ fontSize: 12, color: '#B0A0A0' }}>{lead.contact_person} · {lead.event_name}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.company_name}</div>
+              <div style={{ fontSize: 12, color: '#B0A0A0' }}>{lead.contact_person} · {lead.event_name.replace(/ 20\d\d$/, '')}</div>
             </div>
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-              <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, color: 'white', background: stageBg }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+              <span style={{ display: 'inline-block', padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 700, color: 'white', background: stageBg }}>
                 {form.current_stage || lead.current_stage}
               </span>
               <button onClick={save} disabled={saving}
@@ -215,16 +248,11 @@ export default function LeadDetailPanel({
           {/* Tabs */}
           <div style={{ display: 'flex', background: '#F5F0F0', borderBottom: '1px solid var(--border2)', flexShrink: 0 }}>
             {tabs.map(tb => (
-              <div key={tb.id}
-                onClick={() => setTab(tb.id)}
-                style={{
-                  padding: '11px 18px', fontSize: 13,
-                  fontWeight: tab === tb.id ? 700 : 500,
-                  cursor: 'pointer',
+              <div key={tb.id} onClick={() => setTab(tb.id)}
+                style={{ padding: '11px 16px', fontSize: 12, fontWeight: tab === tb.id ? 700 : 500, cursor: 'pointer',
                   color: tab === tb.id ? 'var(--accent)' : 'var(--muted)',
                   borderBottom: tab === tb.id ? '3px solid var(--accent)' : '3px solid transparent',
-                  whiteSpace: 'nowrap', transition: 'all .15s',
-                }}>
+                  whiteSpace: 'nowrap', transition: 'all .15s' }}>
                 {tb.label}
               </div>
             ))}
@@ -281,15 +309,15 @@ export default function LeadDetailPanel({
                 </Field>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 5 }}>Expected Volume (Monthly)</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center' }}>
-                    <input type="number" value={form.expected_monthly_volume || 0} onChange={e => setForm(f => ({ ...f, expected_monthly_volume: parseInt(e.target.value) || 0 }))} placeholder="예상 월 거래금액" />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8 }}>
+                    <input type="number" value={form.expected_monthly_volume || 0} onChange={e => setForm(f => ({ ...f, expected_monthly_volume: parseInt(e.target.value) || 0 }))} />
                     <select value={form.volume_currency || 'USD'} onChange={e => setForm(f => ({ ...f, volume_currency: e.target.value }))} style={{ minWidth: 80 }}>
                       <option>USD</option><option>KRW</option>
                     </select>
                   </div>
                 </div>
                 <Field label="Address">
-                  <input value={form.address || ''} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="주소" />
+                  <input value={form.address || ''} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} />
                 </Field>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 5 }}>Remarks</div>
@@ -300,65 +328,78 @@ export default function LeadDetailPanel({
 
             {/* Funnel / Stage */}
             {tab === 'funnel' && (
-              <div style={{ padding: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                <Field label="Current Stage">
-                  <select value={form.current_stage || lead.current_stage} onChange={e => setForm(f => ({ ...f, current_stage: e.target.value }))}>
-                    {STAGE_ORDER.map(s => <option key={s}>{s}</option>)}
-                  </select>
-                </Field>
-                <Field label="First Contact Done">
-                  <select value={String(form.first_contact_done ?? lead.first_contact_done)} onChange={e => setForm(f => ({ ...f, first_contact_done: e.target.value === 'true' }))}>
-                    <option value="true">✅ Yes</option>
-                    <option value="false">❌ No</option>
-                  </select>
-                </Field>
-                <Field label="Last Contact Date">
-                  <input type="date" value={form.last_contact_date || ''} onChange={e => setForm(f => ({ ...f, last_contact_date: e.target.value }))} />
-                </Field>
-                <Field label="Next Follow-up Date">
-                  <input type="date" value={form.next_follow_up_date || ''} onChange={e => setForm(f => ({ ...f, next_follow_up_date: e.target.value }))} />
-                </Field>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <Field label="Next Action">
-                    <input value={form.next_action || ''} onChange={e => setForm(f => ({ ...f, next_action: e.target.value }))} placeholder="다음 액션" />
-                  </Field>
+              <div style={{ padding: 20 }}>
+                {/* 스테이지 빠른 변경 버튼 */}
+                <div style={{ marginBottom: 18 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 8 }}>빠른 스테이지 변경 (즉시 저장됨)</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                    {STAGE_ORDER.map(s => {
+                      const c = STAGE_COLORS[s] || { bg: '#6B7280' }
+                      const isActive = (form.current_stage || lead.current_stage) === s
+                      return (
+                        <button key={s} onClick={() => !isActive && updateStageInline(s)}
+                          style={{ padding: '6px 14px', borderRadius: 99, fontSize: 11, fontWeight: 700, cursor: isActive ? 'default' : 'pointer', transition: 'all .15s',
+                            background: isActive ? c.bg : 'white', color: isActive ? 'white' : c.bg,
+                            border: `2px solid ${c.bg}`, opacity: isActive ? 1 : 0.7 }}>
+                          {isActive && '✓ '}{s}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
-                {(form.current_stage || lead.current_stage) === 'Lost' && (
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                  <Field label="First Contact Done">
+                    <select value={String(form.first_contact_done ?? lead.first_contact_done)} onChange={e => setForm(f => ({ ...f, first_contact_done: e.target.value === 'true' }))}>
+                      <option value="true">✅ Yes</option>
+                      <option value="false">❌ No</option>
+                    </select>
+                  </Field>
+                  <Field label="Last Contact Date">
+                    <input type="date" value={form.last_contact_date || ''} onChange={e => setForm(f => ({ ...f, last_contact_date: e.target.value }))} />
+                  </Field>
+                  <Field label="Next Follow-up Date">
+                    <input type="date" value={form.next_follow_up_date || ''} onChange={e => setForm(f => ({ ...f, next_follow_up_date: e.target.value }))} />
+                  </Field>
                   <div style={{ gridColumn: '1 / -1' }}>
-                    <Field label="Lost Reason">
-                      <select value={form.lost_reason || ''} onChange={e => setForm(f => ({ ...f, lost_reason: e.target.value }))}>
-                        {(settings?.lost_reasons || ['No Demand', 'Price Issue', 'Competitor Already Used', 'No Response', 'Other']).map(r => <option key={r}>{r}</option>)}
-                      </select>
+                    <Field label="Next Action">
+                      <input value={form.next_action || ''} onChange={e => setForm(f => ({ ...f, next_action: e.target.value }))} placeholder="다음 액션" />
                     </Field>
                   </div>
-                )}
-                {proposal && <>
-                  <Field label="Contract Status">
-                    <select value={propForm.contract_status || proposal.contract_status} onChange={e => setPropForm(f => ({ ...f, contract_status: e.target.value }))}>
-                      {CONTRACT_STATUSES.map(s => <option key={s}>{s}</option>)}
-                    </select>
-                  </Field>
-                  <Field label="Onboarding Status">
-                    <select value={propForm.onboarding_status || proposal.onboarding_status} onChange={e => setPropForm(f => ({ ...f, onboarding_status: e.target.value }))}>
-                      {ONBOARD_STATUSES.map(s => <option key={s}>{s}</option>)}
-                    </select>
-                  </Field>
-                  <Field label="Proposed Fee Rate">
-                    <input value={propForm.proposed_fee_rate ?? (proposal.proposed_fee_rate || '')} onChange={e => setPropForm(f => ({ ...f, proposed_fee_rate: parseFloat(e.target.value) || null }))} placeholder="e.g. 0.8" />
-                  </Field>
-                  <Field label="Proposal Sent Date">
-                    <input type="date" value={propForm.proposal_sent_date || proposal.proposal_sent_date || ''} onChange={e => setPropForm(f => ({ ...f, proposal_sent_date: e.target.value }))} />
-                  </Field>
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 5 }}>Contract Remarks</div>
-                    <textarea value={propForm.remarks || proposal.remarks || ''} rows={2} onChange={e => setPropForm(f => ({ ...f, remarks: e.target.value }))} style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }} />
-                  </div>
-                </>}
-                {!proposal && (
-                  <div style={{ gridColumn: '1 / -1', color: 'var(--muted)', fontSize: 13, padding: 10 }}>
-                    아직 Proposal이 없습니다. Proposal Sent 단계로 변경 후 정보를 입력하세요.
-                  </div>
-                )}
+                  {(form.current_stage || lead.current_stage) === 'Lost' && (
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <Field label="Lost Reason">
+                        <select value={form.lost_reason || ''} onChange={e => setForm(f => ({ ...f, lost_reason: e.target.value }))}>
+                          <option value="">-- 선택 --</option>
+                          {(settings?.lost_reasons || ['No Demand', 'Price Issue', 'Competitor Already Used', 'No Response', 'Other']).map(r => <option key={r}>{r}</option>)}
+                        </select>
+                      </Field>
+                    </div>
+                  )}
+                  {proposal && <>
+                    <Field label="Contract Status">
+                      <select value={propForm.contract_status || proposal.contract_status} onChange={e => setPropForm(f => ({ ...f, contract_status: e.target.value }))}>
+                        {CONTRACT_STATUSES.map(s => <option key={s}>{s}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Onboarding Status">
+                      <select value={propForm.onboarding_status || proposal.onboarding_status} onChange={e => setPropForm(f => ({ ...f, onboarding_status: e.target.value }))}>
+                        {ONBOARD_STATUSES.map(s => <option key={s}>{s}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Proposed Fee Rate">
+                      <input value={propForm.proposed_fee_rate ?? (proposal.proposed_fee_rate || '')} onChange={e => setPropForm(f => ({ ...f, proposed_fee_rate: parseFloat(e.target.value) || null }))} placeholder="e.g. 0.8" />
+                    </Field>
+                    <Field label="Proposal Sent Date">
+                      <input type="date" value={propForm.proposal_sent_date || proposal.proposal_sent_date || ''} onChange={e => setPropForm(f => ({ ...f, proposal_sent_date: e.target.value }))} />
+                    </Field>
+                  </>}
+                  {!proposal && (
+                    <div style={{ gridColumn: '1 / -1', color: 'var(--muted)', fontSize: 13, padding: '10px 0' }}>
+                      아직 Proposal이 없습니다. Proposal Sent 단계로 변경 후 정보를 입력하세요.
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -366,16 +407,19 @@ export default function LeadDetailPanel({
             {tab === 'activity' && (
               <div style={{ padding: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700 }}>Activity Timeline</div>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>
+                    Activity Timeline
+                    <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--muted)', marginLeft: 8 }}>({activities.length}건)</span>
+                  </div>
                   <button onClick={() => setShowActForm(v => !v)}
-                    style={{ padding: '5px 12px', borderRadius: 6, background: 'var(--accent)', color: 'white', border: 'none', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
-                    + Activity
+                    style={{ padding: '6px 14px', borderRadius: 7, background: 'var(--accent)', color: 'white', border: 'none', fontSize: 12, cursor: 'pointer', fontWeight: 700 }}>
+                    {showActForm ? '접기 ▲' : '+ Activity 추가'}
                   </button>
                 </div>
 
                 {showActForm && (
-                  <div style={{ background: '#F9F5F5', border: '1px solid var(--border2)', borderRadius: 10, padding: 14, marginBottom: 16 }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                  <div style={{ background: '#F9F5F5', border: '1.5px solid var(--border2)', borderRadius: 10, padding: 16, marginBottom: 16 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
                       <div>
                         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>{t('type_lbl')}</div>
                         <select value={actType} onChange={e => setActType(e.target.value)}>
@@ -388,53 +432,114 @@ export default function LeadDetailPanel({
                           {ACTIVITY_RESULTS.map(r => <option key={r}>{r}</option>)}
                         </select>
                       </div>
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>날짜</div>
+                        <input type="date" value={actDate} onChange={e => setActDate(e.target.value)} />
+                      </div>
                     </div>
                     <div style={{ marginBottom: 10 }}>
                       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>{t('task_note_lbl')}</div>
-                      <textarea value={actNote} rows={2} onChange={e => setActNote(e.target.value)} style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+                      <textarea value={actNote} rows={2} onChange={e => setActNote(e.target.value)}
+                        placeholder="통화 내용, 미팅 결과, 이메일 내용 등 기록..."
+                        style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }} />
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={addActivity} style={{ padding: '6px 14px', borderRadius: 6, background: 'var(--accent)', color: 'white', border: 'none', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>{t('save')}</button>
-                      <button onClick={() => setShowActForm(false)} style={{ padding: '6px 14px', borderRadius: 6, background: 'white', color: 'var(--muted)', border: '1px solid var(--border2)', fontSize: 12, cursor: 'pointer' }}>{t('cancel')}</button>
+                      <button onClick={addActivity} style={{ padding: '7px 16px', borderRadius: 7, background: 'var(--accent)', color: 'white', border: 'none', fontSize: 12, cursor: 'pointer', fontWeight: 700 }}>{t('save')}</button>
+                      <button onClick={() => setShowActForm(false)} style={{ padding: '7px 14px', borderRadius: 7, background: 'white', color: 'var(--muted)', border: '1px solid var(--border2)', fontSize: 12, cursor: 'pointer' }}>{t('cancel')}</button>
                     </div>
                   </div>
                 )}
 
-                {activities.length === 0 && !showActForm && <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: 30 }}>{t('no_activities')}</div>}
+                {activities.length === 0 && !showActForm && (
+                  <div style={{ textAlign: 'center', padding: 40, color: 'var(--muted)' }}>
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>📝</div>
+                    <div style={{ fontSize: 13 }}>{t('no_activities')}</div>
+                    <button onClick={() => setShowActForm(true)} style={{ marginTop: 14, padding: '7px 18px', borderRadius: 7, background: 'var(--accent)', color: 'white', border: 'none', fontSize: 12, cursor: 'pointer', fontWeight: 700 }}>
+                      첫 번째 Activity 기록하기
+                    </button>
+                  </div>
+                )}
 
+                {/* Activity Timeline */}
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  {activities.map((a, i) => (
-                    <div key={a.id} style={{ display: 'flex', gap: 14 }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-                        <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'var(--accent)', marginTop: 4, flexShrink: 0 }} />
-                        {i < activities.length - 1 && <div style={{ width: 2, flex: 1, background: 'var(--border2)', margin: '4px 0' }} />}
+                  {activities.map((a, i) => {
+                    const typeInfo = ACTIVITY_ICONS[a.activity_type] || { icon: '📌', color: '#6B7280' }
+                    const resultColor = RESULT_COLORS[a.activity_result || ''] || '#6B7280'
+                    return (
+                      <div key={a.id} style={{ display: 'flex', gap: 14 }}>
+                        {/* Timeline 라인 */}
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+                          <div style={{ width: 36, height: 36, borderRadius: '50%', background: typeInfo.color + '18',
+                            border: `2px solid ${typeInfo.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 16, marginTop: 2, flexShrink: 0 }}>
+                            {typeInfo.icon}
+                          </div>
+                          {i < activities.length - 1 && (
+                            <div style={{ width: 2, flex: 1, background: 'var(--border2)', margin: '6px 0', minHeight: 12 }} />
+                          )}
+                        </div>
+
+                        {/* 내용 */}
+                        <div style={{ flex: 1, paddingBottom: 16 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: typeInfo.color }}>{a.activity_type}</span>
+                            {a.activity_result && (
+                              <span style={{ fontSize: 11, fontWeight: 700, color: 'white', background: resultColor, padding: '2px 8px', borderRadius: 99 }}>
+                                {a.activity_result}
+                              </span>
+                            )}
+                            <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 'auto' }}>{a.activity_date} · {a.created_by}</span>
+                            <button onClick={() => deleteActivity(a.id)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ccc', fontSize: 14, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}
+                              onMouseOver={e => (e.currentTarget as HTMLButtonElement).style.color = '#DC2626'}
+                              onMouseOut={e => (e.currentTarget as HTMLButtonElement).style.color = '#ccc'}
+                              title="Activity 삭제">✕</button>
+                          </div>
+                          {a.note && (
+                            <div style={{ fontSize: 12, color: 'var(--text)', lineHeight: 1.6, background: '#FAFAFA', borderRadius: 7, padding: '8px 10px', whiteSpace: 'pre-wrap' }}>
+                              {a.note}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div style={{ flex: 1, paddingBottom: 14 }}>
-                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>{a.activity_date} · by {a.created_by}</div>
-                        <div style={{ fontSize: 13, fontWeight: 600, margin: '2px 0' }}>{a.activity_type} — {a.activity_result}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text)' }}>{a.note}</div>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
 
                 {/* Tasks */}
-                <div style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Follow-up Tasks</div>
-                  {tasks.length === 0 && <div style={{ color: 'var(--muted)', fontSize: 13 }}>{t('no_tasks_panel')}</div>}
-                  {tasks.map(tk => (
-                    <div key={tk.id} style={{ background: 'var(--light)', borderRadius: 8, padding: '10px 14px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 600 }}>{tk.task_title}</div>
-                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>{lang === 'en' ? taskTypeEn(tk.task_type) : tk.task_type} · {tk.due_date} · {tk.owner}</div>
-                      </div>
-                      {tk.status !== 'Done'
-                        ? <button onClick={() => markTaskDone(tk.id)} style={{ padding: '4px 10px', borderRadius: 6, background: '#059669', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer' }}>{t('mark_done')}</button>
-                        : <span style={{ color: '#059669', fontWeight: 600, fontSize: 12 }}>✅ Done</span>
-                      }
+                {tasks.length > 0 && (
+                  <div style={{ marginTop: 8, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: 'var(--text)' }}>
+                      Follow-up Tasks
+                      <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--muted)', marginLeft: 6 }}>({tasks.filter(t => t.status !== 'Done').length}건 미완료)</span>
                     </div>
-                  ))}
-                </div>
+                    {tasks.map(tk => {
+                      const today = new Date().toISOString().split('T')[0]
+                      const isOverdue = tk.status !== 'Done' && tk.due_date < today
+                      const isDone = tk.status === 'Done'
+                      return (
+                        <div key={tk.id} style={{ background: isDone ? '#F0FFF4' : isOverdue ? '#FEF2F2' : 'var(--light)',
+                          borderRadius: 8, padding: '10px 14px', marginBottom: 8,
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          border: `1px solid ${isDone ? '#A7F3D0' : isOverdue ? '#FECACA' : 'var(--border)'}` }}>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: isOverdue ? '#DC2626' : 'var(--text)', textDecoration: isDone ? 'line-through' : 'none' }}>
+                              {tk.task_title}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                              {lang === 'en' ? taskTypeEn(tk.task_type) : tk.task_type} · {tk.due_date}
+                              {isOverdue && <span style={{ color: '#DC2626', fontWeight: 700, marginLeft: 6 }}>🔴 기한 초과</span>}
+                            </div>
+                          </div>
+                          {isDone
+                            ? <span style={{ color: '#059669', fontWeight: 700, fontSize: 12 }}>✅ Done</span>
+                            : <button onClick={() => markTaskDone(tk.id)} style={{ padding: '4px 12px', borderRadius: 6, background: '#059669', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 700 }}>완료</button>
+                          }
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
@@ -444,7 +549,7 @@ export default function LeadDetailPanel({
                 <Field label="Proposal Sent Date">
                   <input type="date" value={propForm.proposal_sent_date || proposal?.proposal_sent_date || ''} onChange={e => setPropForm(f => ({ ...f, proposal_sent_date: e.target.value }))} />
                 </Field>
-                <Field label="Proposed Fee Rate">
+                <Field label="Proposed Fee Rate (%)">
                   <input value={String(propForm.proposed_fee_rate ?? (proposal?.proposed_fee_rate || ''))} onChange={e => setPropForm(f => ({ ...f, proposed_fee_rate: parseFloat(e.target.value) || null }))} placeholder="e.g. 0.8" />
                 </Field>
                 <Field label="Contract Status">
@@ -470,6 +575,11 @@ export default function LeadDetailPanel({
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 5 }}>Remarks</div>
                   <textarea value={propForm.remarks || proposal?.remarks || ''} rows={3} onChange={e => setPropForm(f => ({ ...f, remarks: e.target.value }))} style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }} />
                 </div>
+                {!proposal && (
+                  <div style={{ gridColumn: '1 / -1', padding: 16, background: '#FFF8F0', borderRadius: 8, border: '1px solid #FDE68A', color: '#D97706', fontSize: 13 }}>
+                    💡 아직 Proposal 정보가 없습니다. 위 내용을 입력하고 헤더의 💾 저장 버튼을 눌러 등록하세요.
+                  </div>
+                )}
               </div>
             )}
           </div>
