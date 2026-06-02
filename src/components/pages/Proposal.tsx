@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { krw, exhColor, formatEventDate, exhDisplayName } from '../../lib/utils'
-import { extractTextFromPdf, parseProposalText } from '../../lib/pdfParser'
+import { extractTextFromPdf, extractTextFromDocx, parseProposalText } from '../../lib/pdfParser'
 import type { Exhibition, Proposal as ProposalType, BudgetItem, ProductTarget } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
@@ -260,6 +260,9 @@ export default function Proposal() {
     setParseResult(null)
 
     const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+    const isDocx = file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      || file.name.toLowerCase().endsWith('.docx')
+      || file.name.toLowerCase().endsWith('.doc')
     const isImage = file.type.startsWith('image/')
 
     try {
@@ -267,7 +270,7 @@ export default function Proposal() {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
       const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
-      if (isPdf || isImage) {
+      if (isPdf || isImage || isDocx) {
         const fileBase64 = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader()
           reader.onload = () => resolve((reader.result as string).split(',')[1])
@@ -304,30 +307,46 @@ export default function Proposal() {
       }
 
       // ── 2차: 클라이언트 사이드 텍스트 추출 (API 키 없을 때 폴백) ──
+      const extractAndParse = async (text: string) => {
+        if (text.trim().length < 20) throw new Error('텍스트를 추출할 수 없습니다')
+        return parseProposalText(text)
+      }
+
       if (isPdf) {
         try {
           const text = await extractTextFromPdf(file)
-          if (text.trim().length < 20) throw new Error('텍스트를 추출할 수 없습니다 (스캔 이미지 PDF일 수 있음)')
-          const parsed = parseProposalText(text)
+          const parsed = await extractAndParse(text)
           setParseResult({ ...parsed, _error: undefined })
-        } catch (pdfErr) {
+        } catch (err) {
           setParseResult({
             exhName: '', year: new Date().getFullYear() + 1,
             venue: '', eventStart: '', eventEnd: '', dateOfEvent: '', objective: '', budget: [],
-            _error: `PDF 텍스트 추출 실패: ${pdfErr instanceof Error ? pdfErr.message : String(pdfErr)}\n스캔된 PDF의 경우 JPG/PNG로 변환 후 업로드하거나 직접 입력하세요.`,
+            _error: `PDF 텍스트 추출 실패: ${err instanceof Error ? err.message : String(err)}\n스캔된 PDF의 경우 이미지(JPG/PNG)로 변환 후 업로드하거나 직접 입력하세요.`,
+          })
+        }
+      } else if (isDocx) {
+        try {
+          const text = await extractTextFromDocx(file)
+          const parsed = await extractAndParse(text)
+          setParseResult({ ...parsed, _error: undefined })
+        } catch (err) {
+          setParseResult({
+            exhName: '', year: new Date().getFullYear() + 1,
+            venue: '', eventStart: '', eventEnd: '', dateOfEvent: '', objective: '', budget: [],
+            _error: `Word 파일 파싱 실패: ${err instanceof Error ? err.message : String(err)}\n직접 입력을 사용해주세요.`,
           })
         }
       } else if (isImage) {
         setParseResult({
           exhName: '', year: new Date().getFullYear() + 1,
           venue: '', eventStart: '', eventEnd: '', dateOfEvent: '', objective: '', budget: [],
-          _error: 'AI API 키가 없어 이미지를 분석할 수 없습니다. PDF 파일로 업로드하거나 직접 입력하세요.',
+          _error: 'AI API 키가 없어 이미지를 분석할 수 없습니다. PDF 또는 Word 파일로 업로드하거나 직접 입력하세요.',
         })
       } else {
         setParseResult({
           exhName: '', year: new Date().getFullYear() + 1,
           venue: '', eventStart: '', eventEnd: '', dateOfEvent: '', objective: '', budget: [],
-          _error: 'Word 파일은 지원되지 않습니다. PDF로 변환 후 업로드해주세요.',
+          _error: '지원하지 않는 파일 형식입니다. PDF, Word(.docx), 이미지를 업로드해주세요.',
         })
       }
     } catch (err) {

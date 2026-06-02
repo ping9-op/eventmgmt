@@ -1,5 +1,5 @@
-// 클라이언트 사이드 PDF 텍스트 추출 + 패턴 매칭 파서
-// pdfjs-dist 사용, API 키 불필요
+// 클라이언트 사이드 PDF/Word 텍스트 추출 + 패턴 매칭 파서
+// pdfjs-dist (PDF), mammoth (Word .docx) 사용, API 키 불필요
 
 interface ParsedProposal {
   exhName: string
@@ -21,6 +21,14 @@ const MONTHS_EN: Record<string, number> = {
 const MONTHS_KO: Record<string, number> = {
   '1월': 1, '2월': 2, '3월': 3, '4월': 4, '5월': 5, '6월': 6,
   '7월': 7, '8월': 8, '9월': 9, '10월': 10, '11월': 11, '12월': 12,
+}
+
+// Word(.docx)에서 전체 텍스트 추출
+export async function extractTextFromDocx(file: File): Promise<string> {
+  const mammoth = await import('mammoth')
+  const arrayBuffer = await file.arrayBuffer()
+  const result = await mammoth.extractRawText({ arrayBuffer })
+  return result.value
 }
 
 // PDF에서 전체 텍스트 추출
