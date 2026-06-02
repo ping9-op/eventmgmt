@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { krw, exhColor } from '../../lib/utils'
@@ -6,6 +6,8 @@ import type { Exhibition, Proposal, Result, ActualCost, MarketingActivity } from
 import { useToast } from '../../contexts/ToastContext'
 import pptxgen from 'pptxgenjs'
 import { useLang } from '../../contexts/LangContext'
+
+const PHOTO_BUCKET = 'report-photos'
 
 interface ReportKey { label: string; exhibition_key: string }
 
@@ -50,8 +52,10 @@ export default function Report() {
   const [report, setReport] = useState<Result | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
   // Proposal 데이터 캐시 (exhibition_key → proposal)
   const [propCache, setPropCache] = useState<Record<string, { prop: Proposal; exhName: string }>>({})
+  const photoInputRef = useRef<HTMLInputElement>(null)
 
   async function load() {
     const [{ data: exhData }, { data: propData }, { data: resultData }] = await Promise.all([
@@ -107,6 +111,40 @@ export default function Report() {
     } else {
       setReport(null)
     }
+  }
+
+  async function uploadPhotos(files: File[]) {
+    if (!selected || files.length === 0) return
+    setUploadingPhoto(true)
+    const urls: string[] = []
+    for (const file of files) {
+      const ext = file.name.split('.').pop() || 'jpg'
+      const path = `${selected}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
+      const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(path, file, { upsert: false })
+      if (error) {
+        showToast('⚠️ 사진 업로드 실패: ' + error.message)
+        continue
+      }
+      const { data: urlData } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
+      if (urlData?.publicUrl) urls.push(urlData.publicUrl)
+    }
+    if (urls.length > 0) {
+      updateField('marketing_photos', [...(report?.marketing_photos || []), ...urls])
+    }
+    setUploadingPhoto(false)
+    if (photoInputRef.current) photoInputRef.current.value = ''
+  }
+
+  async function deletePhoto(url: string) {
+    // Storage URL에서 path 추출
+    const marker = `/object/public/${PHOTO_BUCKET}/`
+    const idx = url.indexOf(marker)
+    if (idx >= 0) {
+      const path = url.slice(idx + marker.length)
+      await supabase.storage.from(PHOTO_BUCKET).remove([path])
+    }
+    const arr = (report?.marketing_photos || []).filter(p => p !== url)
+    updateField('marketing_photos', arr)
   }
 
   async function saveReport() {
@@ -562,33 +600,39 @@ export default function Report() {
 
             {/* Photo gallery */}
             <div className="card" style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>
-                {t('photos_title')}
-                <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--muted)', marginLeft: 8 }}>{t('photos_sub')}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>{t('photos_title')}</span>
+                  <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--muted)', marginLeft: 8 }}>{t('photos_sub')}</span>
+                </div>
+                <label style={{ padding: '6px 14px', borderRadius: 7, background: uploadingPhoto ? 'var(--muted)' : 'var(--accent)', color: 'white', fontSize: 12, cursor: uploadingPhoto ? 'default' : 'pointer', fontWeight: 700 }}>
+                  {uploadingPhoto ? '⏳ 업로드 중...' : '📷 사진 추가'}
+                  <input ref={photoInputRef} type="file" accept="image/*" multiple style={{ display: 'none' }} disabled={uploadingPhoto}
+                    onChange={e => uploadPhotos(Array.from(e.target.files || []))} />
+                </label>
               </div>
+              {(r.marketing_photos || []).length === 0 && !uploadingPhoto && (
+                <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--muted)', fontSize: 13 }}>
+                  현장 사진을 업로드하면 PPT에 자동으로 배치됩니다
+                </div>
+              )}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                 {(r.marketing_photos || []).map((photo, i) => (
                   <div key={i} style={{ position: 'relative', width: 160, height: 120, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border2)' }}>
-                    <img src={photo} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
-                    <button onClick={() => { const arr = [...(r.marketing_photos || [])]; arr.splice(i, 1); updateField('marketing_photos', arr) }}
+                    <img src={photo} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={`Photo ${i + 1}`}
+                      onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+                    <button onClick={() => deletePhoto(photo)}
                       style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,.6)', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>✕</button>
+                    <div style={{ position: 'absolute', bottom: 4, left: 4, background: 'rgba(0,0,0,.5)', color: 'white', fontSize: 10, padding: '1px 5px', borderRadius: 3 }}>{i + 1}</div>
                   </div>
                 ))}
-                <label style={{ width: 160, height: 120, border: '2px dashed var(--border2)', borderRadius: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: 'var(--light)', margin: 0 }}>
-                  <span style={{ fontSize: 24, marginBottom: 6 }}>📷</span>
-                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>{t('add_photo')}</span>
-                  <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={e => {
-                    const files = Array.from(e.target.files || [])
-                    files.forEach(file => {
-                      const reader = new FileReader()
-                      reader.onload = ev => {
-                        updateField('marketing_photos', [...(r.marketing_photos || []), ev.target?.result as string])
-                      }
-                      reader.readAsDataURL(file)
-                    })
-                    e.target.value = ''
-                  }} />
-                </label>
+                {uploadingPhoto && (
+                  <div style={{ width: 160, height: 120, borderRadius: 8, border: '2px dashed var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F9F5F5' }}>
+                    <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 12 }}>
+                      <div style={{ fontSize: 20, marginBottom: 4 }}>⏳</div>업로드 중...
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
