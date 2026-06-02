@@ -360,7 +360,23 @@ export default function Proposal() {
     }
   }
 
-  function applyParsedToForm(r: ParsedProposal) {
+  function applyParsedToForm(r: ParsedProposal, targetStep = 1) {
+    // 박람회명으로 기존 박람회 자동 매칭
+    if (r.exhName) {
+      const q = r.exhName.toLowerCase()
+      const matched = exhibitions.find(e =>
+        e.name.toLowerCase().includes(q) || q.includes(e.name.toLowerCase()) ||
+        e.name.toLowerCase().split(' ').some(w => w.length > 3 && q.includes(w))
+      )
+      if (matched) {
+        setExhId(matched.id)
+        setIsNewExh(false)
+      } else {
+        setIsNewExh(true)
+        setNewExhName(r.exhName)
+        setNewExhKey(r.exhName.replace(/[^a-zA-Z]/g, '').substring(0, 10))
+      }
+    }
     setYear(r.year)
     setVenue(r.venue)
     setEventStartDate(r.eventStart)
@@ -370,7 +386,7 @@ export default function Proposal() {
     setBudget(r.budget.map(b => ({ item: b.item, curr: b.amount, prev: 0, note: '', currency: b.currency })))
     setParseResult(null)
     setShowUpload(false)
-    setStep(1)
+    setStep(targetStep)
     window.scrollTo(0, 0)
   }
 
@@ -579,16 +595,17 @@ export default function Proposal() {
                   </tbody>
                 </table>
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => {
-                    applyParsedToForm(parseResult)
-                    showToast('✅ 폼에 내용을 채웠습니다.')
+                  <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => {
+                    applyParsedToForm(parseResult, 1)
+                    showToast('✅ 폼에 내용을 채웠습니다. 각 단계를 검토 후 저장하세요.')
                   }}>
-                    ✏️ 직접 입력 폼에 채우기
+                    ✏️ 폼에서 검토 후 저장
                   </button>
                   <button className="btn btn-green" style={{ flex: 1 }} onClick={() => {
-                    showToast('🚧 준비 중 — 현재는 "직접 입력 폼에 채우기"를 사용하세요.')
+                    applyParsedToForm(parseResult, 4)
+                    showToast('✅ 내용을 불러왔습니다. 아래에서 최종 확인 후 저장하세요.')
                   }}>
-                    🚀 이 내용으로 등록
+                    🚀 바로 저장 단계로
                   </button>
                 </div>
               </div>
