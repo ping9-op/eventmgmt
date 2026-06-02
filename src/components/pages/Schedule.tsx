@@ -142,6 +142,10 @@ export default function Schedule() {
     yearGroups[e.year].push(e)
   }
 
+  // key별 proposal 연도 수 (2개 이상 = 기존, 1개 = 신규)
+  const countByKey: Record<string, number> = {}
+  for (const e of entries) countByKey[e.key] = (countByKey[e.key] || 0) + 1
+
   if (loading) return <div className="view"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
 
   return (
@@ -197,8 +201,8 @@ export default function Schedule() {
                       <td style={{ cursor: 'pointer' }} onClick={() => openEdit(e)}>{formatEventDate(e.date, e.year)}</td>
                       <td style={{ color: 'var(--muted)', fontSize: 13, cursor: 'pointer' }} onClick={() => openEdit(e)}>{e.venue}</td>
                       <td>
-                        <span className="badge" style={{ background: e.recurring ? '#2E7D51' : 'var(--amber)' }}>
-                          {e.recurring ? t('badge_existing') : t('badge_new')}
+                        <span className="badge" style={{ background: (countByKey[e.key] || 1) >= 2 ? '#2E7D51' : 'var(--amber)' }}>
+                          {(countByKey[e.key] || 1) >= 2 ? t('badge_existing') : t('badge_new')}
                         </span>
                       </td>
                       <td>

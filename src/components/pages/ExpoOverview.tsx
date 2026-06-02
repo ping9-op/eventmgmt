@@ -264,7 +264,7 @@ export default function ExpoOverview() {
                   <span className="ec-name" style={{ color: past ? '#5A6878' : 'var(--text)' }}>{exhDisplayName(e.name, e.key)} {e.year}</span>
                   <div className="ec-badges" style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
                     <span className="badge" style={{ background: past ? 'var(--muted)' : 'var(--green)' }}>{past ? t('badge_done') : t('badge_scheduled')}</span>
-                    <span className="badge" style={{ background: e.recurring ? '#2E7D51' : 'var(--amber)' }}>{e.recurring ? t('badge_existing') : t('badge_new')}</span>
+                    <span className="badge" style={{ background: hist.length >= 2 ? '#2E7D51' : 'var(--amber)' }}>{hist.length >= 2 ? t('badge_existing') : t('badge_new')}</span>
                   </div>
                 </div>
                 <div className="ec-meta">📅 {formatEventDate(e.date, e.year)} &nbsp;📍 {e.venue}</div>

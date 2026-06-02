@@ -315,8 +315,8 @@ export default function Exhibitions() {
                     {exhDisplayName(exh.name, exh.key)}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
-                    <span className="badge" style={{ background: exh.recurring ? '#2E7D51' : 'var(--amber)' }}>
-                      {exh.recurring ? t('badge_existing') : t('badge_new')}
+                    <span className="badge" style={{ background: proposals.length >= 2 ? '#2E7D51' : 'var(--amber)' }}>
+                      {proposals.length >= 2 ? t('badge_existing') : t('badge_new')}
                     </span>
                     <button onClick={() => setDeleteConfirm(exh.id)}
                       style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 5, color: 'var(--muted)', cursor: 'pointer', fontSize: 11, padding: '2px 8px' }}>
