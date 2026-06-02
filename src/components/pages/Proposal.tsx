@@ -47,6 +47,7 @@ interface ParsedProposal {
   venue: string; eventStart: string; eventEnd: string; dateOfEvent: string
   objective: string
   budget: { item: string; amount: number; currency: string }[]
+  _error?: string
 }
 
 interface SavedProposal {
@@ -252,28 +253,78 @@ export default function Proposal() {
     reader.readAsArrayBuffer(file)
   }
 
-  function simulateParse(file: File) {
+  async function simulateParse(file: File) {
     setUploadFileName(file.name)
     setParseLoading(true)
     setParseResult(null)
-    setTimeout(() => {
-      setParseResult({
-        exhName: 'Korea International Trade Show (KITS)',
-        year: 2026,
-        venue: 'COEX, Seoul',
-        eventStart: '2026-08-12',
-        eventEnd: '2026-08-15',
-        dateOfEvent: '2026 Aug 12-15',
-        objective: 'Promote GME remittance and BIZ services to Korean-based importers and business owners.',
-        budget: [
-          { item: 'Booth Fee', amount: 5000000, currency: 'KRW' },
-          { item: 'Design', amount: 1200000, currency: 'KRW' },
-          { item: 'Gift', amount: 800000, currency: 'KRW' },
-          { item: 'Part Timer', amount: 600000, currency: 'KRW' },
-        ],
+
+    try {
+      // 파일을 base64로 변환
+      const fileBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => {
+          const dataUrl = reader.result as string
+          // data:application/pdf;base64,XXXX → XXXX 부분만 추출
+          resolve(dataUrl.split(',')[1])
+        }
+        reader.onerror = reject
+        reader.readAsDataURL(file)
       })
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/parse-proposal`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileBase64,
+          mimeType: file.type || 'application/pdf',
+          fileName: file.name,
+        }),
+      })
+
+      const json = await res.json()
+
+      if (!res.ok || json.error) {
+        const msg = json.error || `서버 오류 (${res.status})`
+        if (msg.includes('ANTHROPIC_API_KEY')) {
+          setParseResult({
+            exhName: '', year: new Date().getFullYear() + 1,
+            venue: '', eventStart: '', eventEnd: '', dateOfEvent: '', objective: '', budget: [],
+            _error: 'AI API 키 미설정 — Supabase Dashboard에서 ANTHROPIC_API_KEY를 등록해주세요.',
+          })
+        } else if (msg.includes('Unsupported file type')) {
+          setParseResult({
+            exhName: '', year: new Date().getFullYear() + 1,
+            venue: '', eventStart: '', eventEnd: '', dateOfEvent: '', objective: '', budget: [],
+            _error: 'Word 파일은 지원되지 않습니다. PDF 또는 이미지(JPG/PNG)로 변환 후 업로드해주세요.',
+          })
+        } else {
+          setParseResult({
+            exhName: '', year: new Date().getFullYear() + 1,
+            venue: '', eventStart: '', eventEnd: '', dateOfEvent: '', objective: '', budget: [],
+            _error: `파싱 실패: ${msg}`,
+          })
+        }
+        setParseLoading(false)
+        return
+      }
+
+      const r = json.result as ParsedProposal
+      setParseResult(r)
+    } catch (err) {
+      setParseResult({
+        exhName: '', year: new Date().getFullYear() + 1,
+        venue: '', eventStart: '', eventEnd: '', dateOfEvent: '', objective: '', budget: [],
+        _error: `오류: ${err instanceof Error ? err.message : String(err)}`,
+      })
+    } finally {
       setParseLoading(false)
-    }, 2200)
+    }
   }
 
   function applyParsedToForm(r: ParsedProposal) {
@@ -448,7 +499,13 @@ export default function Proposal() {
                 </div>
               </div>
             )}
-            {parseResult && (
+            {parseResult && parseResult._error && (
+              <div style={{ marginTop: 4, padding: '14px 16px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#DC2626', marginBottom: 6 }}>⚠️ 파싱 실패 — "{uploadFileName}"</div>
+                <div style={{ fontSize: 12, color: '#DC2626' }}>{parseResult._error}</div>
+              </div>
+            )}
+            {parseResult && !parseResult._error && (
               <div style={{ marginTop: 4 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)', marginBottom: 10 }}>
                   ✅ 파싱 완료 — "{uploadFileName}"
