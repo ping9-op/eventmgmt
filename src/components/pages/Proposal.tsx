@@ -296,16 +296,6 @@ export default function Proposal() {
       return
     }
 
-    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY as string | undefined
-    if (!apiKey) {
-      setAiOutput(
-        '⚠️ VITE_ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다.\n' +
-        '.env.local 파일에 아래 줄을 추가해주세요:\n\n' +
-        'VITE_ANTHROPIC_API_KEY=sk-ant-...'
-      )
-      return
-    }
-
     setAiLoading(true)
     setAiOutput('🤖 AI 생성 중...\n')
 
@@ -326,22 +316,19 @@ export default function Proposal() {
       `[KO] 한국어 변동 사유 (1–2문장, 비즈니스 문서 문체)\n` +
       `[EN] Reason for change (1–2 sentences, business writing style)`
 
+    // Supabase Edge Function을 통해 호출 — API 키가 서버에서만 관리됨
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+    const edgeFnUrl = `${supabaseUrl}/functions/v1/ai-proposal`
+
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch(edgeFnUrl, {
         method: 'POST',
         headers: {
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-allow-browser': 'true',
-          'content-type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 1024,
-          stream: true,
-          system: 'GME(Global Money Express) 박람회 예산 담당자로서 간결하고 전문적인 비즈니스 문서 문체로 작성합니다.',
-          messages: [{ role: 'user', content: userMsg }],
-        }),
+        body: JSON.stringify({ prompt: userMsg }),
       })
       if (!res.ok) {
         const txt = await res.text()
