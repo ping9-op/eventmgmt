@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { krw, exhColor, formatEventDate, exhDisplayName } from '../../lib/utils'
+import { extractTextFromPdf, parseProposalText } from '../../lib/pdfParser'
 import type { Exhibition, Proposal as ProposalType, BudgetItem, ProductTarget } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
@@ -258,64 +259,77 @@ export default function Proposal() {
     setParseLoading(true)
     setParseResult(null)
 
-    try {
-      // 파일을 base64로 변환
-      const fileBase64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => {
-          const dataUrl = reader.result as string
-          // data:application/pdf;base64,XXXX → XXXX 부분만 추출
-          resolve(dataUrl.split(',')[1])
-        }
-        reader.onerror = reject
-        reader.readAsDataURL(file)
-      })
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+    const isImage = file.type.startsWith('image/')
 
+    try {
+      // ── 1차: AI Edge Function (API 키 있을 때) ────────────────────
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
       const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
-      const res = await fetch(`${supabaseUrl}/functions/v1/parse-proposal`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${supabaseAnonKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fileBase64,
-          mimeType: file.type || 'application/pdf',
-          fileName: file.name,
-        }),
-      })
+      if (isPdf || isImage) {
+        const fileBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve((reader.result as string).split(',')[1])
+          reader.onerror = reject
+          reader.readAsDataURL(file)
+        })
 
-      const json = await res.json()
+        const res = await fetch(`${supabaseUrl}/functions/v1/parse-proposal`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${supabaseAnonKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileBase64, mimeType: file.type || 'application/pdf', fileName: file.name }),
+        })
+        const json = await res.json()
 
-      if (!res.ok || json.error) {
-        const msg = json.error || `서버 오류 (${res.status})`
-        if (msg.includes('ANTHROPIC_API_KEY')) {
-          setParseResult({
-            exhName: '', year: new Date().getFullYear() + 1,
-            venue: '', eventStart: '', eventEnd: '', dateOfEvent: '', objective: '', budget: [],
-            _error: 'AI API 키 미설정 — Supabase Dashboard에서 ANTHROPIC_API_KEY를 등록해주세요.',
-          })
-        } else if (msg.includes('Unsupported file type')) {
-          setParseResult({
-            exhName: '', year: new Date().getFullYear() + 1,
-            venue: '', eventStart: '', eventEnd: '', dateOfEvent: '', objective: '', budget: [],
-            _error: 'Word 파일은 지원되지 않습니다. PDF 또는 이미지(JPG/PNG)로 변환 후 업로드해주세요.',
-          })
-        } else {
-          setParseResult({
-            exhName: '', year: new Date().getFullYear() + 1,
-            venue: '', eventStart: '', eventEnd: '', dateOfEvent: '', objective: '', budget: [],
-            _error: `파싱 실패: ${msg}`,
-          })
+        // AI 파싱 성공
+        if (res.ok && !json.error) {
+          setParseResult(json.result as ParsedProposal)
+          setParseLoading(false)
+          return
         }
-        setParseLoading(false)
-        return
+
+        // API 키 미설정 → PDF 텍스트 추출 폴백
+        const isNoKey = json.error?.includes('ANTHROPIC_API_KEY')
+        if (!isNoKey) {
+          // 다른 오류는 그대로 표시
+          setParseResult({
+            exhName: '', year: new Date().getFullYear() + 1,
+            venue: '', eventStart: '', eventEnd: '', dateOfEvent: '', objective: '', budget: [],
+            _error: `AI 파싱 실패: ${json.error || '알 수 없는 오류'}`,
+          })
+          setParseLoading(false)
+          return
+        }
       }
 
-      const r = json.result as ParsedProposal
-      setParseResult(r)
+      // ── 2차: 클라이언트 사이드 텍스트 추출 (API 키 없을 때 폴백) ──
+      if (isPdf) {
+        try {
+          const text = await extractTextFromPdf(file)
+          if (text.trim().length < 20) throw new Error('텍스트를 추출할 수 없습니다 (스캔 이미지 PDF일 수 있음)')
+          const parsed = parseProposalText(text)
+          setParseResult({ ...parsed, _error: undefined })
+        } catch (pdfErr) {
+          setParseResult({
+            exhName: '', year: new Date().getFullYear() + 1,
+            venue: '', eventStart: '', eventEnd: '', dateOfEvent: '', objective: '', budget: [],
+            _error: `PDF 텍스트 추출 실패: ${pdfErr instanceof Error ? pdfErr.message : String(pdfErr)}\n스캔된 PDF의 경우 JPG/PNG로 변환 후 업로드하거나 직접 입력하세요.`,
+          })
+        }
+      } else if (isImage) {
+        setParseResult({
+          exhName: '', year: new Date().getFullYear() + 1,
+          venue: '', eventStart: '', eventEnd: '', dateOfEvent: '', objective: '', budget: [],
+          _error: 'AI API 키가 없어 이미지를 분석할 수 없습니다. PDF 파일로 업로드하거나 직접 입력하세요.',
+        })
+      } else {
+        setParseResult({
+          exhName: '', year: new Date().getFullYear() + 1,
+          venue: '', eventStart: '', eventEnd: '', dateOfEvent: '', objective: '', budget: [],
+          _error: 'Word 파일은 지원되지 않습니다. PDF로 변환 후 업로드해주세요.',
+        })
+      }
     } catch (err) {
       setParseResult({
         exhName: '', year: new Date().getFullYear() + 1,
