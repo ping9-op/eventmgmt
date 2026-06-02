@@ -231,6 +231,68 @@ export default function SalesDashboard() {
         </div>
       </div>
 
+      {/* 행사별 리드 현황 */}
+      {(() => {
+        const events = [...new Set(leads.map(l => l.event_name))].filter(Boolean)
+        if (!events.length) return null
+        return (
+          <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px', marginTop: 20 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>🏛 {t('s_event_leads')}</span>
+              <button onClick={() => navigate('/sales/reports')}
+                style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }}>
+                {t('view_detail')} →
+              </button>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse', minWidth: 600 }}>
+                <thead>
+                  <tr style={{ background: 'var(--accent)', color: 'white' }}>
+                    <th style={{ padding: '9px 14px', textAlign: 'left', fontWeight: 600 }}>행사</th>
+                    <th style={{ padding: '9px 10px', textAlign: 'center', fontWeight: 600 }}>Total</th>
+                    <th style={{ padding: '9px 10px', textAlign: 'center', fontWeight: 600, color: '#FDE68A' }}>Active</th>
+                    <th style={{ padding: '9px 10px', textAlign: 'center', fontWeight: 600, color: '#A7F3D0' }}>Won ✅</th>
+                    <th style={{ padding: '9px 10px', textAlign: 'center', fontWeight: 600, color: '#FCA5A5' }}>Lost</th>
+                    <th style={{ padding: '9px 14px', textAlign: 'left', fontWeight: 600 }}>파이프라인</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {events.map(ev => {
+                    const el = leads.filter(l => l.event_name === ev)
+                    const eWon = el.filter(l => l.current_stage === 'Onboarded / Won').length
+                    const eLost = el.filter(l => l.current_stage === 'Lost').length
+                    const eActive = el.filter(l => l.current_stage !== 'Lost' && l.current_stage !== 'Onboarded / Won').length
+                    const eTotal = el.length
+                    const wonPct = eTotal ? Math.round(eWon / eTotal * 100) : 0
+                    const activePct = eTotal ? Math.round(eActive / eTotal * 100) : 0
+                    const lostPct = eTotal ? Math.round(eLost / eTotal * 100) : 0
+                    return (
+                      <tr key={ev} style={{ borderBottom: '0.5px solid var(--border)', cursor: 'pointer', transition: 'background .1s' }}
+                        onClick={() => navigate('/sales/leads', { state: { filter: { event: ev } } })}
+                        onMouseOver={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = '#FDF5F5'))}
+                        onMouseOut={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = ''))}>
+                        <td style={{ padding: '9px 14px', fontWeight: 600, fontSize: 12 }}>{ev.replace(/ 20\d\d$/, '')}</td>
+                        <td style={{ padding: '9px 10px', textAlign: 'center', fontWeight: 700 }}>{eTotal}</td>
+                        <td style={{ padding: '9px 10px', textAlign: 'center', color: '#4F46E5', fontWeight: 600 }}>{eActive}</td>
+                        <td style={{ padding: '9px 10px', textAlign: 'center', color: '#065F46', fontWeight: 700 }}>{eWon}</td>
+                        <td style={{ padding: '9px 10px', textAlign: 'center', color: '#DC2626', fontWeight: 600 }}>{eLost}</td>
+                        <td style={{ padding: '9px 14px' }}>
+                          <div style={{ height: 8, background: '#EEE', borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
+                            <div style={{ width: `${activePct}%`, background: '#4F46E5' }} />
+                            <div style={{ width: `${wonPct}%`, background: '#065F46' }} />
+                            <div style={{ width: `${lostPct}%`, background: '#DC2626' }} />
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
+      })()}
+
       {selectedLeadId && (
         <LeadDetailPanel
           leadId={selectedLeadId}
