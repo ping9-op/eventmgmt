@@ -45,6 +45,7 @@ export default function SalesLeads() {
   const [stageFilter, setStageFilter] = useState<string | null>(null)
   const [filterOwner, setFilterOwner] = useState<string | null>(null)
   const [filterStage, setFilterStage] = useState<string | null>(null)
+  const [filterCorridor, setFilterCorridor] = useState<string | null>(null)
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
   const [showRegister, setShowRegister] = useState(false)
   const [checked, setChecked] = useState<Set<string>>(new Set())
@@ -78,6 +79,10 @@ export default function SalesLeads() {
       }
       if (state.filter.lostReason) {
         setFilterStage('Lost')
+        setViewMode('detail')
+      }
+      if (state.filter.corridor) {
+        setFilterCorridor(state.filter.corridor)
         setViewMode('detail')
       }
     }
@@ -247,6 +252,7 @@ export default function SalesLeads() {
   let filteredLeads = leads
   if (filterOwner) filteredLeads = filteredLeads.filter(l => l.owner === filterOwner)
   if (filterStage) filteredLeads = filteredLeads.filter(l => l.current_stage === filterStage)
+  if (filterCorridor) filteredLeads = filteredLeads.filter(l => l.country_corridor === filterCorridor)
 
   // Build groups
   const groups: Record<string, SalesLead[]> = {}
@@ -329,6 +335,12 @@ export default function SalesLeads() {
               <span style={{ background: '#FEF2F2', color: '#DC2626', padding: '4px 10px', borderRadius: 99, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
                 📊 {filterStage}
                 <button onClick={() => setFilterStage(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: 13, marginLeft: 2 }}>✕</button>
+              </span>
+            )}
+            {filterCorridor && (
+              <span style={{ background: '#F0FFF4', color: '#059669', padding: '4px 10px', borderRadius: 99, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                🌏 {filterCorridor}
+                <button onClick={() => setFilterCorridor(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#059669', fontSize: 13, marginLeft: 2 }}>✕</button>
               </span>
             )}
             <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{t('total')} {filteredLeads.length}</span>

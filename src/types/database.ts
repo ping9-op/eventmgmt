@@ -257,19 +257,43 @@ export interface Result {
   cover_author: string; sections_enabled: Record<string, boolean>
 }
 
+export interface SubItem {
+  text: string; status: string
+}
+
 export interface ChecklistItem {
-  name: string; pic: string; deadline: string; status: string; remarks: string
-  subs: Array<{ name: string; status: string }>
+  sn: number; item: string; pic: string; deadline: string
+  status: string; remarks: string; subitems: SubItem[]
+  detail?: string
+}
+
+export interface DesignItem {
+  sn: number; category: string; item: string; size: string; qty: string
+  spec: string; deadline: string; status: string; note: string
+}
+
+export interface GiftItem {
+  sn: number; prize: string; item: string; qty: number
+  price: number; currency: string; note: string
+}
+
+export interface EquipmentItem {
+  sn: number; item: string; qty: number; note: string; done: boolean
+}
+
+export interface ItineraryItem {
+  sn: number; date: string; day: string; time: string
+  activity: string; location: string; assignee: string; note: string
 }
 
 export interface EventData {
   id: string; exhibition_key: string; tab: string
   checklist: ChecklistItem[]
-  design: Array<{ item: string; vendor: string; qty: number; status: string; note: string }>
-  gifts_onboard: Array<{ item: string; qty: number; status: string; note: string }>
-  gifts_event: Array<{ item: string; qty: number; status: string; note: string }>
-  equipment: Array<{ item: string; qty: number; owner: string; status: string; note: string }>
-  itinerary: Array<{ date: string; time: string; activity: string; person: string; note: string }>
+  design: DesignItem[]
+  gifts_onboard: GiftItem[]
+  gifts_event: GiftItem[]
+  equipment: EquipmentItem[]
+  itinerary: ItineraryItem[]
 }
 
 export interface SalesLead {

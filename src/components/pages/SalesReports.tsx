@@ -5,16 +5,34 @@ import { STAGE_ORDER, STAGE_COLORS } from '../../lib/utils'
 import type { SalesLead } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
 
+type PeriodFilter = 'all' | 'month' | '3months' | 'year'
+
+function periodLabel(p: PeriodFilter, t: (k: string) => string): string {
+  return { all: t('period_all'), month: t('period_this_month'), '3months': t('period_3months'), year: t('period_this_year') }[p] || p
+}
+
+function filterByPeriod(leads: SalesLead[], period: PeriodFilter): SalesLead[] {
+  if (period === 'all') return leads
+  const now = new Date()
+  const cutoff = new Date()
+  if (period === 'month') cutoff.setDate(1)
+  else if (period === '3months') cutoff.setMonth(now.getMonth() - 3)
+  else if (period === 'year') cutoff.setMonth(0, 1)
+  const cutoffStr = cutoff.toISOString().split('T')[0]
+  return leads.filter(l => (l.registered_date || '') >= cutoffStr)
+}
+
 export default function SalesReports() {
   const { t } = useLang()
   const navigate = useNavigate()
-  const [leads, setLeads] = useState<SalesLead[]>([])
+  const [allLeads, setAllLeads] = useState<SalesLead[]>([])
   const [loading, setLoading] = useState(true)
+  const [period, setPeriod] = useState<PeriodFilter>('all')
 
   useEffect(() => {
     supabase.from('sales_leads').select('*').then(({ data, error }) => {
       if (error) console.error('SalesReports load error:', error.message)
-      setLeads((data || []) as SalesLead[])
+      setAllLeads((data || []) as SalesLead[])
       setLoading(false)
     })
   }, [])
@@ -28,8 +46,10 @@ export default function SalesReports() {
     const wonCount = leads.filter(l => l.current_stage === 'Onboarded / Won').length
     const evts = [...new Set(leads.map(l => l.event_name))]
     const ownrs = [...new Set(leads.map(l => l.owner))]
+    const corridors = [...new Set(leads.map(l => l.country_corridor).filter(Boolean))]
     const rows: (string | number)[][] = [
       ['GME Sales Report', new Date().toISOString().split('T')[0]],
+      ['기간', periodLabel(period, t)],
       [],
       ['[KPI 요약]'],
       ['전체 리드', tot],
@@ -54,6 +74,14 @@ export default function SalesReports() {
           el.filter(l => l.current_stage === 'Lost').length]
       }),
       [],
+      ['[국가 코리도별]', 'Total', 'Won', 'Lost'],
+      ...corridors.map(c => {
+        const cl = leads.filter(l => l.country_corridor === c)
+        return [c, cl.length,
+          cl.filter(l => l.current_stage === 'Onboarded / Won').length,
+          cl.filter(l => l.current_stage === 'Lost').length]
+      }),
+      [],
       ['[담당자별 성과]', 'Total', 'Contacted', 'Proposal', 'Won'],
       ...ownrs.map(o => {
         const ol = leads.filter(l => l.owner === o)
@@ -73,11 +101,12 @@ export default function SalesReports() {
 
   if (loading) return <div className="view wide"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
 
+  const leads = filterByPeriod(allLeads, period)
   const total = leads.length
   const won = leads.filter(l => l.current_stage === 'Onboarded / Won').length
   const conv = total ? Math.round(won / total * 100) : 0
 
-  const funnelRows = STAGE_ORDER.map((s, i) => {
+  const funnelRows = STAGE_ORDER.map(s => {
     const exact = leads.filter(l => l.current_stage === s).length
     const rate = total ? Math.round(exact / total * 100) : 0
     const c = STAGE_COLORS[s] || { bg: '#6B7280' }
@@ -86,9 +115,18 @@ export default function SalesReports() {
 
   const events = [...new Set(leads.map(l => l.event_name))]
   const owners = [...new Set(leads.map(l => l.owner))]
+  const corridors = [...new Set(leads.map(l => l.country_corridor).filter(Boolean))]
   const lostLeads = leads.filter(l => l.current_stage === 'Lost' && l.lost_reason)
   const lostCounts: Record<string, number> = {}
   lostLeads.forEach(l => { if (l.lost_reason) lostCounts[l.lost_reason] = (lostCounts[l.lost_reason] || 0) + 1 })
+
+  const corridorStats = corridors.map(c => {
+    const cl = leads.filter(l => l.country_corridor === c)
+    const cWon = cl.filter(l => l.current_stage === 'Onboarded / Won').length
+    const cLost = cl.filter(l => l.current_stage === 'Lost').length
+    const cActive = cl.filter(l => l.current_stage !== 'Lost' && l.current_stage !== 'Onboarded / Won').length
+    return { corridor: c, total: cl.length, won: cWon, lost: cLost, active: cActive }
+  }).sort((a, b) => b.total - a.total)
 
   const kpiCards = [
     { lbl: t('total_leads_lbl'), val: total, col: 'var(--text)', f: {} as Record<string, string> | null },
@@ -98,6 +136,8 @@ export default function SalesReports() {
     { lbl: t('conversion_rate'), val: conv + '%', col: '#7C3AED', f: null },
   ]
 
+  const PERIODS: PeriodFilter[] = ['all', 'month', '3months', 'year']
+
   return (
     <div className="view wide">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -106,8 +146,27 @@ export default function SalesReports() {
           <div className="txt">{t('s_reports_title')}</div>
           <div className="sub">{t('s_reports_sub')}</div>
         </div>
-        <button className="btn btn-outline btn-sm" onClick={exportCSV}>⬇️ {t('export_excel')}</button>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {/* 기간 필터 */}
+          <div style={{ display: 'flex', background: 'white', border: '1.5px solid var(--border2)', borderRadius: 8, overflow: 'hidden' }}>
+            {PERIODS.map(p => (
+              <button key={p} onClick={() => setPeriod(p)}
+                style={{ padding: '6px 14px', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, transition: 'all .15s',
+                  background: period === p ? 'var(--accent)' : 'white', color: period === p ? 'white' : 'var(--muted)' }}>
+                {periodLabel(p, t)}
+              </button>
+            ))}
+          </div>
+          <button className="btn btn-outline btn-sm" onClick={exportCSV}>⬇️ {t('export_excel')}</button>
+        </div>
       </div>
+
+      {/* 기간 표시 뱃지 */}
+      {period !== 'all' && (
+        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>
+          📅 기간 필터: {periodLabel(period, t)} — {leads.length}개 리드
+        </div>
+      )}
 
       {/* KPI 카드 5개 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 14, marginBottom: 24, marginTop: 16 }}>
@@ -124,8 +183,8 @@ export default function SalesReports() {
         ))}
       </div>
 
-      {/* 4섹션 그리드 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+      {/* 상단 2개 섹션 */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
         {/* Funnel 전환율 */}
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px' }}>
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>{t('s_funnel_report')}</div>
@@ -191,23 +250,60 @@ export default function SalesReports() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* 하단 3개 섹션 */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 20 }}>
+        {/* 국가 코리도별 분석 */}
+        <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>🌏 {t('s_corridor_report')}</div>
+          {corridorStats.length === 0
+            ? <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: 20 }}>{t('no_report_data')}</div>
+            : <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <th style={{ padding: '6px 7px', textAlign: 'left', color: 'var(--muted)', fontWeight: 600 }}>Corridor</th>
+                    <th style={{ padding: '6px 7px', textAlign: 'center', color: 'var(--muted)', fontWeight: 600 }}>Total</th>
+                    <th style={{ padding: '6px 7px', textAlign: 'center', color: '#4F46E5', fontWeight: 600 }}>Active</th>
+                    <th style={{ padding: '6px 7px', textAlign: 'center', color: '#065F46', fontWeight: 600 }}>Won</th>
+                    <th style={{ padding: '6px 7px', textAlign: 'center', color: '#DC2626', fontWeight: 600 }}>Lost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {corridorStats.map(c => (
+                    <tr key={c.corridor}
+                      style={{ borderBottom: '0.5px solid var(--border)', cursor: 'pointer', transition: 'background .1s' }}
+                      onClick={() => goToLeads({ corridor: c.corridor })}
+                      onMouseOver={e => (e.currentTarget as HTMLTableRowElement).style.background = '#FDF5F5'}
+                      onMouseOut={e => (e.currentTarget as HTMLTableRowElement).style.background = ''}>
+                      <td style={{ padding: '7px', fontSize: 11, fontWeight: 600, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.corridor}>{c.corridor}</td>
+                      <td style={{ padding: '7px', textAlign: 'center', fontWeight: 700 }}>{c.total}</td>
+                      <td style={{ padding: '7px', textAlign: 'center', color: '#4F46E5', fontWeight: 600 }}>{c.active}</td>
+                      <td style={{ padding: '7px', textAlign: 'center', color: '#065F46', fontWeight: 700 }}>{c.won}</td>
+                      <td style={{ padding: '7px', textAlign: 'center', color: '#DC2626', fontWeight: 600 }}>{c.lost}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+          }
+        </div>
 
         {/* Lost Reason 분석 */}
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px' }}>
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>{t('s_lost_report')}</div>
           {Object.keys(lostCounts).length === 0
             ? <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: 20 }}>{t('no_report_data')}</div>
-            : Object.entries(lostCounts).map(([r, c]) => (
+            : Object.entries(lostCounts).sort(([, a], [, b]) => b - a).map(([r, c]) => (
               <div key={r}
                 onClick={() => goToLeads({ stage: 'Lost', lostReason: r })}
                 style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, cursor: 'pointer', padding: '6px 8px', borderRadius: 7, transition: 'background .1s' }}
                 onMouseOver={e => (e.currentTarget as HTMLDivElement).style.background = '#FEF2F2'}
                 onMouseOut={e => (e.currentTarget as HTMLDivElement).style.background = ''}>
-                <div style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{r}</div>
-                <div style={{ width: 80, background: '#EEE', borderRadius: 3, height: 8, overflow: 'hidden' }}>
+                <div style={{ flex: 1, fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r}</div>
+                <div style={{ width: 80, background: '#EEE', borderRadius: 3, height: 8, overflow: 'hidden', flexShrink: 0 }}>
                   <div style={{ height: '100%', background: '#DC2626', width: `${Math.round(c / lostLeads.length * 100)}%` }} />
                 </div>
-                <span style={{ fontWeight: 700, color: '#DC2626', width: 20 }}>{c}</span>
+                <span style={{ fontWeight: 700, color: '#DC2626', width: 20, textAlign: 'right', flexShrink: 0 }}>{c}</span>
               </div>
             ))
           }
