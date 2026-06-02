@@ -361,6 +361,13 @@ export default function Proposal() {
   }
 
   function applyParsedToForm(r: ParsedProposal, targetStep = 1) {
+    // 폼 전체 초기화 후 파싱 결과 적용
+    // 이전 proposal 편집 상태 완전히 해제
+    setEditingProposalId(null)
+    setAiOutput('AI 생성 결과가 여기에 표시됩니다.\n\n"AI 변동 사유 생성" 버튼을 눌러주세요.')
+    setAiMemos({})
+    setPropDate(new Date().toISOString().split('T')[0])
+
     // 박람회명으로 기존 박람회 자동 매칭
     if (r.exhName) {
       const q = r.exhName.toLowerCase()
@@ -371,19 +378,33 @@ export default function Proposal() {
       if (matched) {
         setExhId(matched.id)
         setIsNewExh(false)
+        setNewExhName('')
+        setNewExhKey('')
       } else {
+        setExhId('')
         setIsNewExh(true)
         setNewExhName(r.exhName)
         setNewExhKey(r.exhName.replace(/[^a-zA-Z]/g, '').substring(0, 10))
       }
+    } else {
+      setExhId('')
+      setIsNewExh(false)
     }
+
     setYear(r.year)
     setVenue(r.venue)
     setEventStartDate(r.eventStart)
     setEventEndDate(r.eventEnd)
     setDateOfEvent(r.dateOfEvent)
     setObjective(r.objective)
-    setBudget(r.budget.map(b => ({ item: b.item, curr: b.amount, prev: 0, note: '', currency: b.currency })))
+    // 제품/기대효과는 파싱 결과에 없으므로 기본값으로 초기화
+    setProducts([{ product: 'GMEBIZ', target: '' }])
+    setExpectedResults(['Promote GME BIZ to potential merchants'])
+    setBudget(
+      r.budget.length > 0
+        ? r.budget.map(b => ({ item: b.item, curr: b.amount, prev: 0, note: '', currency: b.currency }))
+        : [{ item: 'Booth Fee', curr: 0, prev: 0, note: '', currency: 'KRW' }]
+    )
     setParseResult(null)
     setShowUpload(false)
     setStep(targetStep)
