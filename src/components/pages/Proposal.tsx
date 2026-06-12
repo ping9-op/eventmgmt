@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { krw, exhColor, formatEventDate, exhDisplayName, CURRENCIES, COST_ITEMS, MON, formatDateRange, parseDateRange } from '../../lib/utils'
+import { krw, exhColor, formatEventDate, exhDisplayName, CURRENCIES, COST_ITEMS, MON, formatDateRange, parseDateRange, CUR_SYM } from '../../lib/utils'
 import { extractTextFromPdf, extractTextFromDocx, parseProposalText } from '../../lib/pdfParser'
 import type { Exhibition, Proposal as ProposalType, BudgetItem, ProductTarget } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
+import {
+  Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
+  WidthType, AlignmentType, HeadingLevel, BorderStyle, ShadingType,
+  TableLayoutType, VerticalAlign,
+} from 'docx'
 
 
 interface ParsedProposal {
@@ -514,6 +519,173 @@ export default function Proposal() {
   const totalBudget = budget.reduce((s, b) => s + (b.curr || 0), 0)
   const changedItems = budget.filter(r => (r.prev && r.curr !== r.prev) || (!r.prev && r.curr > 0))
 
+  async function exportDocx() {
+    const exhName = isNewExh ? newExhName : (exhibitions.find(e => e.id === exhId)?.name || '박람회')
+    const prevYear = year - 1
+    const activeBudget = budget.filter(b => b.curr > 0 || b.prev > 0)
+    const totalCurr = activeBudget.reduce((s, b) => s + (b.curr || 0), 0)
+    const totalPrev = activeBudget.reduce((s, b) => s + (b.prev || 0), 0)
+    const diff = totalCurr - totalPrev
+
+    const RED = 'CC1F1F'
+    const DARK = '1A1A1A'
+    const LGRAY = 'F0F0F0'
+    const HDRFILL = 'D9D9D9'
+
+    const fmtAmt = (amt: number, cur = 'KRW') => amt > 0 ? `${CUR_SYM[cur] || ''}${amt.toLocaleString()}` : '-'
+
+    const cell = (text: string, opts: { bold?: boolean; fill?: string; align?: (typeof AlignmentType)[keyof typeof AlignmentType]; color?: string; w?: number } = {}) =>
+      new TableCell({
+        ...(opts.w ? { width: { size: opts.w, type: WidthType.PERCENTAGE } } : {}),
+        ...(opts.fill ? { shading: { fill: opts.fill, type: ShadingType.SOLID, color: opts.fill } } : {}),
+        verticalAlign: VerticalAlign.CENTER,
+        margins: { top: 60, bottom: 60, left: 100, right: 100 },
+        children: [new Paragraph({
+          alignment: opts.align || AlignmentType.LEFT,
+          children: [new TextRun({ text, bold: opts.bold ?? false, size: 20, color: opts.color || DARK, font: 'Calibri' })],
+        })],
+      })
+
+    const hdrCell = (text: string, w?: number) => cell(text, { bold: true, fill: RED, color: 'FFFFFF', align: AlignmentType.CENTER, w })
+
+    const noBorder = { style: BorderStyle.NIL, size: 0, color: 'FFFFFF' }
+    const thinBorder = { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC' }
+
+    const doc = new Document({
+      styles: {
+        default: { document: { run: { font: 'Calibri', size: 22, color: DARK } } },
+      },
+      sections: [{
+        properties: { page: { margin: { top: 720, bottom: 720, left: 1080, right: 1080 } } },
+        children: [
+          // ── 제목 ──
+          new Paragraph({
+            children: [new TextRun({
+              text: `Proposal to Apply for Booth in the ${exhName} ${year}`,
+              bold: true, size: 32, color: RED, font: 'Calibri',
+            })],
+            spacing: { after: 160 },
+          }),
+          // ── 날짜/작성자 ──
+          new Paragraph({
+            children: [new TextRun({ text: `${propDate}  By ${author}`, size: 20, color: '555555', font: 'Calibri' })],
+            spacing: { after: 360 },
+          }),
+          // ── Objective ──
+          new Paragraph({
+            children: [
+              new TextRun({ text: 'Objective of participation: ', bold: true, size: 22, font: 'Calibri' }),
+              new TextRun({ text: objective || '—', size: 22, font: 'Calibri' }),
+            ],
+            spacing: { after: 280 },
+          }),
+          // ── Date of Event ──
+          new Paragraph({
+            children: [
+              new TextRun({ text: 'Date of Event: ', bold: true, size: 22, font: 'Calibri' }),
+              new TextRun({ text: `${dateOfEvent}${venue ? ', ' + venue : ''}`, size: 22, font: 'Calibri' }),
+            ],
+            spacing: { after: 360 },
+          }),
+          // ── Products to Promote ──
+          new Paragraph({
+            children: [new TextRun({ text: 'GME Products to Promote', bold: true, size: 24, color: RED, font: 'Calibri' })],
+            spacing: { before: 160, after: 160 },
+          }),
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            layout: TableLayoutType.FIXED,
+            borders: { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder, insideHorizontal: thinBorder, insideVertical: thinBorder },
+            rows: [
+              new TableRow({
+                tableHeader: true,
+                children: [hdrCell('No', 8), hdrCell('Product', 30), hdrCell('Target', 62)],
+              }),
+              ...products.filter(p => p.product).map((p, i) => new TableRow({
+                children: [
+                  cell(String(i + 1), { align: AlignmentType.CENTER, w: 8 }),
+                  cell(p.product, { w: 30 }),
+                  cell(p.target || '', { w: 62 }),
+                ],
+              })),
+            ],
+          }),
+          // ── Expected Result ──
+          new Paragraph({
+            children: [new TextRun({ text: 'Expected Result', bold: true, size: 24, color: RED, font: 'Calibri' })],
+            spacing: { before: 360, after: 160 },
+          }),
+          ...expectedResults.filter(r => r.trim()).map(r => new Paragraph({
+            children: [new TextRun({ text: r, size: 22, font: 'Calibri' })],
+            bullet: { level: 0 },
+            spacing: { after: 80 },
+          })),
+          // ── Expected Cost ──
+          new Paragraph({
+            children: [
+              new TextRun({ text: 'Expected Cost: ', bold: true, size: 22, font: 'Calibri' }),
+              new TextRun({ text: `KRW ${totalCurr.toLocaleString()}`, bold: true, size: 22, color: RED, font: 'Calibri' }),
+            ],
+            spacing: { before: 360, after: 200 },
+          }),
+          // ── Budget Table ──
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            layout: TableLayoutType.FIXED,
+            borders: { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder, insideHorizontal: thinBorder, insideVertical: thinBorder },
+            rows: [
+              new TableRow({
+                tableHeader: true,
+                children: [
+                  hdrCell('No', 6),
+                  hdrCell('Item', 24),
+                  hdrCell(String(prevYear), 18),
+                  hdrCell(String(year), 18),
+                  hdrCell('Note', 34),
+                ],
+              }),
+              ...activeBudget.map((b, i) => new TableRow({
+                children: [
+                  cell(String(i + 1), { align: AlignmentType.CENTER, fill: i % 2 === 1 ? LGRAY : undefined, w: 6 }),
+                  cell(b.item, { fill: i % 2 === 1 ? LGRAY : undefined, w: 24 }),
+                  cell(fmtAmt(b.prev, b.currency), { align: AlignmentType.RIGHT, fill: i % 2 === 1 ? LGRAY : undefined, w: 18 }),
+                  cell(fmtAmt(b.curr, b.currency), { align: AlignmentType.RIGHT, fill: i % 2 === 1 ? LGRAY : undefined, w: 18 }),
+                  cell(b.note || '', { fill: i % 2 === 1 ? LGRAY : undefined, w: 34 }),
+                ],
+              })),
+              // Total row
+              new TableRow({
+                children: [
+                  cell('', { fill: HDRFILL, w: 6 }),
+                  cell('Total Cost', { bold: true, fill: HDRFILL, w: 24 }),
+                  cell(totalPrev > 0 ? `KRW ${totalPrev.toLocaleString()}` : '-', { bold: true, align: AlignmentType.RIGHT, fill: HDRFILL, w: 18 }),
+                  cell(`KRW ${totalCurr.toLocaleString()}`, { bold: true, align: AlignmentType.RIGHT, fill: HDRFILL, w: 18 }),
+                  cell(
+                    totalPrev > 0 ? (diff > 0 ? `+KRW ${diff.toLocaleString()}` : diff < 0 ? `-KRW ${Math.abs(diff).toLocaleString()}` : 'Same') : '',
+                    { bold: true, align: AlignmentType.RIGHT, fill: HDRFILL, color: diff > 0 ? 'C00000' : diff < 0 ? '2E7D51' : DARK, w: 34 }
+                  ),
+                ],
+              }),
+            ],
+          }),
+          // ── 하단 여백 ──
+          new Paragraph({ children: [], spacing: { after: 280 } }),
+        ],
+      }],
+    })
+
+    try {
+      const blob = await Packer.toBlob(doc)
+      const url = URL.createObjectURL(blob)
+      const a = Object.assign(document.createElement('a'), { href: url, download: `${exhName}_${year}_Proposal.docx` })
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      showToast(t('save_docx') + ' ✓')
+    } catch (e: any) {
+      showToast('Word 파일 생성 실패: ' + (e?.message || String(e)), 'error')
+    }
+  }
+
   const STEPS = [t('step1'), t('step2'), t('step3'), t('step4')]
 
   const PER_PAGE = 10
@@ -932,23 +1104,8 @@ export default function Proposal() {
             <button className="btn btn-green" onClick={save} disabled={saving || saved}>
               📋 {saving ? t('saving') : saved ? '✓ ' + t('save') : t('save_history').replace('📋 ', '')}
             </button>
-            <button className="btn btn-primary" onClick={() => {
-              const exhName = isNewExh ? newExhName : (exhibitions.find(e => e.id === exhId)?.name || '박람회')
-              const lines = [
-                `GME Booth Proposal`, `==================`, ``,
-                `박람회: ${exhName} ${year}`, `행사 기간: ${dateOfEvent}`, `장소: ${venue}`, ``,
-                `참가 목적`, `---------`, objective, ``,
-                `예산 내역`, `---------`,
-                ...budget.filter(b => b.curr > 0).map(r => `${r.item}: ${krw(r.curr)}  (${r.note || ''})`),
-                ``, `합계: ${krw(totalBudget)}`, ``, `작성자: ${author}`, `작성일: ${propDate}`,
-              ].join('\n')
-              const a = Object.assign(document.createElement('a'), {
-                href: 'data:text/plain;charset=utf-8,' + encodeURIComponent(lines),
-                download: `${exhName}_${year}_Proposal.txt`,
-              })
-              document.body.appendChild(a); a.click(); document.body.removeChild(a)
-            }}>
-              💾 TXT 내보내기
+            <button className="btn btn-primary" onClick={exportDocx}>
+              {t('save_docx')}
             </button>
           </div>
           {saved && (
