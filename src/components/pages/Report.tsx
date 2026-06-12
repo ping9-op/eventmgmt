@@ -188,12 +188,13 @@ export default function Report() {
     setGeneratingPPT(true)
     try {
 
+    // Returns "image/xxx;base64,yyy" (no "data:" prefix) — pptxgenjs data field format
     async function imgToBase64(url: string): Promise<string> {
       const res = await fetch(url)
       const blob = await res.blob()
       return new Promise(resolve => {
         const reader = new FileReader()
-        reader.onloadend = () => resolve((reader.result as string).split(',')[1])
+        reader.onloadend = () => resolve((reader.result as string).slice(5)) // strip "data:"
         reader.readAsDataURL(blob)
       })
     }
@@ -216,7 +217,7 @@ export default function Report() {
 
     const newSlide = (num: number, title: string) => {
       const sl = pptx.addSlide()
-      sl.addImage({ data: `image/png;base64,${contentB64}`, x: 0, y: 0, w: 13.33, h: 7.5 })
+      sl.addImage({ data: contentB64, x: 0, y: 0, w: 13.33, h: 7.5 })
       sl.addText(`${num}.  ${title}`, {
         x: 0.6, y: 0.15, w: 12, h: 0.6,
         fontSize: 26, bold: true, color: WHITE, fontFace: 'Calibri', valign: 'middle'
@@ -263,7 +264,7 @@ export default function Report() {
 
     // ── Cover Slide ──────────────────────────────────────
     const cv = pptx.addSlide()
-    cv.addImage({ data: `image/png;base64,${coverB64}`, x: 0, y: 0, w: 13.33, h: 7.5 })
+    cv.addImage({ data: coverB64, x: 0, y: 0, w: 13.33, h: 7.5 })
     cv.addText(r.cover_title || selected, {
       x: 0.7, y: 4.2, w: 7.5, h: 1.5,
       fontSize: 36, bold: true, color: DARK, fontFace: 'Calibri', valign: 'middle', wrap: true,
@@ -366,7 +367,7 @@ export default function Report() {
       ]
       for (let start = 0; start < photos.length; start += 4) {
         const sl = pptx.addSlide()
-        sl.addImage({ data: `image/png;base64,${contentB64}`, x: 0, y: 0, w: 13.33, h: 7.5 })
+        sl.addImage({ data: contentB64, x: 0, y: 0, w: 13.33, h: 7.5 })
         sl.addText('Photos', {
           x: 0.6, y: 0.15, w: 12, h: 0.6,
           fontSize: 26, bold: true, color: WHITE, fontFace: 'Calibri', valign: 'middle'
@@ -376,7 +377,7 @@ export default function Report() {
           try {
             const b64 = await imgToBase64(batch[i])
             const pos = positions[i]
-            sl.addImage({ data: `image/jpeg;base64,${b64}`, x: pos.x, y: pos.y, w: 6.2, h: 3.0 })
+            sl.addImage({ data: b64, x: pos.x, y: pos.y, w: 6.2, h: 3.0 })
           } catch { /* 개별 사진 실패는 건너뜀 */ }
         }
       }
