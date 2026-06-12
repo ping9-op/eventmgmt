@@ -469,6 +469,9 @@ label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px;margin-t
 
   /* 거인 박스 말트레이 오버라이드 */
   .login-box{width:calc(100vw - 32px)!important;max-width:380px!important;padding:28px 20px!important}
+
+  /* ── SalesLeads 검색 입력 풀폭 ── */
+  .leads-search-input{width:100%!important;min-width:0!important}
 }
 
 @media (max-width: 480px) {

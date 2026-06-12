@@ -6,6 +6,8 @@ import type { Exhibition, Proposal, Result, ActualCost, MarketingActivity } from
 import { useToast } from '../../contexts/ToastContext'
 import pptxgen from 'pptxgenjs'
 import { useLang } from '../../contexts/LangContext'
+import LoadingSpinner from '../LoadingSpinner'
+import EmptyState from '../EmptyState'
 
 const PHOTO_BUCKET = 'report-photos'
 
@@ -52,6 +54,7 @@ export default function Report() {
   const [report, setReport] = useState<Result | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [generatingPPT, setGeneratingPPT] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   // Proposal 데이터 캐시 (exhibition_key → proposal)
   const [propCache, setPropCache] = useState<Record<string, { prop: Proposal; exhName: string }>>({})
@@ -102,7 +105,7 @@ export default function Report() {
           }
         }
       } catch (e) {
-        console.error('load error:', e)
+        showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -182,6 +185,8 @@ export default function Report() {
 
   async function exportPPT() {
     if (!report || !selected) return
+    setGeneratingPPT(true)
+    try {
 
     async function imgToBase64(url: string): Promise<string> {
       const res = await fetch(url)
@@ -352,6 +357,31 @@ export default function Report() {
       ))
     }
 
+    // ── 4b. Marketing Photos ─────────────────────────────
+    const photos = r.marketing_photos || []
+    if (photos.length > 0) {
+      const positions = [
+        { x: 0.4, y: 0.9 }, { x: 6.9, y: 0.9 },
+        { x: 0.4, y: 4.2 }, { x: 6.9, y: 4.2 },
+      ]
+      for (let start = 0; start < photos.length; start += 4) {
+        const sl = pptx.addSlide()
+        sl.addImage({ data: `image/png;base64,${contentB64}`, x: 0, y: 0, w: 13.33, h: 7.5 })
+        sl.addText('Photos', {
+          x: 0.6, y: 0.15, w: 12, h: 0.6,
+          fontSize: 26, bold: true, color: WHITE, fontFace: 'Calibri', valign: 'middle'
+        })
+        const batch = photos.slice(start, start + 4)
+        for (let i = 0; i < batch.length; i++) {
+          try {
+            const b64 = await imgToBase64(batch[i])
+            const pos = positions[i]
+            sl.addImage({ data: `image/jpeg;base64,${b64}`, x: pos.x, y: pos.y, w: 6.2, h: 3.0 })
+          } catch { /* 개별 사진 실패는 건너뜀 */ }
+        }
+      }
+    }
+
     // ── 5. Registration Results ───────────────────────────
     if (sNum('5') !== undefined) {
       const sl = newSlide(sNum('5')!, 'Registration Results')
@@ -398,7 +428,13 @@ export default function Report() {
 
     const fname = (r.cover_title || selected).replace(/[\s/\\]/g, '_') + '_Result_Report.pptx'
     await pptx.writeFile({ fileName: fname })
-    showToast(t('saved_ok') + ' 📊')
+    showToast('PPT가 생성되었습니다.')
+
+    } catch (e: any) {
+      showToast('PPT 생성 중 오류가 발생했습니다: ' + (e?.message || String(e)), 'error')
+    } finally {
+      setGeneratingPPT(false)
+    }
   }
 
   function initReport(): Result {
@@ -414,7 +450,7 @@ export default function Report() {
     }
   }
 
-  if (loading) return <div className="view"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
+  if (loading) return <div className="view"><LoadingSpinner /></div>
 
   const r = report || initReport()
 
@@ -694,13 +730,13 @@ export default function Report() {
               <button className="btn btn-green" onClick={saveReport} disabled={saving} style={{ flex: 1, minWidth: 140, padding: 14 }}>
                 {saving ? t('saving') : t('save_report')}
               </button>
-              <button className="btn btn-primary" onClick={exportPPT} style={{ flex: 1, minWidth: 140, padding: 14 }}>
-                {t('export_ppt')}
+              <button className="btn btn-primary" onClick={exportPPT} disabled={generatingPPT} style={{ flex: 1, minWidth: 140, padding: 14 }}>
+                {generatingPPT ? 'PPT 생성 중...' : t('export_ppt')}
               </button>
             </div>
           </div>
         ) : (
-          <div style={{ color: 'var(--muted)', fontSize: 14, padding: 20 }}>{t('select_report')}</div>
+          <EmptyState icon="📋" title={t('select_report')} sub={t('select_report_hint')} />
         )}
       </div>
     </div>

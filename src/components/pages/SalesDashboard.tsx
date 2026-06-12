@@ -5,7 +5,9 @@ import { STAGE_ORDER, STAGE_COLORS } from '../../lib/utils'
 import type { SalesLead, SalesTask } from '../../types/database'
 import LeadDetailPanel from './LeadDetailPanel'
 import { useLang } from '../../contexts/LangContext'
+import { useToast } from '../../contexts/ToastContext'
 import { useIsMobile } from '../../hooks/useBreakpoint'
+import LoadingSpinner from '../LoadingSpinner'
 
 function krwusd(vol: number | null, cur: string): string {
   if (!vol) return '-'
@@ -24,6 +26,7 @@ function StageBadge({ stage }: { stage: string }) {
 export default function SalesDashboard() {
   const { t } = useLang()
   const navigate = useNavigate()
+  const { showToast } = useToast()
   const isMobile = useIsMobile()
   const [leads, setLeads] = useState<SalesLead[]>([])
   const [tasks, setTasks] = useState<SalesTask[]>([])
@@ -47,7 +50,7 @@ export default function SalesDashboard() {
           setTasks((taskData || []) as SalesTask[])
         }
       } catch (err: any) {
-        console.error('SalesDashboard load error:', err?.message)
+        showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -56,7 +59,7 @@ export default function SalesDashboard() {
     return () => { cancelled = true }
   }, [])
 
-  if (loading) return <div className="view wide"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
+  if (loading) return <div className="view wide"><LoadingSpinner /></div>
 
   const total = leads.length
   const byStage = (s: string) => leads.filter(l => l.current_stage === s).length
@@ -310,7 +313,7 @@ export default function SalesDashboard() {
               if (error) throw error
               setLeads((data || []) as SalesLead[])
             } catch (err: any) {
-              console.error('SalesDashboard onRefresh error:', err?.message)
+              showToast('새로고침 중 오류가 발생했습니다.', 'error')
             }
           }}
         />

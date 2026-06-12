@@ -2,42 +2,8 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../contexts/ToastContext'
 import { useLang } from '../contexts/LangContext'
+import { CURRENCIES, COST_ITEMS, MON, formatDateRange, parseDateRange } from '../lib/utils'
 
-const CURRENCIES = ['KRW', 'JPY', 'USD', 'EUR', 'SGD']
-const COST_ITEMS = ['Booth Fee', 'Design', 'Gift', 'Part Timer', 'Flight', 'Accommodation', 'Meal', 'Item Delivery']
-const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-
-function formatDateRange(start: string, end: string): string {
-  if (!start) return ''
-  const s = new Date(start + 'T00:00:00')
-  if (isNaN(s.getTime())) return ''
-  const yr = s.getFullYear(), m = MON[s.getMonth()], d1 = s.getDate()
-  if (!end || end === start) return `${yr} ${m} ${d1}`
-  const e = new Date(end + 'T00:00:00')
-  if (isNaN(e.getTime())) return `${yr} ${m} ${d1}`
-  const d2 = e.getDate()
-  if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear())
-    return `${yr} ${m} ${d1}-${d2}`
-  return `${yr} ${m} ${d1} - ${e.getFullYear()} ${MON[e.getMonth()]} ${d2}`
-}
-
-function parseDateToInputs(str: string): { start: string; end: string } {
-  if (!str) return { start: '', end: '' }
-  const s = str.toLowerCase()
-  const MAP: Record<string,number> = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12}
-  let month = -1
-  for (const [k, v] of Object.entries(MAP)) { if (s.includes(k)) { month = v; break } }
-  if (month < 0) return { start: '', end: '' }
-  const nums = [...s.matchAll(/\d+/g)].map(m => parseInt(m[0]))
-  const yr = nums.find(n => n > 1000) || new Date().getFullYear()
-  const days = nums.filter(n => n >= 1 && n <= 31)
-  if (!days.length) return { start: '', end: '' }
-  const mm = String(month).padStart(2, '0')
-  return {
-    start: `${yr}-${mm}-${String(days[0]).padStart(2,'0')}`,
-    end:   `${yr}-${mm}-${String(days[days.length-1]).padStart(2,'0')}`,
-  }
-}
 
 interface BudgetRow { item: string; curr: number; prev: number; currency: string; note: string }
 
@@ -67,7 +33,7 @@ export default function ProposalEditModal({ propId, exhName, exhKey, year, initi
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
-  const initDates = parseDateToInputs(initialDate)
+  const initDates = parseDateRange(initialDate)
   const [startDate, setStartDate] = useState(initDates.start)
   const [endDate, setEndDate] = useState(initDates.end)
 
@@ -94,8 +60,8 @@ export default function ProposalEditModal({ propId, exhName, exhKey, year, initi
     for (const b of activeBudget) {
       const pay = pays.find(p => p.item === b.item)
       if (pay) {
-        if (pay.total !== b.curr) {
-          // total 변경 시 비율 유지하여 선금/잔금 재계산
+        if (pay.total !== b.curr && !pay.deposit_paid && !pay.final_paid) {
+          // 미납 상태에서만 금액 변경 반영 (납부 완료 항목은 건드리지 않음)
           const depRatio = pay.total > 0 ? pay.deposit_amount / pay.total : 0.5
           const newDep = Math.round(b.curr * depRatio)
           await supabase.from('payments').update({
@@ -112,10 +78,10 @@ export default function ProposalEditModal({ propId, exhName, exhKey, year, initi
         })
       }
     }
-    // 예산에서 삭제된 항목의 결제도 삭제
+    // 예산에서 삭제된 항목 중 미납인 결제만 삭제 (납부 완료 항목은 이력 보존)
     const activeItems = new Set(activeBudget.map(b => b.item))
     for (const pay of pays) {
-      if (!activeItems.has(pay.item)) {
+      if (!activeItems.has(pay.item) && !pay.deposit_paid && !pay.final_paid) {
         await supabase.from('payments').delete().eq('id', pay.id)
       }
     }

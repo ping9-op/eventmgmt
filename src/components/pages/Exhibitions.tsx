@@ -1,52 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { exhColor, costColor, formatEventDate, isPastEvent, exhDisplayName } from '../../lib/utils'
+import { exhColor, costColor, formatEventDate, isPastEvent, exhDisplayName, CUR_SYM, CURRENCIES, COST_ITEMS, MON, fmtCur, formatDateRange, parseDateRange } from '../../lib/utils'
 import { useToast } from '../../contexts/ToastContext'
 import type { Exhibition, Proposal, BudgetItem } from '../../types/database'
+import LoadingSpinner from '../LoadingSpinner'
 import ProposalEditModal from '../ProposalEditModal'
 import { useLang } from '../../contexts/LangContext'
+import EmptyState from '../EmptyState'
 
-const CUR_SYM: Record<string, string> = { KRW: '₩', JPY: '¥', USD: '$', EUR: '€', SGD: 'S$' }
-const CURRENCIES = ['KRW', 'JPY', 'USD', 'EUR', 'SGD']
-const COST_ITEMS = ['Booth Fee', 'Design', 'Gift', 'Part Timer', 'Flight', 'Accommodation', 'Meal', 'Item Delivery']
-const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-
-function formatDateRange(start: string, end: string): string {
-  if (!start) return ''
-  const s = new Date(start + 'T00:00:00')
-  if (isNaN(s.getTime())) return ''
-  const yr = s.getFullYear(), m = MON[s.getMonth()], d1 = s.getDate()
-  if (!end || end === start) return `${yr} ${m} ${d1}`
-  const e = new Date(end + 'T00:00:00')
-  if (isNaN(e.getTime())) return `${yr} ${m} ${d1}`
-  const d2 = e.getDate()
-  if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear())
-    return `${yr} ${m} ${d1}-${d2}`
-  return `${yr} ${m} ${d1} - ${e.getFullYear()} ${MON[e.getMonth()]} ${d2}`
-}
-
-function parseDateRange(str: string): { start: string; end: string } {
-  if (!str) return { start: '', end: '' }
-  const s = str.toLowerCase()
-  const MON_MAP: Record<string,number> = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12}
-  let month = -1
-  for (const [k, v] of Object.entries(MON_MAP)) { if (s.includes(k)) { month = v; break } }
-  if (month < 0) return { start: '', end: '' }
-  const nums = [...s.matchAll(/\d+/g)].map(m => parseInt(m[0]))
-  const yr = nums.find(n => n > 1000) || new Date().getFullYear()
-  const days = nums.filter(n => n >= 1 && n <= 31)
-  if (!days.length) return { start: '', end: '' }
-  const mm = String(month).padStart(2, '0')
-  return {
-    start: `${yr}-${mm}-${String(days[0]).padStart(2,'0')}`,
-    end:   `${yr}-${mm}-${String(days[days.length-1]).padStart(2,'0')}`,
-  }
-}
-
-function fmtCur(amt: number, cur: string) {
-  return (CUR_SYM[cur] || cur) + Math.round(amt).toLocaleString()
-}
 
 function budgetStr(budget: BudgetItem[]): string {
   const bc: Record<string, number> = {}
@@ -104,8 +66,8 @@ export default function Exhibitions() {
         supabase.from('proposals').select('*').order('year', { ascending: true }),
       ])
       if (cancelled?.current) return
-      if (exhErr) { console.error('exhibitions fetch error:', exhErr); return }
-      if (propErr) { console.error('proposals fetch error:', propErr); return }
+      if (exhErr) { showToast('박람회 데이터 로드 중 오류가 발생했습니다.', 'error'); return }
+      if (propErr) { showToast('Proposal 데이터 로드 중 오류가 발생했습니다.', 'error'); return }
       const exhList = exhData || []
       const propList = (propData || []) as unknown as Proposal[]
       const knownExhIds = new Set(exhList.map(e => e.id))
@@ -133,7 +95,7 @@ export default function Exhibitions() {
 
       if (!cancelled?.current) setData(entries)
     } catch (e) {
-      console.error('load error:', e)
+      showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error')
     } finally {
       if (!cancelled?.current) setLoading(false)
     }
@@ -288,7 +250,7 @@ export default function Exhibitions() {
     }
   }
 
-  if (loading) return <div className="view"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
+  if (loading) return <div className="view"><LoadingSpinner /></div>
 
   return (
     <div className="view">
@@ -305,10 +267,7 @@ export default function Exhibitions() {
       </div>
 
       {data.length === 0 && !loading && (
-        <div style={{ textAlign: 'center', color: 'var(--muted)', padding: 60, fontSize: 14 }}>
-          {t('no_items')}<br />
-          <button className="btn btn-primary btn-sm" style={{ marginTop: 16 }} onClick={() => setShowAddModal(true)}>{t('add_past')}</button>
-        </div>
+        <EmptyState icon="🏛" title={t('no_items')} sub={t('add_past_hint')} action={{ label: t('add_past'), onClick: () => setShowAddModal(true) }} />
       )}
 
       <div className="exh-grid" style={{ marginTop: 20 }}>

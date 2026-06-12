@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { exhColor, formatEventDate, costColor } from '../../lib/utils'
+import { exhColor, formatEventDate, costColor, CUR_SYM } from '../../lib/utils'
 import { useToast } from '../../contexts/ToastContext'
 import type { Payment } from '../../types/database'
 import ProposalEditModal from '../ProposalEditModal'
+import EmptyState from '../EmptyState'
 import { useLang } from '../../contexts/LangContext'
 import { useIsMobile } from '../../hooks/useBreakpoint'
 
@@ -40,7 +41,6 @@ const STATUS_COLORS: Record<string, string> = {
 }
 const SUB_CYCLE = ['Plan', 'Progress', 'Done']
 const OWNERS = ['Andrew', 'Jacey', 'Violet', 'John', 'All']
-const CUR_SYM: Record<string, string> = { KRW: '₩', JPY: '¥', USD: '$', EUR: '€', SGD: 'S$' }
 const CURRENCIES = ['KRW', 'JPY', 'USD', 'EUR', 'SGD']
 
 const DEFAULT_CHECKLIST: ChecklistItem[] = [
@@ -471,9 +471,7 @@ export default function EventDetail() {
                 )}
               </>
             ) : (
-              <div style={{ color: 'var(--muted)', padding: 40, textAlign: 'center' }}>
-                {t('no_proposal')}
-              </div>
+              <EmptyState icon="📄" title={t('no_proposal')} sub={t('no_proposal_hint')} />
             )}
           </div>
         )}

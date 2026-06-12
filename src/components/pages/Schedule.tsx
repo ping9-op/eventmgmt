@@ -5,6 +5,7 @@ import { krw, exhColor, formatEventDate, isPastEvent, exhDisplayName } from '../
 import type { Exhibition, Proposal, BudgetItem } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
+import LoadingSpinner from '../LoadingSpinner'
 
 interface ExhEntry {
   key: string; name: string; year: number
@@ -155,7 +156,7 @@ export default function Schedule() {
   const countByKey: Record<string, number> = {}
   for (const e of entries) countByKey[e.key] = (countByKey[e.key] || 0) + 1
 
-  if (loading) return <div className="view"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
+  if (loading) return <div className="view"><LoadingSpinner /></div>
 
   return (
     <div className="view">

@@ -1,15 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { costColor, exhColor } from '../../lib/utils'
+import { costColor, exhColor, CUR_SYM, fmtCur } from '../../lib/utils'
 import type { Exhibition, Payment } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
+import { useToast } from '../../contexts/ToastContext'
+import LoadingSpinner from '../LoadingSpinner'
+import EmptyState from '../EmptyState'
 
-const CUR_SYM: Record<string, string> = { KRW: '₩', JPY: '¥', USD: '$', EUR: '€', SGD: 'S$' }
-
-function fmtPay(amt: number, cur: string): string {
-  return (CUR_SYM[cur] || cur) + Math.round(amt).toLocaleString()
-}
 
 function sumByCur(pays: Payment[], fn: (p: Payment) => number): string {
   const acc: Record<string, number> = {}
@@ -19,7 +17,7 @@ function sumByCur(pays: Payment[], fn: (p: Payment) => number): string {
   }
   return Object.entries(acc).filter(([, v]) => v > 0)
     .sort(([a], [b]) => a === 'KRW' ? -1 : b === 'KRW' ? 1 : 0)
-    .map(([c, v]) => fmtPay(v, c)).join(' + ') || '0'
+    .map(([c, v]) => fmtCur(v, c)).join(' + ') || '0'
 }
 
 interface AddItemForm {
@@ -37,6 +35,7 @@ const emptyForm = (): AddItemForm => ({
 export default function Payments() {
   const location = useLocation()
   const { t } = useLang()
+  const { showToast } = useToast()
   const initKey = (location.state as any)?.key || null
   const [payments, setPayments] = useState<Record<string, Payment[]>>({})
   const [exhibitions, setExhibitions] = useState<Record<string, Exhibition>>({})
@@ -48,7 +47,6 @@ export default function Payments() {
   const [addForm, setAddForm] = useState<AddItemForm>(emptyForm())
   const [addError, setAddError] = useState('')
   const [addLoading, setAddLoading] = useState(false)
-  const [toast, setToast] = useState('')
   const [invoiceParseLoading, setInvoiceParseLoading] = useState(false)
   const [invoiceParseFileName, setInvoiceParseFileName] = useState('')
   const [invoiceParsed, setInvoiceParsed] = useState<{
@@ -77,7 +75,7 @@ export default function Payments() {
       if (initKey && keys.includes(initKey)) setSelected(initKey)
       else if (keys.length) setSelected(prev => prev || keys[0])
     } catch (e) {
-      console.error('load error:', e)
+      showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error')
     } finally {
       if (!cancelled?.current) setLoading(false)
     }
@@ -95,10 +93,7 @@ export default function Payments() {
     setShowInvoice(false)
   }, [selected])
 
-  function showToast(msg: string) {
-    setToast(msg)
-    setTimeout(() => setToast(''), 1800)
-  }
+
 
   function handleInvoiceFiles(files: FileList | null) {
     if (!files || !selected) return
@@ -243,7 +238,7 @@ export default function Payments() {
     return { label: t('unpaid_label'), color: '#D63031' }
   }
 
-  if (loading) return <div className="view"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
+  if (loading) return <div className="view"><LoadingSpinner /></div>
 
   return (
     <div className="view">
@@ -392,13 +387,11 @@ export default function Payments() {
             })}
 
             {selPays.length === 0 && (
-              <div style={{ color: 'var(--muted)', fontSize: 14, padding: '24px 0', textAlign: 'center' }}>
-                {t('no_items')}
-              </div>
+              <EmptyState icon="💳" title={t('no_items')} sub={t('add_payment_hint')} />
             )}
           </div>
         ) : (
-          <div style={{ color: 'var(--muted)', fontSize: 14, padding: 20 }}>{t('select_exh')}</div>
+          <EmptyState icon="🏛" title={t('select_exh')} sub={t('select_exh_hint')} />
         )}
       </div>
 
@@ -516,12 +509,7 @@ export default function Payments() {
         </div>
       )}
 
-      {/* 토스트 */}
-      {toast && (
-        <div style={{ position: 'fixed', bottom: 24, right: 16, background: '#1E3A5F', color: 'white', padding: '12px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 9999, animation: 'fadeIn .2s', maxWidth: 'calc(100vw - 32px)', wordBreak: 'keep-all' }}>
-          {toast}
-        </div>
-      )}
+
     </div>
   )
 }

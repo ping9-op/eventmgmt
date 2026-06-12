@@ -7,6 +7,9 @@ import type { SalesLead, SalesProposal } from '../../types/database'
 import { loadSalesSettings } from '../../lib/settings'
 import LeadDetailPanel from './LeadDetailPanel'
 import { useLang } from '../../contexts/LangContext'
+import { useToast } from '../../contexts/ToastContext'
+import { useIsMobile } from '../../hooks/useBreakpoint'
+import LoadingSpinner from '../LoadingSpinner'
 
 type TabType = 'board' | 'table' | 'proposal'
 
@@ -20,7 +23,9 @@ function PriorityBadge({ p }: { p: string }) {
 
 export default function SalesFunnel() {
   const { t } = useLang()
+  const { showToast } = useToast()
   const location = useLocation()
+  const isMobile = useIsMobile()
   const { owners: OWNERS } = loadSalesSettings()
 
   const KPI_CARDS = [
@@ -63,7 +68,7 @@ export default function SalesFunnel() {
         setLeads((leadData || []) as SalesLead[])
         setProposals((propData || []) as SalesProposal[])
       } catch (err: any) {
-        console.error('SalesFunnel load error:', err?.message)
+        showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -127,7 +132,7 @@ export default function SalesFunnel() {
     setChecked(new Set())
   }
 
-  if (loading) return <div className="view wide"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
+  if (loading) return <div className="view wide"><LoadingSpinner /></div>
 
   const total = leads.length
   const byS = (s: string) => leads.filter(l => l.current_stage === s).length
@@ -270,73 +275,115 @@ export default function SalesFunnel() {
 
         {/* 테이블 뷰 */}
         {tab === 'table' && (
-          <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, overflow: 'hidden' }}>
-            <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ background: isMobile ? 'transparent' : 'white', border: isMobile ? 'none' : '0.5px solid var(--border2)', borderRadius: 12, overflow: isMobile ? 'visible' : 'hidden' }}>
+            <div style={{ padding: '10px 16px', borderBottom: isMobile ? 'none' : '1px solid var(--border)', marginBottom: isMobile ? 10 : 0, display: 'flex', alignItems: 'center', gap: 10, background: isMobile ? 'white' : 'transparent', borderRadius: isMobile ? 10 : 0, border: isMobile ? '0.5px solid var(--border2)' : 'none' }}>
               <input type="text" placeholder="🔍 Company, Contact 검색..." style={{ flex: 1, padding: '7px 12px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13 }}
                 value={tableSearch}
                 onChange={e => setTableSearch(e.target.value)} />
               <span style={{ fontSize: 12, color: 'var(--muted)' }}>{tableFiltered.length}개</span>
             </div>
-            {/* 액션 바 */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '10px 16px', borderBottom: '1px solid var(--border)', background: '#FAFAFA' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
-                <input type="checkbox" checked={allIds.length > 0 && allIds.every(i => checked.has(i))} onChange={() => toggleCheck('', allIds)} style={{ width: 16, height: 16, accentColor: 'var(--accent)', cursor: 'pointer' }} />
-                {t('select_all')}
-              </label>
-              <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700, minWidth: 70 }}>{checked.size > 0 ? `${checked.size}개 선택됨` : ''}</span>
-              <div style={{ marginLeft: 'auto' }}>
-                <button onClick={exportCSV} style={{ padding: '6px 14px', borderRadius: 7, background: 'white', border: '1.5px solid #059669', color: '#059669', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>⬇️ {t('export_excel')}</button>
-              </div>
-            </div>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1050 }}>
-                <thead>
-                  <tr style={{ background: 'var(--accent)', color: 'white' }}>
-                    <th style={{ padding: '9px 10px', width: 38 }}><input type="checkbox" style={{ width: 15, height: 15, cursor: 'pointer' }} /></th>
-                    <th style={{ padding: '9px 12px', textAlign: 'left' }}>{t('col_company')}</th>
-                    <th style={{ padding: '9px 12px' }}>Event</th>
-                    <th style={{ padding: '9px 12px' }}>{t('col_owner')}</th>
-                    <th style={{ padding: '9px 12px' }}>1st</th>
-                    <th style={{ padding: '9px 12px' }}>{t('col_stage')}</th>
-                    <th style={{ padding: '9px 12px' }}>{t('col_last_contact')}</th>
-                    <th style={{ padding: '9px 12px' }}>Follow-up</th>
-                    <th style={{ padding: '9px 12px', textAlign: 'right' }}>{t('col_vol')}</th>
-                    <th style={{ padding: '9px 12px' }}>Priority</th>
-                    <th style={{ padding: '9px 12px' }}>Lost Reason</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tableFiltered.map(l => (
-                    <tr key={l.id} style={{ borderBottom: '0.5px solid var(--border)', cursor: 'pointer', transition: 'background .1s' }}
-                      onClick={() => setSelectedLeadId(l.id)}
-                      onMouseOver={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = '#FDF5F5'))}
-                      onMouseOut={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = ''))}>
-                      <td style={{ padding: '9px 10px', textAlign: 'center' }} onClick={e => { e.stopPropagation(); toggleCheck(l.id) }}>
-                        <input type="checkbox" checked={checked.has(l.id)} onChange={() => toggleCheck(l.id)} style={{ width: 15, height: 15, accentColor: 'var(--accent)', cursor: 'pointer' }} />
-                      </td>
-                      <td style={{ padding: '9px 12px', fontWeight: 700 }}>{l.company_name}<br /><span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 400 }}>{l.contact_person}</span></td>
-                      <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--muted)' }}>{l.event_name.replace(/ 20\d\d$/, '')}</td>
-                      <td style={{ padding: '9px 12px' }}>{l.owner}</td>
-                      <td style={{ padding: '9px 12px', textAlign: 'center' }}>{l.first_contact_done ? '✅' : '—'}</td>
-                      <td style={{ padding: '9px 12px' }} onClick={e => e.stopPropagation()}>
+            {isMobile ? (
+              /* 모바일 카드 뷰 */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {tableFiltered.map(l => {
+                  const stageColor = STAGE_COLORS[l.current_stage]?.bg || '#6B7280'
+                  return (
+                    <div key={l.id}
+                      style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '14px 16px', cursor: 'pointer' }}
+                      onClick={() => setSelectedLeadId(l.id)}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 700 }}>{l.company_name}</div>
+                          <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{l.contact_person} · {l.owner}</div>
+                        </div>
+                        <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, color: 'white', background: stageColor, flexShrink: 0, marginLeft: 8 }}>
+                          {l.current_stage}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
+                        {l.event_name.replace(/ 20\d\d$/, '')} · {l.volume_currency === 'KRW' ? `₩${(l.expected_monthly_volume || 0).toLocaleString()}` : `$${(l.expected_monthly_volume || 0).toLocaleString()}`}
+                      </div>
+                      <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--muted)', flexWrap: 'wrap', marginBottom: 10 }}>
+                        {l.last_contact_date && <span>연락: {l.last_contact_date}</span>}
+                        {l.next_follow_up_date && <span style={{ color: '#4F46E5', fontWeight: 600 }}>팔업: {l.next_follow_up_date}</span>}
+                      </div>
+                      <div onClick={e => e.stopPropagation()}>
                         <select value={l.current_stage} onChange={e => { e.stopPropagation(); moveStage(l.id, e.target.value) }} onClick={e => e.stopPropagation()}
-                          style={{ fontSize: 12, padding: '4px 7px', border: '1.5px solid var(--border2)', borderRadius: 6, background: 'white', cursor: 'pointer', maxWidth: 170 }}>
+                          style={{ width: '100%', fontSize: 12, padding: '8px 10px', border: '1.5px solid var(--border2)', borderRadius: 7, background: 'white', cursor: 'pointer', minHeight: 44 }}>
                           {STAGE_ORDER.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
-                      </td>
-                      <td style={{ padding: '9px 12px', fontSize: 12 }}>{l.last_contact_date || '—'}</td>
-                      <td style={{ padding: '9px 12px', fontSize: 12 }}>{l.next_follow_up_date || '—'}</td>
-                      <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 700, color: 'var(--accent)' }}>
-                        {l.volume_currency === 'KRW' ? `₩${(l.expected_monthly_volume || 0).toLocaleString()}` : `$${(l.expected_monthly_volume || 0).toLocaleString()}`}
-                      </td>
-                      <td style={{ padding: '9px 12px' }}><PriorityBadge p={l.priority} /></td>
-                      <td style={{ padding: '9px 12px', fontSize: 11, color: '#DC2626' }}>{l.lost_reason || '—'}</td>
-                    </tr>
-                  ))}
-                  {tableFiltered.length === 0 && <tr><td colSpan={11} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>{t('no_matching_leads')}</td></tr>}
-                </tbody>
-              </table>
-            </div>
+                      </div>
+                    </div>
+                  )
+                })}
+                {tableFiltered.length === 0 && (
+                  <div style={{ textAlign: 'center', color: 'var(--muted)', padding: 32, background: 'white', borderRadius: 12, border: '0.5px solid var(--border2)' }}>{t('no_matching_leads')}</div>
+                )}
+              </div>
+            ) : (
+              /* 데스크탑 테이블 뷰 */
+              <>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '10px 16px', borderBottom: '1px solid var(--border)', background: '#FAFAFA' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
+                    <input type="checkbox" checked={allIds.length > 0 && allIds.every(i => checked.has(i))} onChange={() => toggleCheck('', allIds)} style={{ width: 16, height: 16, accentColor: 'var(--accent)', cursor: 'pointer' }} />
+                    {t('select_all')}
+                  </label>
+                  <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700, minWidth: 70 }}>{checked.size > 0 ? `${checked.size}개 선택됨` : ''}</span>
+                  <div style={{ marginLeft: 'auto' }}>
+                    <button onClick={exportCSV} style={{ padding: '6px 14px', borderRadius: 7, background: 'white', border: '1.5px solid #059669', color: '#059669', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>⬇️ {t('export_excel')}</button>
+                  </div>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1050 }}>
+                    <thead>
+                      <tr style={{ background: 'var(--accent)', color: 'white' }}>
+                        <th style={{ padding: '9px 10px', width: 38 }}><input type="checkbox" style={{ width: 15, height: 15, cursor: 'pointer' }} /></th>
+                        <th style={{ padding: '9px 12px', textAlign: 'left' }}>{t('col_company')}</th>
+                        <th style={{ padding: '9px 12px' }}>Event</th>
+                        <th style={{ padding: '9px 12px' }}>{t('col_owner')}</th>
+                        <th style={{ padding: '9px 12px' }}>1st</th>
+                        <th style={{ padding: '9px 12px' }}>{t('col_stage')}</th>
+                        <th style={{ padding: '9px 12px' }}>{t('col_last_contact')}</th>
+                        <th style={{ padding: '9px 12px' }}>Follow-up</th>
+                        <th style={{ padding: '9px 12px', textAlign: 'right' }}>{t('col_vol')}</th>
+                        <th style={{ padding: '9px 12px' }}>Priority</th>
+                        <th style={{ padding: '9px 12px' }}>Lost Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tableFiltered.map(l => (
+                        <tr key={l.id} style={{ borderBottom: '0.5px solid var(--border)', cursor: 'pointer', transition: 'background .1s' }}
+                          onClick={() => setSelectedLeadId(l.id)}
+                          onMouseOver={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = '#FDF5F5'))}
+                          onMouseOut={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = ''))}>
+                          <td style={{ padding: '9px 10px', textAlign: 'center' }} onClick={e => { e.stopPropagation(); toggleCheck(l.id) }}>
+                            <input type="checkbox" checked={checked.has(l.id)} onChange={() => toggleCheck(l.id)} style={{ width: 15, height: 15, accentColor: 'var(--accent)', cursor: 'pointer' }} />
+                          </td>
+                          <td style={{ padding: '9px 12px', fontWeight: 700 }}>{l.company_name}<br /><span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 400 }}>{l.contact_person}</span></td>
+                          <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--muted)' }}>{l.event_name.replace(/ 20\d\d$/, '')}</td>
+                          <td style={{ padding: '9px 12px' }}>{l.owner}</td>
+                          <td style={{ padding: '9px 12px', textAlign: 'center' }}>{l.first_contact_done ? '✅' : '—'}</td>
+                          <td style={{ padding: '9px 12px' }} onClick={e => e.stopPropagation()}>
+                            <select value={l.current_stage} onChange={e => { e.stopPropagation(); moveStage(l.id, e.target.value) }} onClick={e => e.stopPropagation()}
+                              style={{ fontSize: 12, padding: '4px 7px', border: '1.5px solid var(--border2)', borderRadius: 6, background: 'white', cursor: 'pointer', maxWidth: 170 }}>
+                              {STAGE_ORDER.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                          </td>
+                          <td style={{ padding: '9px 12px', fontSize: 12 }}>{l.last_contact_date || '—'}</td>
+                          <td style={{ padding: '9px 12px', fontSize: 12 }}>{l.next_follow_up_date || '—'}</td>
+                          <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 700, color: 'var(--accent)' }}>
+                            {l.volume_currency === 'KRW' ? `₩${(l.expected_monthly_volume || 0).toLocaleString()}` : `$${(l.expected_monthly_volume || 0).toLocaleString()}`}
+                          </td>
+                          <td style={{ padding: '9px 12px' }}><PriorityBadge p={l.priority} /></td>
+                          <td style={{ padding: '9px 12px', fontSize: 11, color: '#DC2626' }}>{l.lost_reason || '—'}</td>
+                        </tr>
+                      ))}
+                      {tableFiltered.length === 0 && <tr><td colSpan={11} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>{t('no_matching_leads')}</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </div>
         )}
 

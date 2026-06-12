@@ -1,18 +1,14 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLang } from '../../contexts/LangContext'
+import { useToast } from '../../contexts/ToastContext'
+import LoadingSpinner from '../LoadingSpinner'
 import { Chart, ArcElement, Tooltip, DoughnutController } from 'chart.js'
 Chart.register(ArcElement, Tooltip, DoughnutController)
 import { supabase } from '../../lib/supabase'
-import { krw, exhColor, costColor, formatEventDate, isPastEvent, daysUntil, exhDisplayName } from '../../lib/utils'
+import { krw, exhColor, costColor, formatEventDate, isPastEvent, daysUntil, exhDisplayName, CUR_SYM, fmtCur } from '../../lib/utils'
 import type { Exhibition, BudgetItem, ActualCost } from '../../types/database'
 
-const CUR_SYM: Record<string, string> = { KRW: '₩', JPY: '¥', USD: '$', EUR: '€', SGD: 'S$' }
-
-function fmtCur(amt: number, cur: string): string {
-  const sym = CUR_SYM[cur] || cur
-  return sym + Math.round(amt).toLocaleString()
-}
 
 function budgetByCurStr(budget: BudgetItem[]): string {
   const bc: Record<string, number> = {}
@@ -33,6 +29,7 @@ interface UpcomingItem {
 export default function ExpoOverview() {
   const navigate = useNavigate()
   const { t } = useLang()
+  const { showToast } = useToast()
   const [entries, setEntries] = useState<ExhEntry[]>([])
   const [results, setResults] = useState<Record<string, { actual_costs: ActualCost[] }>>({})
   const [payments, setPayments] = useState<Record<string, any[]>>({})
@@ -52,7 +49,7 @@ export default function ExpoOverview() {
       for (const r of (data || []) as any[]) map[r.exhibition_key] = r
       setResults(map)
     } catch (e) {
-      console.error('reloadResults error:', e)
+      showToast('결과 데이터 로드 중 오류가 발생했습니다.', 'error')
     }
   }, [])
 
@@ -94,7 +91,7 @@ export default function ExpoOverview() {
         }
         setPayments(payMap)
       } catch (e) {
-        console.error('load error:', e)
+        showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -169,7 +166,7 @@ export default function ExpoOverview() {
     return items.sort((a, b) => a.days - b.days).slice(0, 5)
   }
 
-  if (loading) return <div className="view"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
+  if (loading) return <div className="view"><LoadingSpinner /></div>
 
   const upcoming = getUpcoming()
   const allE = entries

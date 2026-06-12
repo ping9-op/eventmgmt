@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { exhColor, formatEventDate, isPastEvent, STAGE_ORDER, STAGE_COLORS, exhDisplayName } from '../../lib/utils'
+import { exhColor, formatEventDate, isPastEvent, STAGE_ORDER, STAGE_COLORS, exhDisplayName, CUR_SYM } from '../../lib/utils'
 import type { Exhibition, Payment, SalesLead, SalesTask, BudgetItem } from '../../types/database'
 import LeadDetailPanel from './LeadDetailPanel'
 import { useLang } from '../../contexts/LangContext'
+import { useToast } from '../../contexts/ToastContext'
+import LoadingSpinner from '../LoadingSpinner'
 
-const CUR_SYM: Record<string, string> = { KRW: '₩', JPY: '¥', USD: '$', EUR: '€', SGD: 'S$' }
 
 function fmtCur(amt: number, cur: string, lang: string): string {
   const sym = CUR_SYM[cur] || cur
@@ -27,6 +28,7 @@ interface UpcomingItem {
 export default function Dashboard() {
   const navigate = useNavigate()
   const { t, lang } = useLang()
+  const { showToast } = useToast()
   const [entries, setEntries] = useState<ExhEntry[]>([])
   const [payments, setPayments] = useState<Record<string, Payment[]>>({})
   const [leads, setLeads] = useState<SalesLead[]>([])
@@ -65,7 +67,7 @@ export default function Dashboard() {
         setLeads((leadData || []) as SalesLead[])
         setTasks((taskData || []) as SalesTask[])
       } catch (err: any) {
-        console.error('Dashboard load error:', err?.message)
+        showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -129,7 +131,7 @@ export default function Dashboard() {
     return items.sort((a, b) => a.days - b.days).slice(0, 5)
   }
 
-  if (loading) return <div className="view"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
+  if (loading) return <div className="view"><LoadingSpinner /></div>
 
   const upcoming = getUpcoming()
   const latest = getLatestSorted()
@@ -358,7 +360,7 @@ export default function Dashboard() {
               const { data } = await supabase.from('sales_leads').select('*')
               if (data) setLeads(data as SalesLead[])
             } catch (err: any) {
-              console.error('onRefresh error:', err?.message)
+              showToast('새로고침 중 오류가 발생했습니다.', 'error')
             }
           }}
         />

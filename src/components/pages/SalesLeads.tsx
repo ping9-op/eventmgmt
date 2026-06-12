@@ -8,6 +8,8 @@ import { useToast } from '../../contexts/ToastContext'
 import LeadDetailPanel from './LeadDetailPanel'
 import { useLang } from '../../contexts/LangContext'
 import { logStageChange } from '../../lib/stageHistory'
+import { useIsMobile } from '../../hooks/useBreakpoint'
+import LoadingSpinner from '../LoadingSpinner'
 
 type GroupBy = 'event' | 'date' | 'source'
 type ViewMode = 'group' | 'detail'
@@ -34,6 +36,7 @@ export default function SalesLeads() {
   const { t } = useLang()
   const location = useLocation()
   const { showToast } = useToast()
+  const isMobile = useIsMobile()
   const [settings, setSettings] = useState<SalesSettingsData | null>(null)
   const PRIORITIES = ['High', 'Medium', 'Low']
 
@@ -98,7 +101,7 @@ export default function SalesLeads() {
           setSettings(s)
         }
       } catch (e) {
-        console.error('load error:', e)
+        showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -112,7 +115,7 @@ export default function SalesLeads() {
       const { data } = await supabase.from('sales_leads').select('*').order('registered_date', { ascending: false })
       setLeads((data || []) as SalesLead[])
     } catch (e) {
-      console.error('load error:', e)
+      showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error')
     } finally {
       setLoading(false)
     }
@@ -316,7 +319,7 @@ export default function SalesLeads() {
   const pagedDetailLeads = detailLeads.slice(detailPage * DETAIL_PER_PAGE, (detailPage + 1) * DETAIL_PER_PAGE)
   const allDetailIds = pagedDetailLeads.map(l => l.id)
 
-  if (loading) return <div className="view wide"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
+  if (loading) return <div className="view wide"><LoadingSpinner /></div>
 
   return (
     <div className="view wide">
@@ -356,6 +359,7 @@ export default function SalesLeads() {
               </button>
             ))}
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('search_placeholder')}
+              className="leads-search-input"
               style={{ flex: 1, minWidth: 200, padding: '7px 12px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13 }} />
             {filterOwner && (
               <span style={{ background: '#EEF2FF', color: '#4F46E5', padding: '4px 10px', borderRadius: 99, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -450,71 +454,116 @@ export default function SalesLeads() {
           </div>
 
           {/* 액션 바 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '10px 16px', borderBottom: '1px solid var(--border)', background: '#FAFAFA', marginBottom: 0 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
-              <input type="checkbox" checked={allDetailIds.length > 0 && allDetailIds.every(i => checked.has(i))} onChange={() => toggleCheck('', allDetailIds)} style={{ width: 16, height: 16, accentColor: 'var(--accent)', cursor: 'pointer' }} />
-              {t('select_all')}
-            </label>
-            <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700, minWidth: 70 }}>{checked.size > 0 ? `${checked.size}개 선택됨` : ''}</span>
-            <div style={{ marginLeft: 'auto' }}>
-              <button onClick={() => exportCSV()} style={{ padding: '6px 14px', borderRadius: 7, background: 'white', border: '1.5px solid #059669', color: '#059669', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                {t('export_excel')}
+          {isMobile ? (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+              <button onClick={() => exportCSV()} style={{ padding: '8px 14px', borderRadius: 7, background: 'white', border: '1.5px solid #059669', color: '#059669', fontSize: 12, fontWeight: 700, cursor: 'pointer', minHeight: 44 }}>
+                ⬇️ {t('export_excel')}
               </button>
             </div>
-          </div>
-
-          <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: totalDetailPages > 1 ? '12px 12px 0 0' : 12, overflow: 'hidden' }}>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1180 }}>
-                <thead>
-                  <tr style={{ background: 'var(--accent)', color: 'white' }}>
-                    <th style={{ padding: '9px 10px', width: 38 }}><input type="checkbox" style={{ width: 15, height: 15, cursor: 'pointer' }} /></th>
-                    <th style={{ padding: '9px 12px' }}>SN</th>
-                    <th style={{ padding: '9px 12px' }}>{t('registered_date_lbl')}</th>
-                    <th style={{ padding: '9px 12px' }}>{t('s_event')}</th>
-                    <th style={{ padding: '9px 12px', textAlign: 'left' }}>Company</th>
-                    <th style={{ padding: '9px 12px' }}>{t('owner_lbl')}</th>
-                    <th style={{ padding: '9px 12px' }}>Phone/Email</th>
-                    <th style={{ padding: '9px 12px' }}>Source</th>
-                    <th style={{ padding: '9px 12px' }}>Owner</th>
-                    <th style={{ padding: '9px 12px' }}>Stage</th>
-                    <th style={{ padding: '9px 12px' }}>Last Contact</th>
-                    <th style={{ padding: '9px 12px' }}>Next Action</th>
-                    <th style={{ padding: '9px 12px' }}>Follow-up</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagedDetailLeads.map(l => (
-                    <tr key={l.id} style={{ borderBottom: '0.5px solid var(--border)', cursor: 'pointer', transition: 'background .1s' }}
-                      onClick={() => setSelectedLeadId(l.id)}
-                      onMouseOver={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = '#FDF5F5'))}
-                      onMouseOut={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = ''))}>
-                      <td style={{ padding: '9px 10px', textAlign: 'center' }} onClick={e => { e.stopPropagation(); toggleCheck(l.id) }}>
-                        <input type="checkbox" checked={checked.has(l.id)} onChange={() => toggleCheck(l.id)} style={{ width: 15, height: 15, accentColor: 'var(--accent)', cursor: 'pointer' }} />
-                      </td>
-                      <td style={{ padding: '9px 12px', color: 'var(--muted)', fontWeight: 600 }}>{l.serial_no}</td>
-                      <td style={{ padding: '9px 12px' }}>{l.registered_date}</td>
-                      <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--muted)' }}>{l.event_name.replace(/ 20\d\d$/, '')}</td>
-                      <td style={{ padding: '9px 12px', fontWeight: 700 }}>{l.company_name}</td>
-                      <td style={{ padding: '9px 12px' }}>{l.contact_person}</td>
-                      <td style={{ padding: '9px 12px', fontSize: 11 }}>{l.phone || '—'}<br /><span style={{ color: 'var(--muted)' }}>{l.email || '—'}</span></td>
-                      <td style={{ padding: '9px 12px', fontSize: 12 }}>{l.lead_source}</td>
-                      <td style={{ padding: '9px 12px' }}>{l.owner}</td>
-                      <td style={{ padding: '9px 12px' }} onClick={e => e.stopPropagation()}>
-                        <InlineStageSelect lead={l} onUpdate={updateStage} />
-                      </td>
-                      <td style={{ padding: '9px 12px', fontSize: 12 }}>{l.last_contact_date || '—'}</td>
-                      <td style={{ padding: '9px 12px', fontSize: 11, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.next_action || '—'}</td>
-                      <td style={{ padding: '9px 12px', fontSize: 12 }}>{l.next_follow_up_date || '—'}</td>
-                    </tr>
-                  ))}
-                  {detailLeads.length === 0 && (
-                    <tr><td colSpan={13} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>{t('no_leads')}</td></tr>
-                  )}
-                </tbody>
-              </table>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '10px 16px', borderBottom: '1px solid var(--border)', background: '#FAFAFA', marginBottom: 0 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
+                <input type="checkbox" checked={allDetailIds.length > 0 && allDetailIds.every(i => checked.has(i))} onChange={() => toggleCheck('', allDetailIds)} style={{ width: 16, height: 16, accentColor: 'var(--accent)', cursor: 'pointer' }} />
+                {t('select_all')}
+              </label>
+              <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700, minWidth: 70 }}>{checked.size > 0 ? `${checked.size}개 선택됨` : ''}</span>
+              <div style={{ marginLeft: 'auto' }}>
+                <button onClick={() => exportCSV()} style={{ padding: '6px 14px', borderRadius: 7, background: 'white', border: '1.5px solid #059669', color: '#059669', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                  {t('export_excel')}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
+
+          {isMobile ? (
+            /* 모바일 카드 뷰 */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {pagedDetailLeads.map(l => {
+                const stageColor = STAGE_COLORS[l.current_stage]?.bg || '#6B7280'
+                return (
+                  <div key={l.id}
+                    style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '14px 16px', cursor: 'pointer' }}
+                    onClick={() => setSelectedLeadId(l.id)}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{l.company_name}</div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{l.contact_person} · {l.owner}</div>
+                      </div>
+                      <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, color: 'white', background: stageColor, whiteSpace: 'nowrap', flexShrink: 0, marginLeft: 8 }}>
+                        {l.current_stage}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>{l.event_name.replace(/ 20\d\d$/, '')} · {l.lead_source}</div>
+                    <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--muted)', flexWrap: 'wrap' }}>
+                      {l.last_contact_date && <span>연락: {l.last_contact_date}</span>}
+                      {l.next_follow_up_date && <span style={{ color: '#4F46E5', fontWeight: 600 }}>팔업: {l.next_follow_up_date}</span>}
+                      {l.next_action && <span style={{ color: 'var(--accent)' }}>→ {l.next_action}</span>}
+                    </div>
+                    <div style={{ marginTop: 10 }} onClick={e => e.stopPropagation()}>
+                      <InlineStageSelect lead={l} onUpdate={updateStage} />
+                    </div>
+                  </div>
+                )
+              })}
+              {detailLeads.length === 0 && (
+                <div style={{ textAlign: 'center', color: 'var(--muted)', padding: 32, background: 'white', borderRadius: 12, border: '0.5px solid var(--border2)' }}>{t('no_leads')}</div>
+              )}
+            </div>
+          ) : (
+            /* 데스크탑 테이블 뷰 */
+            <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: totalDetailPages > 1 ? '12px 12px 0 0' : 12, overflow: 'hidden' }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1180 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--accent)', color: 'white' }}>
+                      <th style={{ padding: '9px 10px', width: 38 }}><input type="checkbox" style={{ width: 15, height: 15, cursor: 'pointer' }} /></th>
+                      <th style={{ padding: '9px 12px' }}>SN</th>
+                      <th style={{ padding: '9px 12px' }}>{t('registered_date_lbl')}</th>
+                      <th style={{ padding: '9px 12px' }}>{t('s_event')}</th>
+                      <th style={{ padding: '9px 12px', textAlign: 'left' }}>Company</th>
+                      <th style={{ padding: '9px 12px' }}>{t('owner_lbl')}</th>
+                      <th style={{ padding: '9px 12px' }}>Phone/Email</th>
+                      <th style={{ padding: '9px 12px' }}>Source</th>
+                      <th style={{ padding: '9px 12px' }}>Owner</th>
+                      <th style={{ padding: '9px 12px' }}>Stage</th>
+                      <th style={{ padding: '9px 12px' }}>Last Contact</th>
+                      <th style={{ padding: '9px 12px' }}>Next Action</th>
+                      <th style={{ padding: '9px 12px' }}>Follow-up</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedDetailLeads.map(l => (
+                      <tr key={l.id} style={{ borderBottom: '0.5px solid var(--border)', cursor: 'pointer', transition: 'background .1s' }}
+                        onClick={() => setSelectedLeadId(l.id)}
+                        onMouseOver={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = '#FDF5F5'))}
+                        onMouseOut={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = ''))}>
+                        <td style={{ padding: '9px 10px', textAlign: 'center' }} onClick={e => { e.stopPropagation(); toggleCheck(l.id) }}>
+                          <input type="checkbox" checked={checked.has(l.id)} onChange={() => toggleCheck(l.id)} style={{ width: 15, height: 15, accentColor: 'var(--accent)', cursor: 'pointer' }} />
+                        </td>
+                        <td style={{ padding: '9px 12px', color: 'var(--muted)', fontWeight: 600 }}>{l.serial_no}</td>
+                        <td style={{ padding: '9px 12px' }}>{l.registered_date}</td>
+                        <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--muted)' }}>{l.event_name.replace(/ 20\d\d$/, '')}</td>
+                        <td style={{ padding: '9px 12px', fontWeight: 700 }}>{l.company_name}</td>
+                        <td style={{ padding: '9px 12px' }}>{l.contact_person}</td>
+                        <td style={{ padding: '9px 12px', fontSize: 11 }}>{l.phone || '—'}<br /><span style={{ color: 'var(--muted)' }}>{l.email || '—'}</span></td>
+                        <td style={{ padding: '9px 12px', fontSize: 12 }}>{l.lead_source}</td>
+                        <td style={{ padding: '9px 12px' }}>{l.owner}</td>
+                        <td style={{ padding: '9px 12px' }} onClick={e => e.stopPropagation()}>
+                          <InlineStageSelect lead={l} onUpdate={updateStage} />
+                        </td>
+                        <td style={{ padding: '9px 12px', fontSize: 12 }}>{l.last_contact_date || '—'}</td>
+                        <td style={{ padding: '9px 12px', fontSize: 11, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.next_action || '—'}</td>
+                        <td style={{ padding: '9px 12px', fontSize: 12 }}>{l.next_follow_up_date || '—'}</td>
+                      </tr>
+                    ))}
+                    {detailLeads.length === 0 && (
+                      <tr><td colSpan={13} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>{t('no_leads')}</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
           {/* 페이지네이션 */}
           {totalDetailPages > 1 && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap', padding: '12px 16px', background: 'white', border: '0.5px solid var(--border2)', borderTop: '1px solid var(--border)', borderRadius: '0 0 12px 12px' }}>

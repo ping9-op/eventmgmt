@@ -4,6 +4,8 @@ import { supabase } from '../../lib/supabase'
 import { STAGE_ORDER, STAGE_COLORS } from '../../lib/utils'
 import type { SalesLead } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
+import { useToast } from '../../contexts/ToastContext'
+import LoadingSpinner from '../LoadingSpinner'
 import { computeAvgDaysPerStage, type StageHistoryRow } from '../../lib/stageHistory'
 
 type PeriodFilter = 'all' | 'month' | '3months' | 'year'
@@ -46,6 +48,7 @@ function computeCurrentStageDays(leads: SalesLead[]): Record<string, { avgDays: 
 export default function SalesReports() {
   const { t } = useLang()
   const navigate = useNavigate()
+  const { showToast } = useToast()
   const [allLeads, setAllLeads] = useState<SalesLead[]>([])
   const [stageHistory, setStageHistory] = useState<StageHistoryRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -59,13 +62,13 @@ export default function SalesReports() {
           supabase.from('sales_leads').select('*'),
           supabase.from('sales_stage_history').select('*').order('changed_at'),
         ])
-        if (le) console.error('SalesReports load error:', le.message)
+        if (le) { showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error') }
         if (!cancelled) {
           setAllLeads((leadData || []) as SalesLead[])
           setStageHistory((histData || []) as StageHistoryRow[])
         }
       } catch (e) {
-        console.error('SalesReports load error:', e)
+        showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -136,7 +139,7 @@ export default function SalesReports() {
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
   }
 
-  if (loading) return <div className="view wide"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
+  if (loading) return <div className="view wide"><LoadingSpinner /></div>
 
   const leads = filterByPeriod(allLeads, period)
   const total = leads.length
