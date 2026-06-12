@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { krw, exhColor, formatEventDate, isPastEvent, exhDisplayName } from '../../lib/utils'
@@ -29,33 +29,42 @@ export default function Schedule() {
   const [form, setForm] = useState<Partial<ExhEntry>>({})
   const [saving, setSaving] = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
+  const mountedRef = useRef(true)
 
   async function load() {
-    const [{ data: exhData, error: ee }, { data: propData, error: pe }] = await Promise.all([
-      supabase.from('exhibitions').select('*'),
-      supabase.from('proposals').select('*').order('year'),
-    ])
-    if (ee || pe) { showToast('⚠️ 데이터 로드 실패'); setLoading(false); return }
-    const map: Record<string, Exhibition> = {}
-    for (const e of (exhData || [])) map[e.id] = e
-    setExhMap(map)
+    try {
+      const [{ data: exhData, error: ee }, { data: propData, error: pe }] = await Promise.all([
+        supabase.from('exhibitions').select('*'),
+        supabase.from('proposals').select('*').order('year'),
+      ])
+      if (ee || pe) { if (mountedRef.current) showToast('⚠️ 데이터 로드 실패'); return }
+      const map: Record<string, Exhibition> = {}
+      for (const e of (exhData || [])) map[e.id] = e
 
-    const list: ExhEntry[] = ((propData || []) as unknown as Proposal[]).map(p => {
-      const exh = map[p.exhibition_id]
-      const budget = (p.budget as BudgetItem[]) || []
-      return {
-        key: exh?.key || '', name: exh?.name || '', year: p.year,
-        date: p.date_of_event, venue: p.venue,
-        total: budget.reduce((s, b) => s + b.curr, 0),
-        recurring: exh?.recurring || false,
-        proposal_date: p.proposal_date, author: p.author
-      }
-    })
-    setEntries(list)
-    setLoading(false)
+      const list: ExhEntry[] = ((propData || []) as unknown as Proposal[]).map(p => {
+        const exh = map[p.exhibition_id]
+        const budget = (p.budget as BudgetItem[]) || []
+        return {
+          key: exh?.key || '', name: exh?.name || '', year: p.year,
+          date: p.date_of_event, venue: p.venue,
+          total: budget.reduce((s, b) => s + b.curr, 0),
+          recurring: exh?.recurring || false,
+          proposal_date: p.proposal_date, author: p.author
+        }
+      })
+      if (mountedRef.current) { setExhMap(map); setEntries(list) }
+    } catch {
+      if (mountedRef.current) showToast('⚠️ 데이터 로드 실패')
+    } finally {
+      if (mountedRef.current) setLoading(false)
+    }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    mountedRef.current = true
+    load()
+    return () => { mountedRef.current = false }
+  }, [])
 
   function openNew() {
     setForm({ year: new Date().getFullYear() + 1, author: '' })
@@ -132,8 +141,8 @@ export default function Schedule() {
     const exh = Object.values(exhMap).find(e => e.key === key)
     if (!exh) return
     const { error } = await supabase.from('proposals').delete().eq('exhibition_id', exh.id).eq('year', year)
-    if (error) { showToast('⚠️ 삭제 실패: ' + error.message); return }
-    load()
+    if (error) { if (mountedRef.current) showToast('⚠️ 삭제 실패: ' + error.message); return }
+    if (mountedRef.current) load()
   }
 
   const yearGroups: Record<number, ExhEntry[]> = {}
@@ -150,13 +159,15 @@ export default function Schedule() {
 
   return (
     <div className="view">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div className="sec-hdr" style={{ margin: 0 }}>
+      <div className="page-hdr-row">
+        <div className="sec-hdr">
           <div className="bar" />
           <div className="txt">{t('sched_title')}</div>
           <div className="sub">{t('sched_sub')}</div>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={openNew}>{t('add_schedule')}</button>
+        <div className="page-hdr-actions">
+          <button className="btn btn-primary btn-sm" onClick={openNew}>{t('add_schedule')}</button>
+        </div>
       </div>
 
       {Object.entries(yearGroups).sort((a, b) => Number(b[0]) - Number(a[0])).map(([year, yEntries]) => {
@@ -172,6 +183,7 @@ export default function Schedule() {
               </span>
               <div className="yr-meta">{yEntries.length}{t('unit_exh')} &nbsp;·&nbsp; {krw(yearTotal)}</div>
             </div>
+            <div className="table-scroll-wrapper">
             <table className="rank-table">
               <thead>
                 <tr>
@@ -219,13 +231,14 @@ export default function Schedule() {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )
       })}
 
       {modal.open && (
         <div className="modal-bg open">
-          <div className="modal" style={{ maxWidth: 500 }}>
+          <div className="modal">
             <div className="modal-hdr">
               <h3>{modal.isNew ? t('sched_add_title') : t('sched_edit_title')}</h3>
               <button className="modal-close" onClick={() => { setModal({ open: false, isNew: false }); setConfirmDel(false) }}>✕</button>
@@ -265,7 +278,7 @@ export default function Schedule() {
               <div style={{ marginTop: 16, padding: '12px 14px', background: '#FFF0F0', borderRadius: 8, border: '1px solid #F5C6C6' }}>
                 <div style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 8 }}>{t('delete_sched_warn')}</div>
                 {confirmDel ? (
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--danger)' }}>{t('confirm_delete')}</span>
                     <button className="btn btn-sm" style={{ background: '#D63031', color: 'white', border: 'none' }}
                       onClick={async () => {

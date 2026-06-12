@@ -57,27 +57,37 @@ export default function Payments() {
   } | null>(null)
   const itemInputRef = useRef<HTMLInputElement>(null)
 
-  async function load() {
-    const [{ data: exhData }, { data: payData }] = await Promise.all([
-      supabase.from('exhibitions').select('*'),
-      supabase.from('payments').select('*').order('created_at'),
-    ])
-    const exhMap: Record<string, Exhibition> = {}
-    for (const e of (exhData || [])) exhMap[e.key] = e
-    setExhibitions(exhMap)
-    const payMap: Record<string, Payment[]> = {}
-    for (const p of (payData || []) as Payment[]) {
-      if (!payMap[p.exhibition_key]) payMap[p.exhibition_key] = []
-      payMap[p.exhibition_key].push(p)
+  async function load(cancelled?: { current: boolean }) {
+    try {
+      const [{ data: exhData }, { data: payData }] = await Promise.all([
+        supabase.from('exhibitions').select('*'),
+        supabase.from('payments').select('*').order('created_at'),
+      ])
+      if (cancelled?.current) return
+      const exhMap: Record<string, Exhibition> = {}
+      for (const e of (exhData || [])) exhMap[e.key] = e
+      setExhibitions(exhMap)
+      const payMap: Record<string, Payment[]> = {}
+      for (const p of (payData || []) as Payment[]) {
+        if (!payMap[p.exhibition_key]) payMap[p.exhibition_key] = []
+        payMap[p.exhibition_key].push(p)
+      }
+      setPayments(payMap)
+      const keys = Object.keys(payMap)
+      if (initKey && keys.includes(initKey)) setSelected(initKey)
+      else if (keys.length) setSelected(prev => prev || keys[0])
+    } catch (e) {
+      console.error('load error:', e)
+    } finally {
+      if (!cancelled?.current) setLoading(false)
     }
-    setPayments(payMap)
-    const keys = Object.keys(payMap)
-    if (initKey && keys.includes(initKey)) setSelected(initKey)
-    else if (keys.length) setSelected(prev => prev || keys[0])
-    setLoading(false)
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    const cancelled = { current: false }
+    load(cancelled)
+    return () => { cancelled.current = true }
+  }, [])
 
   useEffect(() => {
     setInvoiceParsed(null)
@@ -152,23 +162,28 @@ export default function Payments() {
     const finAmt = addForm.finalAmt !== '' ? (parseInt(addForm.finalAmt) || 0) : total - depAmt
 
     setAddLoading(true)
-    const { error } = await supabase.from('payments').insert({
-      exhibition_key: selected!,
-      item: itemName,
-      total,
-      currency: addForm.currency,
-      deposit_amount: depAmt,
-      deposit_due: addForm.depositDue || null,
-      deposit_paid: false,
-      final_amount: finAmt,
-      final_due: addForm.finalDue || null,
-      final_paid: false,
-    } as any)
-    setAddLoading(false)
-    if (error) { setAddError('저장 실패: ' + error.message); return }
-    setShowAddModal(false)
-    showToast('💾 저장되었습니다.')
-    load()
+    try {
+      const { error } = await supabase.from('payments').insert({
+        exhibition_key: selected!,
+        item: itemName,
+        total,
+        currency: addForm.currency,
+        deposit_amount: depAmt,
+        deposit_due: addForm.depositDue || null,
+        deposit_paid: false,
+        final_amount: finAmt,
+        final_due: addForm.finalDue || null,
+        final_paid: false,
+      } as any)
+      if (error) { setAddError('저장 실패: ' + error.message); return }
+      setShowAddModal(false)
+      showToast('💾 저장되었습니다.')
+      load()
+    } catch (e) {
+      setAddError('오류: ' + String(e))
+    } finally {
+      setAddLoading(false)
+    }
   }
 
   async function deleteItem(payId: string) {
@@ -259,11 +274,11 @@ export default function Payments() {
         {/* 오른쪽 상세 */}
         {selected ? (
           <div style={{ overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <div className="page-hdr-row" style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 16, fontWeight: 700 }}>
                 {exhNameFromKey(selected)} {t('payment_schedule_lbl')}
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div className="page-hdr-actions">
                 <button className="btn btn-primary btn-sm" onClick={openAddModal}>
                   {t('add_pay_item')}
                 </button>
@@ -303,7 +318,7 @@ export default function Payments() {
                   </div>
                 )}
                 {invoiceParsed && (
-                  <div style={{ border: '1px solid var(--border2)', borderRadius: 10, padding: '14px 16px', background: '#FDFBFB' }}>
+                  <div style={{ border: '1px solid var(--border2)', borderRadius: 10, padding: '14px 16px', background: '#FDFBFB', overflowX: 'auto' }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)', marginBottom: 10 }}>
                       ✅ 파싱 완료 — "{invoiceParsed.fileName}"
                     </div>
@@ -397,7 +412,7 @@ export default function Payments() {
 
             <div style={{ display: 'grid', gap: 14 }}>
               {/* 항목명 + 통화 */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'end' }}>
+              <div className="add-form-top-row" style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'end' }}>
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>{t('item_name_required')}</label>
                   <input
@@ -405,7 +420,7 @@ export default function Payments() {
                     value={addForm.item}
                     onChange={e => setAddForm(f => ({ ...f, item: e.target.value }))}
                     placeholder="예: Booth Fee, Flight, Design..."
-                    style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border2)', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}
+                    style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border2)', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', minHeight: '44px' }}
                     onKeyDown={e => e.key === 'Enter' && submitAdd()}
                   />
                 </div>
@@ -428,14 +443,14 @@ export default function Payments() {
                   value={addForm.total}
                   onChange={e => setAddForm(f => ({ ...f, total: e.target.value }))}
                   placeholder="0"
-                  style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border2)', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border2)', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', minHeight: '44px' }}
                 />
               </div>
 
               {/* 선금 */}
               <div style={{ background: '#EEF4FF', borderRadius: 10, padding: '12px 14px' }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#3A5FA0', marginBottom: 10 }}>{t('deposit_label')}</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div className="g2-nm" style={{ gap: 10 }}>
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>{t('amount_col')}</label>
                     <input
@@ -443,7 +458,7 @@ export default function Payments() {
                       value={addForm.depositAmt}
                       onChange={e => setAddForm(f => ({ ...f, depositAmt: e.target.value }))}
                       placeholder="0"
-                      style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, boxSizing: 'border-box' }}
+                      style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', minHeight: '44px' }}
                     />
                   </div>
                   <div>
@@ -452,7 +467,7 @@ export default function Payments() {
                       type="date"
                       value={addForm.depositDue}
                       onChange={e => setAddForm(f => ({ ...f, depositDue: e.target.value }))}
-                      style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, boxSizing: 'border-box' }}
+                      style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', minHeight: '44px' }}
                     />
                   </div>
                 </div>
@@ -461,7 +476,7 @@ export default function Payments() {
               {/* 잔금 */}
               <div style={{ background: '#F0FFF4', borderRadius: 10, padding: '12px 14px' }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#2E7D51', marginBottom: 10 }}>{t('final_pay')}</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div className="g2-nm" style={{ gap: 10 }}>
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>{t('amount_col')}</label>
                     <input
@@ -469,7 +484,7 @@ export default function Payments() {
                       value={addForm.finalAmt}
                       onChange={e => setAddForm(f => ({ ...f, finalAmt: e.target.value }))}
                       placeholder={t('total') + ' - ' + t('deposit_pay')}
-                      style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, boxSizing: 'border-box' }}
+                      style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', minHeight: '44px' }}
                     />
                   </div>
                   <div>
@@ -478,7 +493,7 @@ export default function Payments() {
                       type="date"
                       value={addForm.finalDue}
                       onChange={e => setAddForm(f => ({ ...f, finalDue: e.target.value }))}
-                      style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, boxSizing: 'border-box' }}
+                      style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', minHeight: '44px' }}
                     />
                   </div>
                 </div>
@@ -489,7 +504,7 @@ export default function Payments() {
               <div style={{ marginTop: 12, fontSize: 12, color: '#D63031', fontWeight: 600 }}>{addError}</div>
             )}
 
-            <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
               <button className="btn btn-muted btn-sm" onClick={() => setShowAddModal(false)} style={{ padding: '8px 20px' }}>
                 {t('cancel')}
               </button>
@@ -503,7 +518,7 @@ export default function Payments() {
 
       {/* 토스트 */}
       {toast && (
-        <div style={{ position: 'fixed', bottom: 24, right: 24, background: '#1E3A5F', color: 'white', padding: '12px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 9999, animation: 'fadeIn .2s' }}>
+        <div style={{ position: 'fixed', bottom: 24, right: 16, background: '#1E3A5F', color: 'white', padding: '12px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 9999, animation: 'fadeIn .2s', maxWidth: 'calc(100vw - 32px)', wordBreak: 'keep-all' }}>
           {toast}
         </div>
       )}
@@ -529,8 +544,8 @@ function PayCard({ pay, color, isSaving, onToggle, onSaveCurrency, onSaveAmounts
       <div className="pic-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
           <div style={{ width: 5, height: 22, background: costColor(pay.item), borderRadius: 3, flexShrink: 0 }} />
-          <span style={{ fontWeight: 700, fontSize: 15, whiteSpace: 'nowrap' }}>{pay.item}</span>
-          <span style={{ fontSize: 13, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+          <span style={{ fontWeight: 700, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '40%' }}>{pay.item}</span>
+          <span style={{ fontSize: 13, color: 'var(--muted)', whiteSpace: 'nowrap', flexShrink: 0 }}>
             {t('total')}: <strong style={{ color: 'var(--accent)' }}>
               {(CUR_SYM[pay.currency] || pay.currency)}{pay.total.toLocaleString()}
             </strong>

@@ -52,15 +52,26 @@ export default function SalesReports() {
   const [period, setPeriod] = useState<PeriodFilter>('all')
 
   useEffect(() => {
-    Promise.all([
-      supabase.from('sales_leads').select('*'),
-      supabase.from('sales_stage_history').select('*').order('changed_at'),
-    ]).then(([{ data: leadData, error: le }, { data: histData }]) => {
-      if (le) console.error('SalesReports load error:', le.message)
-      setAllLeads((leadData || []) as SalesLead[])
-      setStageHistory((histData || []) as StageHistoryRow[])
-      setLoading(false)
-    })
+    let cancelled = false
+    async function load() {
+      try {
+        const [{ data: leadData, error: le }, { data: histData }] = await Promise.all([
+          supabase.from('sales_leads').select('*'),
+          supabase.from('sales_stage_history').select('*').order('changed_at'),
+        ])
+        if (le) console.error('SalesReports load error:', le.message)
+        if (!cancelled) {
+          setAllLeads((leadData || []) as SalesLead[])
+          setStageHistory((histData || []) as StageHistoryRow[])
+        }
+      } catch (e) {
+        console.error('SalesReports load error:', e)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
   }, [])
 
   function goToLeads(filter: Record<string, string>) {
@@ -171,18 +182,17 @@ export default function SalesReports() {
 
   return (
     <div className="view wide">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div className="sec-hdr" style={{ margin: 0 }}>
+      <div className="page-hdr-row">
+        <div className="sec-hdr">
           <div className="bar" />
           <div className="txt">{t('s_reports_title')}</div>
           <div className="sub">{t('s_reports_sub')}</div>
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          {/* 기간 필터 */}
-          <div style={{ display: 'flex', background: 'white', border: '1.5px solid var(--border2)', borderRadius: 8, overflow: 'hidden' }}>
+        <div className="page-hdr-actions">
+          <div className="period-filter-group" style={{ display: 'flex', flexWrap: 'wrap', background: 'white', border: '1.5px solid var(--border2)', borderRadius: 8, overflow: 'hidden', maxWidth: '100%', width: '100%' }}>
             {PERIODS.map(p => (
               <button key={p} onClick={() => setPeriod(p)}
-                style={{ padding: '6px 14px', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, transition: 'all .15s',
+                style={{ padding: '6px 12px', minHeight: 44, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, transition: 'all .15s',
                   background: period === p ? 'var(--accent)' : 'white', color: period === p ? 'white' : 'var(--muted)' }}>
                 {periodLabel(p, t)}
               </button>
@@ -200,7 +210,7 @@ export default function SalesReports() {
       )}
 
       {/* KPI 카드 5개 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 14, marginBottom: 24, marginTop: 16 }}>
+      <div className="g5" style={{ marginBottom: 24, marginTop: 16 }}>
         {kpiCards.map((k, i) => (
           <div key={i}
             onClick={k.f ? () => goToLeads(k.f!) : undefined}
@@ -215,10 +225,11 @@ export default function SalesReports() {
       </div>
 
       {/* 상단 2개 섹션 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
+      <div className="g2">
         {/* Funnel 전환율 */}
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px' }}>
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>{t('s_funnel_report')}</div>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
             <tbody>
               {funnelRows.map(r => (
@@ -232,7 +243,7 @@ export default function SalesReports() {
                   <td style={{ padding: 8, textAlign: 'center', fontWeight: 700 }}>{r.count}</td>
                   <td style={{ padding: 8, textAlign: 'right' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
-                      <div style={{ width: 60, background: '#EEE', borderRadius: 3, height: 6, overflow: 'hidden' }}>
+                      <div style={{ flex: 1, minWidth: 40, background: '#EEE', borderRadius: 3, height: 6, overflow: 'hidden' }}>
                         <div style={{ height: '100%', background: r.col, width: `${r.rate}%` }} />
                       </div>
                       <span style={{ fontWeight: 700, color: r.col, width: 35, textAlign: 'right' }}>{r.rate}%</span>
@@ -242,11 +253,13 @@ export default function SalesReports() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
 
         {/* 행사별 성과 */}
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px' }}>
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>{t('s_event_report')}</div>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
@@ -280,22 +293,19 @@ export default function SalesReports() {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
 
       {/* 단계 전환 소요일 분석 */}
       <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px', marginBottom: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 700 }}>⏱ {t('s_stage_duration')}</div>
-            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
-              {hasHistoryData
-                ? t('s_stage_duration_real')
-                : t('s_stage_duration_approx')}
-            </div>
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>⏱ {t('s_stage_duration')}</div>
+          <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
+            {hasHistoryData ? t('s_stage_duration_real') : t('s_stage_duration_approx')}
           </div>
           {!hasHistoryData && (
-            <span style={{ fontSize: 11, background: '#FFF8F0', color: '#D97706', border: '1px solid #FDE68A', borderRadius: 99, padding: '3px 10px', fontWeight: 600 }}>
+            <span style={{ display: 'inline-block', marginTop: 8, fontSize: 11, background: '#FFF8F0', color: '#D97706', border: '1px solid #FDE68A', borderRadius: 99, padding: '3px 10px', fontWeight: 600 }}>
               📌 {t('s_stage_duration_notice')}
             </span>
           )}
@@ -325,8 +335,8 @@ export default function SalesReports() {
                 const pct = days != null ? Math.min(Math.round(days / maxDays * 100), 100) : 0
                 return (
                   <tr key={stage} style={{ borderBottom: '0.5px solid var(--border)' }}>
-                    <td style={{ padding: '9px 14px' }}>
-                      <span style={{ display: 'inline-block', padding: '3px 9px', borderRadius: 99, fontSize: 11, fontWeight: 700, color: 'white', background: c.bg }}>{stage}</span>
+                    <td style={{ padding: '9px 14px', width: 180 }}>
+                      <span style={{ display: 'block', padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, color: 'white', background: c.bg, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stage}</span>
                     </td>
                     <td style={{ padding: '9px 10px', textAlign: 'center', fontWeight: 700, color: c.bg }}>{count || '—'}</td>
                     <td style={{ padding: '9px 10px', textAlign: 'center', fontWeight: 700, color: days != null && days > 30 ? '#DC2626' : days != null && days > 14 ? '#D97706' : 'var(--text)' }}>
@@ -347,13 +357,13 @@ export default function SalesReports() {
       </div>
 
       {/* 하단 3개 섹션 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 20 }}>
+      <div className="g3">
         {/* 국가 코리도별 분석 */}
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px' }}>
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>🌏 {t('s_corridor_report')}</div>
           {corridorStats.length === 0
             ? <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: 20 }}>{t('no_report_data')}</div>
-            : <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+            : <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}><table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
                     <th style={{ padding: '6px 7px', textAlign: 'left', color: 'var(--muted)', fontWeight: 600 }}>Corridor</th>
@@ -370,7 +380,7 @@ export default function SalesReports() {
                       onClick={() => goToLeads({ corridor: c.corridor })}
                       onMouseOver={e => (e.currentTarget as HTMLTableRowElement).style.background = '#FDF5F5'}
                       onMouseOut={e => (e.currentTarget as HTMLTableRowElement).style.background = ''}>
-                      <td style={{ padding: '7px', fontSize: 11, fontWeight: 600, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.corridor}>{c.corridor}</td>
+                      <td style={{ padding: '7px', fontSize: 11, fontWeight: 600, maxWidth: '30vw', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.corridor}>{c.corridor}</td>
                       <td style={{ padding: '7px', textAlign: 'center', fontWeight: 700 }}>{c.total}</td>
                       <td style={{ padding: '7px', textAlign: 'center', color: '#4F46E5', fontWeight: 600 }}>{c.active}</td>
                       <td style={{ padding: '7px', textAlign: 'center', color: '#065F46', fontWeight: 700 }}>{c.won}</td>
@@ -378,7 +388,7 @@ export default function SalesReports() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
           }
         </div>
 
@@ -409,6 +419,7 @@ export default function SalesReports() {
             {t('s_owner_report')}
             <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--muted)', marginLeft: 8 }}>{t('name_click_hint')}</span>
           </div>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
@@ -424,9 +435,9 @@ export default function SalesReports() {
                 const ol = leads.filter(l => l.owner === o)
                 return (
                   <tr key={o} style={{ borderBottom: '0.5px solid var(--border)' }}>
-                    <td style={{ padding: '9px 8px' }}>
+                    <td style={{ padding: '9px 8px', maxWidth: '30vw', overflow: 'hidden' }}>
                       <button onClick={() => goToLeads({ owner: o })}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: 'var(--accent)', textDecoration: 'underline', padding: 0 }}>
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: 'var(--accent)', textDecoration: 'underline', padding: 0, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
                         {o}
                       </button>
                     </td>
@@ -442,6 +453,7 @@ export default function SalesReports() {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </div>

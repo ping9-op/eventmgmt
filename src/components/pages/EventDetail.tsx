@@ -6,6 +6,7 @@ import { useToast } from '../../contexts/ToastContext'
 import type { Payment } from '../../types/database'
 import ProposalEditModal from '../ProposalEditModal'
 import { useLang } from '../../contexts/LangContext'
+import { useIsMobile } from '../../hooks/useBreakpoint'
 
 type TabId = 'overview' | 'budget' | 'checklist' | 'design' | 'gifts' | 'equipment' | 'itinerary'
 
@@ -122,6 +123,7 @@ export default function EventDetail() {
   const navigate = useNavigate()
   const { showToast } = useToast()
   const { t } = useLang()
+  const isMobile = useIsMobile()
   const [tab, setTab] = useState<TabId>('checklist')
   const [saving, setSaving] = useState(false)
   const [exhName, setExhName] = useState('')
@@ -139,6 +141,7 @@ export default function EventDetail() {
   const [showEpModal, setShowEpModal] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [isDirty, setIsDirty] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [showLeaveModal, setShowLeaveModal] = useState(false)
   const [pendingNav, setPendingNav] = useState<(() => void) | null>(null)
   const justLoaded = useRef(true)
@@ -147,83 +150,97 @@ export default function EventDetail() {
   const yearNum = parseInt(year || '0')
 
   useEffect(() => {
+    let mounted = true
     justLoaded.current = true
     setIsDirty(false)
+    setLoading(true)
     async function load() {
-      const [{ data: exhData }, { data: allProps }, { data: evData }, { data: payData }] = await Promise.all([
-        supabase.from('exhibitions').select('*').eq('key', key || '').single(),
-        supabase.from('proposals').select('*').order('year'),
-        supabase.from('event_data').select('*').eq('exhibition_key', dbKey).single(),
-        supabase.from('payments').select('*').eq('exhibition_key', dbKey),
-      ])
-      let paymentsToSet = (payData || []) as unknown as Payment[]
-      if (exhData) {
-        setExhName(exhData.name)
-        setColor(exhColor(exhData.name))
-        const props = (allProps as any[])?.filter((p: any) => p.exhibition_id === exhData.id) || []
-        const cur = props.find((p: any) => p.year === yearNum)
-        const prev = [...props].filter((p: any) => p.year < yearNum).sort((a: any, b: any) => b.year - a.year)[0]
-        if (cur) setOverview({ ...cur, budget: (cur.budget as any) || [] })
-        if (prev) setPrevOverview({ ...prev, budget: (prev.budget as any) || [] })
-
-        // Proposal 예산 항목 → 결제 일정 자동 동기화
-        // - payments에 없는 예산 항목은 신규 추가
-        // - 금액이 변경된 항목은 total 업데이트 (입금/잔금 비율 유지)
-        // - 이미 납부 완료된 항목은 건드리지 않음
-        if (cur) {
-          const budgetItems = ((cur.budget as any[]) || []).filter((b: any) => b.item && b.curr > 0)
-          const addedPays: Payment[] = []
-          for (const b of budgetItems) {
-            const existing = paymentsToSet.find((p: any) => p.item === b.item)
-            if (!existing) {
-              // 새 예산 항목 — 결제 행 추가
-              const { data: newPay } = await supabase.from('payments').insert({
-                exhibition_key: dbKey, item: b.item, total: b.curr,
-                currency: b.currency || 'KRW',
-                deposit_amount: 0, deposit_due: null, deposit_paid: false,
-                final_amount: 0, final_due: null, final_paid: false,
-              }).select().single()
-              if (newPay) addedPays.push(newPay as unknown as Payment)
-            } else if (existing.total !== b.curr && !existing.deposit_paid && !existing.final_paid) {
-              // 금액 변경 + 미납 상태 → total 업데이트
-              const depRatio = existing.total > 0 ? existing.deposit_amount / existing.total : 0.5
-              const newDep = Math.round(b.curr * depRatio)
-              await supabase.from('payments').update({
-                total: b.curr,
-                deposit_amount: newDep,
-                final_amount: b.curr - newDep,
-                currency: b.currency || 'KRW',
-              }).eq('id', existing.id)
-              // 로컬 상태도 반영
-              paymentsToSet = paymentsToSet.map((p: any) =>
-                p.id === existing.id ? { ...p, total: b.curr, deposit_amount: newDep, final_amount: b.curr - newDep } : p
-              ) as unknown as Payment[]
-            }
+      try {
+        const [{ data: exhData }, { data: allProps }, { data: evData }, { data: payData }] = await Promise.all([
+          supabase.from('exhibitions').select('*').eq('key', key || '').single(),
+          supabase.from('proposals').select('*').order('year'),
+          supabase.from('event_data').select('*').eq('exhibition_key', dbKey).single(),
+          supabase.from('payments').select('*').eq('exhibition_key', dbKey),
+        ])
+        let paymentsToSet = (payData || []) as unknown as Payment[]
+        if (exhData) {
+          if (mounted) {
+            setExhName(exhData.name)
+            setColor(exhColor(exhData.name))
           }
-          if (addedPays.length > 0) paymentsToSet = [...paymentsToSet, ...addedPays]
+          const props = (allProps as any[])?.filter((p: any) => p.exhibition_id === exhData.id) || []
+          const cur = props.find((p: any) => p.year === yearNum)
+          const prev = [...props].filter((p: any) => p.year < yearNum).sort((a: any, b: any) => b.year - a.year)[0]
+          if (mounted) {
+            if (cur) setOverview({ ...cur, budget: (cur.budget as any) || [] })
+            if (prev) setPrevOverview({ ...prev, budget: (prev.budget as any) || [] })
+          }
+
+          // Proposal 예산 항목 → 결제 일정 자동 동기화
+          // - payments에 없는 예산 항목은 신규 추가
+          // - 금액이 변경된 항목은 total 업데이트 (입금/잔금 비율 유지)
+          // - 이미 납부 완료된 항목은 건드리지 않음
+          if (cur) {
+            const budgetItems = ((cur.budget as any[]) || []).filter((b: any) => b.item && b.curr > 0)
+            const addedPays: Payment[] = []
+            for (const b of budgetItems) {
+              const existing = paymentsToSet.find((p: any) => p.item === b.item)
+              if (!existing) {
+                // 새 예산 항목 — 결제 행 추가
+                const { data: newPay } = await supabase.from('payments').insert({
+                  exhibition_key: dbKey, item: b.item, total: b.curr,
+                  currency: b.currency || 'KRW',
+                  deposit_amount: 0, deposit_due: null, deposit_paid: false,
+                  final_amount: 0, final_due: null, final_paid: false,
+                }).select().single()
+                if (newPay) addedPays.push(newPay as unknown as Payment)
+              } else if (existing.total !== b.curr && !existing.deposit_paid && !existing.final_paid) {
+                // 금액 변경 + 미납 상태 → total 업데이트
+                const depRatio = existing.total > 0 ? existing.deposit_amount / existing.total : 0.5
+                const newDep = Math.round(b.curr * depRatio)
+                await supabase.from('payments').update({
+                  total: b.curr,
+                  deposit_amount: newDep,
+                  final_amount: b.curr - newDep,
+                  currency: b.currency || 'KRW',
+                }).eq('id', existing.id)
+                // 로컬 상태도 반영
+                paymentsToSet = paymentsToSet.map((p: any) =>
+                  p.id === existing.id ? { ...p, total: b.curr, deposit_amount: newDep, final_amount: b.curr - newDep } : p
+                ) as unknown as Payment[]
+              }
+            }
+            if (addedPays.length > 0) paymentsToSet = [...paymentsToSet, ...addedPays]
+          }
         }
-      }
-      setPayments(paymentsToSet)
-      if (evData) {
-        setDataId(evData.id)
-        setChecklist(migrateChecklist((evData.checklist as any) || DEFAULT_CHECKLIST))
-        setDesign((evData.design as any) || DEFAULT_DESIGN)
-        setGiftsOnboard((evData.gifts_onboard as any) || DEFAULT_GIFTS_ONBOARD)
-        setGiftsEvent((evData.gifts_event as any) || DEFAULT_GIFTS_EVENT)
-        setEquipment((evData.equipment as any) || DEFAULT_EQUIPMENT)
-        setItinerary((evData.itinerary as any) || DEFAULT_ITINERARY)
-      } else {
-        setChecklist(JSON.parse(JSON.stringify(DEFAULT_CHECKLIST)))
-        setDesign(JSON.parse(JSON.stringify(DEFAULT_DESIGN)))
-        setGiftsOnboard(JSON.parse(JSON.stringify(DEFAULT_GIFTS_ONBOARD)))
-        setGiftsEvent(JSON.parse(JSON.stringify(DEFAULT_GIFTS_EVENT)))
-        setEquipment(JSON.parse(JSON.stringify(DEFAULT_EQUIPMENT)))
-        setItinerary(JSON.parse(JSON.stringify(DEFAULT_ITINERARY)))
+        if (!mounted) return
+        setPayments(paymentsToSet)
+        if (evData) {
+          setDataId(evData.id)
+          setChecklist(migrateChecklist((evData.checklist as any) || DEFAULT_CHECKLIST))
+          setDesign((evData.design as any) || DEFAULT_DESIGN)
+          setGiftsOnboard((evData.gifts_onboard as any) || DEFAULT_GIFTS_ONBOARD)
+          setGiftsEvent((evData.gifts_event as any) || DEFAULT_GIFTS_EVENT)
+          setEquipment((evData.equipment as any) || DEFAULT_EQUIPMENT)
+          setItinerary((evData.itinerary as any) || DEFAULT_ITINERARY)
+        } else {
+          setChecklist(JSON.parse(JSON.stringify(DEFAULT_CHECKLIST)))
+          setDesign(JSON.parse(JSON.stringify(DEFAULT_DESIGN)))
+          setGiftsOnboard(JSON.parse(JSON.stringify(DEFAULT_GIFTS_ONBOARD)))
+          setGiftsEvent(JSON.parse(JSON.stringify(DEFAULT_GIFTS_EVENT)))
+          setEquipment(JSON.parse(JSON.stringify(DEFAULT_EQUIPMENT)))
+          setItinerary(JSON.parse(JSON.stringify(DEFAULT_ITINERARY)))
+        }
+      } catch (err: any) {
+        if (mounted) showToast('데이터 로드 실패: ' + (err?.message || '알 수 없는 오류'))
+      } finally {
+        if (mounted) setLoading(false)
       }
     }
     load().then(() => {
-      setTimeout(() => { justLoaded.current = false }, 100)
+      if (mounted) setTimeout(() => { justLoaded.current = false }, 100)
     })
+    return () => { mounted = false }
   }, [key, year, refreshKey])
 
   // 변경사항 감지 — 로드 직후는 무시, 그 이후 변경만 추적
@@ -332,40 +349,51 @@ export default function EventDetail() {
 
   return (
     <div className="ev-wrap">
-      <div className="ev-topbar">
-        <button className="back" onClick={() => safeNavigate(() => navigate(-1))}>{t('ev_back')}</button>
-        <div style={{ width: 5, height: 22, background: color, borderRadius: 3 }} />
-        <div>
-          <div className="ev-name">{exhName} {year}</div>
-          <div className="ev-sub">
-            {overview ? `${formatEventDate(overview.date_of_event, yearNum)} · ${overview.venue}` : ''}
+      {/* ev-header: sticky on mobile so tabs/topbar don't scroll away */}
+      <div className="ev-header">
+        <div className="ev-topbar">
+          <button className="back" onClick={() => safeNavigate(() => navigate(-1))}>{t('ev_back')}</button>
+          <div style={{ width: 4, height: 20, background: color, borderRadius: 3, flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="ev-name">{exhName} {year}</div>
+            <div className="ev-sub">
+              {overview ? `${formatEventDate(overview.date_of_event, yearNum)} · ${overview.venue}` : ''}
+            </div>
+          </div>
+          <div className="ev-topbar-actions">
+            {isDirty && (
+              <span style={{ fontSize: 11, color: '#FCD34D', fontWeight: 700, background: 'rgba(0,0,0,.25)', padding: '3px 8px', borderRadius: 99, whiteSpace: 'nowrap' }}>
+                ● 미저장
+              </span>
+            )}
+            <button className="btn btn-primary btn-sm" onClick={save} disabled={saving}>
+              {saving ? t('saving') : t('ev_save')}
+            </button>
+            <button className="btn btn-sm" style={{ background: 'rgba(255,255,255,.15)', color: 'white', border: '1.5px solid rgba(255,255,255,.4)', whiteSpace: 'nowrap' }}
+              onClick={() => safeNavigate(() => navigate('/expo/create', { state: { exhId: overview?.exhibition_id } }))}>
+              ✏️ Proposal
+            </button>
           </div>
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
-          {isDirty && (
-            <span style={{ fontSize: 11, color: '#FCD34D', fontWeight: 700, background: 'rgba(0,0,0,.25)', padding: '3px 10px', borderRadius: 99 }}>
-              ● 미저장
-            </span>
-          )}
-          <button className="btn btn-primary" style={{ fontSize: 13 }} onClick={save} disabled={saving}>
-            {saving ? t('saving') : t('ev_save')}
-          </button>
-          <button style={{ fontSize: 13, padding: '9px 18px', borderRadius: 8, fontWeight: 600, cursor: 'pointer', background: 'rgba(255,255,255,.15)', color: 'white', border: '1.5px solid rgba(255,255,255,.4)' }}
-            onClick={() => safeNavigate(() => navigate('/expo/create', { state: { exhId: overview?.exhibition_id } }))}>
-            ✏️ Proposal 작성
-          </button>
+
+        <div className="ev-tabs">
+          {TABS.map(t => (
+            <div key={t.id} className={`ev-tab${tab === t.id ? ' active' : ''}`} onClick={() => setTab(t.id)}>
+              {t.label}
+            </div>
+          ))}
         </div>
       </div>
 
-      <div className="ev-tabs">
-        {TABS.map(t => (
-          <div key={t.id} className={`ev-tab${tab === t.id ? ' active' : ''}`} onClick={() => setTab(t.id)}>
-            {t.label}
-          </div>
-        ))}
-      </div>
+      <div className="ev-body">
 
-      <div className="ev-body" style={{ flex: 1, overflowY: 'auto' }}>
+        {/* ── 로딩 스피너 ── */}
+        {loading && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', color: 'var(--muted)', fontSize: 14, gap: 10 }}>
+            <div style={{ width: 20, height: 20, border: '2.5px solid var(--border2)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+            데이터를 불러오는 중…
+          </div>
+        )}
 
         {/* ── 개요 탭 ── */}
         {tab === 'overview' && (
@@ -381,7 +409,7 @@ export default function EventDetail() {
                       {t('proposal_edit')}
                     </button>
                   </div>
-                  <div style={{ padding: '18px 24px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+                  <div className="g3" style={{ padding: isMobile ? '12px 14px' : '18px 24px' }}>
                     {[
                       [t('col_exh'), exhName],
                       [t('year_label'), year],
@@ -399,7 +427,7 @@ export default function EventDetail() {
                 </div>
 
                 {/* 목표 & 기대 효과 */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div className="g2">
                   <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '18px 22px' }}>
                     <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: 'var(--accent)' }}>{t('overview_goal')}</div>
                     <div style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--text)' }}>{overview.objective || '목표 미입력'}</div>
@@ -467,7 +495,7 @@ export default function EventDetail() {
         {/* ── 체크리스트 탭 ── */}
         {tab === 'checklist' && (
           <div style={{ padding: '20px 24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
               <div>
                 <div style={{ fontSize: 16, fontWeight: 700 }}>{t('checklist_title')}</div>
                 <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
@@ -496,14 +524,15 @@ export default function EventDetail() {
 
         {/* ── 디자인 탭 ── */}
         {tab === 'design' && (
-          <div style={{ padding: '20px 24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ padding: isMobile ? '12px 14px' : '20px 24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
               <div style={{ fontSize: 15, fontWeight: 700 }}>{t('design_title')}</div>
               <button className="btn btn-primary btn-sm"
                 onClick={() => setDesign(p => [...p, { sn: p.length + 1, category: '', item: '', size: '', qty: '', spec: '', deadline: '', status: 'Plan', note: '' }])}>
                 + 항목 추가
               </button>
             </div>
+            <div style={{ overflowX: 'auto' }}>
             <table className="cl-table">
               <thead>
                 <tr>
@@ -535,6 +564,7 @@ export default function EventDetail() {
                 ))}
               </tbody>
             </table>
+            </div>
             <button className="add-row-btn" onClick={() => setDesign(p => [...p, { sn: p.length + 1, category: '', item: '', size: '', qty: '', spec: '', deadline: '', status: 'Plan', note: '' }])}>
               + 항목 추가
             </button>
@@ -552,8 +582,8 @@ export default function EventDetail() {
 
         {/* ── 장비 탭 ── */}
         {tab === 'equipment' && (
-          <div style={{ padding: '20px 24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ padding: isMobile ? '12px 14px' : '20px 24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 700 }}>{t('equipment_title')}</div>
                 <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
@@ -567,6 +597,7 @@ export default function EventDetail() {
             <div style={{ background: '#EEE', borderRadius: 6, height: 10, marginBottom: 20, overflow: 'hidden' }}>
               <div style={{ height: '100%', background: 'var(--green)', borderRadius: 6, width: equipment.length ? `${Math.round(equipment.filter(e => e.done).length / equipment.length * 100)}%` : '0%', transition: 'width .3s' }} />
             </div>
+            <div style={{ overflowX: 'auto' }}>
             <table className="cl-table">
               <thead>
                 <tr><th style={{ width: 36 }}>{t('col_no')}</th><th>{t('col_item')}</th><th style={{ width: 80 }}>{t('col_qty')}</th><th>{t('col_note')}</th><th style={{ width: 90 }}>{t('col_confirm')}</th><th style={{ width: 36 }}></th></tr>
@@ -592,6 +623,7 @@ export default function EventDetail() {
                 ))}
               </tbody>
             </table>
+            </div>
             <button className="add-row-btn" onClick={() => setEquipment(p => [...p, { sn: p.length + 1, item: '', qty: 1, note: '', done: false }])}>
               + 항목 추가
             </button>
@@ -600,13 +632,14 @@ export default function EventDetail() {
 
         {/* ── 현지 일정 탭 ── */}
         {tab === 'itinerary' && (
-          <div style={{ padding: '20px 24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ padding: isMobile ? '12px 14px' : '20px 24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
               <div style={{ fontSize: 15, fontWeight: 700 }}>{t('itinerary_title')}</div>
               <button className="btn btn-primary btn-sm" onClick={() => setItinerary(p => [...p, { sn: p.length + 1, date: '', day: '', time: '', activity: '', location: '', assignee: 'All', note: '' }])}>
                 + 일정 추가
               </button>
             </div>
+            <div style={{ overflowX: 'auto' }}>
             <table className="cl-table">
               <thead>
                 <tr>
@@ -642,6 +675,7 @@ export default function EventDetail() {
                 ))}
               </tbody>
             </table>
+            </div>
             <button className="add-row-btn" onClick={() => setItinerary(p => [...p, { sn: p.length + 1, date: '', day: '', time: '', activity: '', location: '', assignee: 'All', note: '' }])}>
               + 일정 추가
             </button>
@@ -712,7 +746,7 @@ function OverviewBudgetTable({ budget, prevBudget, prevYear }: { budget: any[]; 
           {budgetSummary || '-'}
         </span>
       </div>
-      <div style={{ padding: '0 20px' }}>
+      <div style={{ padding: '0 20px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: '2px solid var(--border)' }}>
@@ -785,6 +819,7 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
   onEditProposal?: () => void
 }) {
   const { t } = useLang()
+  const isMobile = useIsMobile()
   const [deletePayConfirm, setDeletePayConfirm] = useState<string | null>(null)
 
   const budget = overview?.budget || []
@@ -809,7 +844,7 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
   return (
     <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* 요약 카드 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 }}>
+      <div className="g3" style={{ gap: 14 }}>
         {[
           { lbl: t('approved_budget'), val: sumStr(byCur), col: '#1E3A5F', bg: '#EFF6FF' },
           { lbl: t('paid_done'), val: sumStr(paidByCur) || '0', col: '#059669', bg: '#ECFDF5' },
@@ -834,6 +869,7 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
               </button>
             )}
           </div>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
@@ -862,6 +898,7 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
@@ -1011,7 +1048,7 @@ function PayCard({ p, onTogglePaid, onSave, onDelete, deleteConfirm, onSetDelete
 
       {/* 납부 행 */}
       {mode === 'lump' ? (
-        <div style={{ ...rowBase, background: p.deposit_paid ? '#ECFDF5' : '#FFFBEB', borderColor: p.deposit_paid ? '#6EE7B7' : '#FDE68A' }}>
+        <div style={{ ...rowBase, flexWrap: 'wrap', background: p.deposit_paid ? '#ECFDF5' : '#FFFBEB', borderColor: p.deposit_paid ? '#6EE7B7' : '#FDE68A' }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', width: 36 }}>납부</span>
           <input type="number" value={depAmt} onChange={e => setDepAmt(e.target.value)}
             style={{ width: 130, padding: '5px 8px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13, textAlign: 'right', boxSizing: 'border-box' }} />
@@ -1022,7 +1059,7 @@ function PayCard({ p, onTogglePaid, onSave, onDelete, deleteConfirm, onSetDelete
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
           {/* 비율 조정 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px', background: '#F1F5FD', borderRadius: 6, fontSize: 12, color: 'var(--muted)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '4px 10px', background: '#F1F5FD', borderRadius: 6, fontSize: 12, color: 'var(--muted)' }}>
             <span>비율 — 선금</span>
             <input type="number" value={depPct} min={0} max={100}
               onChange={e => {
@@ -1042,7 +1079,7 @@ function PayCard({ p, onTogglePaid, onSave, onDelete, deleteConfirm, onSetDelete
             { type: 'deposit' as const, label: '선금', paid: p.deposit_paid, amt: depAmt, due: depDue, setAmt: setDepAmt, setDue: setDepDue },
             { type: 'final' as const, label: '잔금', paid: p.final_paid, amt: finAmt, due: finDue, setAmt: setFinAmt, setDue: setFinDue },
           ]).map(box => (
-            <div key={box.type} style={{ ...rowBase,
+            <div key={box.type} style={{ ...rowBase, flexWrap: 'wrap',
               background: box.paid ? '#ECFDF5' : box.type === 'deposit' ? '#EEF4FF' : '#F0FFF4',
               borderColor: box.paid ? '#6EE7B7' : box.type === 'deposit' ? '#C7D7F8' : '#A7F3D0',
             }}>
@@ -1093,7 +1130,7 @@ function ChecklistCard({ row, idx, onUpdate, onDelete }: {
           <input value={row.item} style={{ fontSize: 14, fontWeight: 700, border: 'none', outline: 'none', background: 'transparent', color: 'var(--text)', fontFamily: 'inherit', flex: 1, width: '100%' }}
             onChange={e => onUpdate({ ...row, item: e.target.value })} />
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, flexWrap: 'wrap' }}>
           <div>
             <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase' }}>{t('col_pic')}</div>
             <input value={row.pic || ''} onChange={e => onUpdate({ ...row, pic: e.target.value })}
@@ -1153,7 +1190,8 @@ function GiftSection({ title, data, setData }: { title: string; data: any[]; set
   return (
     <>
       <div className="section-badge">{title}</div>
-      <table className="cl-table" style={{ marginBottom: 20 }}>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', marginBottom: 20 }}>
+      <table className="cl-table">
         <thead>
           <tr><th>{t('col_no')}</th><th>{t('col_prize')}</th><th style={{ minWidth: 160 }}>{t('col_item')}</th><th>{t('col_qty')}</th><th>{t('col_unit_price')}</th><th>{t('col_subtotal')}</th><th style={{ minWidth: 120 }}>{t('col_note')}</th><th /></tr>
         </thead>
@@ -1179,6 +1217,7 @@ function GiftSection({ title, data, setData }: { title: string; data: any[]; set
           </tr>
         </tbody>
       </table>
+      </div>
       <button className="add-row-btn" onClick={() => setData(p => [...p, { sn: p.length + 1, prize: '', item: '', qty: 0, price: 0, currency: 'KRW', note: '' }])}>
         {t('add_item')}
       </button>

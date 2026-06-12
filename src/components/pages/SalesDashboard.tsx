@@ -5,6 +5,7 @@ import { STAGE_ORDER, STAGE_COLORS } from '../../lib/utils'
 import type { SalesLead, SalesTask } from '../../types/database'
 import LeadDetailPanel from './LeadDetailPanel'
 import { useLang } from '../../contexts/LangContext'
+import { useIsMobile } from '../../hooks/useBreakpoint'
 
 function krwusd(vol: number | null, cur: string): string {
   if (!vol) return '-'
@@ -23,6 +24,7 @@ function StageBadge({ stage }: { stage: string }) {
 export default function SalesDashboard() {
   const { t } = useLang()
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
   const [leads, setLeads] = useState<SalesLead[]>([])
   const [tasks, setTasks] = useState<SalesTask[]>([])
   const [loading, setLoading] = useState(true)
@@ -31,6 +33,7 @@ export default function SalesDashboard() {
   const today = new Date().toISOString().split('T')[0]
 
   useEffect(() => {
+    let cancelled = false
     async function load() {
       try {
         const [{ data: leadData, error: le }, { data: taskData, error: te }] = await Promise.all([
@@ -39,15 +42,18 @@ export default function SalesDashboard() {
         ])
         if (le) throw le
         if (te) throw te
-        setLeads((leadData || []) as SalesLead[])
-        setTasks((taskData || []) as SalesTask[])
+        if (!cancelled) {
+          setLeads((leadData || []) as SalesLead[])
+          setTasks((taskData || []) as SalesTask[])
+        }
       } catch (err: any) {
         console.error('SalesDashboard load error:', err?.message)
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
     load()
+    return () => { cancelled = true }
   }, [])
 
   if (loading) return <div className="view wide"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
@@ -92,7 +98,7 @@ export default function SalesDashboard() {
       </div>
 
       {/* KPI 카드 5개 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 14, marginBottom: 28 }}>
+      <div className="g5" style={{ marginBottom: 28 }}>
         {kpiCards.map((k, i) => (
           <div key={i}
             onClick={k.fn || undefined}
@@ -110,60 +116,58 @@ export default function SalesDashboard() {
         ))}
       </div>
 
-      {/* Funnel 현황 + 알림 카드 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20, marginBottom: 28 }}>
-        {/* Funnel Stage Bar */}
-        <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px' }}>
-          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 16 }}>{t('funnel_stage_status')}</div>
-          {STAGE_ORDER.map(s => {
-            const c = STAGE_COLORS[s] || { bg: '#6B7280' }
-            const cnt = byStage(s)
-            const pct = total ? Math.round(cnt / total * 100) : 0
-            return (
-              <div key={s}
-                onClick={() => navigate('/sales/funnel', { state: { filter: s, view: 'board' } })}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, cursor: 'pointer', padding: '4px 6px', borderRadius: 6, transition: 'background .12s' }}
-                onMouseOver={e => (e.currentTarget as HTMLDivElement).style.background = '#F5F0F0'}
-                onMouseOut={e => (e.currentTarget as HTMLDivElement).style.background = ''}
-              >
-                <div style={{ width: 150, fontSize: 12, color: 'var(--text)', flexShrink: 0 }}>{s}</div>
-                <div style={{ flex: 1, background: '#EEE', borderRadius: 4, height: 10, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', background: c.bg, width: `${pct}%`, borderRadius: 4, transition: 'width .3s' }} />
-                </div>
-                <div style={{ width: 28, textAlign: 'right', fontSize: 13, fontWeight: 700, color: c.bg }}>{cnt}</div>
+      {/* Funnel 단계별 현황 — 풀폭 */}
+      <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px', marginBottom: 16 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 16 }}>{t('funnel_stage_status')}</div>
+        {STAGE_ORDER.map(s => {
+          const c = STAGE_COLORS[s] || { bg: '#6B7280' }
+          const cnt = byStage(s)
+          const pct = total ? Math.round(cnt / total * 100) : 0
+          return (
+            <div key={s}
+              onClick={() => navigate('/sales/funnel', { state: { filter: s, view: 'board' } })}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, cursor: 'pointer', padding: '4px 6px', borderRadius: 6, transition: 'background .12s' }}
+              onMouseOver={e => (e.currentTarget as HTMLDivElement).style.background = '#F5F0F0'}
+              onMouseOut={e => (e.currentTarget as HTMLDivElement).style.background = ''}
+            >
+              <div style={{ width: 150, minWidth: 80, fontSize: 12, color: 'var(--text)', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s}</div>
+              <div style={{ flex: 1, background: '#EEE', borderRadius: 4, height: 10, overflow: 'hidden' }}>
+                <div style={{ height: '100%', background: c.bg, width: `${pct}%`, borderRadius: 4, transition: 'width .3s' }} />
               </div>
-            )
-          })}
-        </div>
+              <div style={{ width: 28, textAlign: 'right', fontSize: 13, fontWeight: 700, color: c.bg }}>{cnt}</div>
+            </div>
+          )
+        })}
+      </div>
 
-        {/* 알림 카드 3개 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 12, padding: '18px 20px', cursor: 'pointer' }}
-            onClick={() => navigate('/sales/followup', { state: { filter: 'overdue' } })}>
-            <div style={{ fontSize: 12, color: '#DC2626', fontWeight: 600, marginBottom: 4 }}>{t('overdue_tasks_lbl')}</div>
-            <div style={{ fontSize: 32, fontWeight: 800, color: '#DC2626' }}>{overdueCount}</div>
-            <div style={{ fontSize: 12, color: '#DC2626', marginTop: 4 }}>{t('action_required')}</div>
-          </div>
-          <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 12, padding: '18px 20px', cursor: 'pointer' }}
-            onClick={() => navigate('/sales/followup', { state: { filter: 'today' } })}>
-            <div style={{ fontSize: 12, color: '#D97706', fontWeight: 600, marginBottom: 4 }}>{t('today_tasks_lbl')}</div>
-            <div style={{ fontSize: 32, fontWeight: 800, color: '#D97706' }}>{todayTaskCount}</div>
-            <div style={{ fontSize: 12, color: '#D97706', marginTop: 4 }}>{t('due_today_desc')}</div>
-          </div>
-          <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 12, padding: '18px 20px', cursor: 'pointer' }}
-            onClick={() => navigate('/sales/funnel', { state: { filter: 'Onboarding', view: 'board' } })}>
-            <div style={{ fontSize: 12, color: '#059669', fontWeight: 600, marginBottom: 4 }}>{t('onboarding_lbl')}</div>
-            <div style={{ fontSize: 32, fontWeight: 800, color: '#059669' }}>{onboardingCount}</div>
-            <div style={{ fontSize: 12, color: '#059669', marginTop: 4 }}>{t('onboarding_in_progress_desc')}</div>
-          </div>
+      {/* 알림 카드 3개 — 가로 3열 */}
+      <div className="g3" style={{ marginBottom: 28 }}>
+        <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 12, padding: '18px 20px', cursor: 'pointer' }}
+          onClick={() => navigate('/sales/followup', { state: { filter: 'overdue' } })}>
+          <div style={{ fontSize: 12, color: '#DC2626', fontWeight: 600, marginBottom: 4 }}>{t('overdue_tasks_lbl')}</div>
+          <div style={{ fontSize: 32, fontWeight: 800, color: '#DC2626' }}>{overdueCount}</div>
+          <div style={{ fontSize: 12, color: '#DC2626', marginTop: 4 }}>{t('action_required')}</div>
+        </div>
+        <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 12, padding: '18px 20px', cursor: 'pointer' }}
+          onClick={() => navigate('/sales/followup', { state: { filter: 'today' } })}>
+          <div style={{ fontSize: 12, color: '#D97706', fontWeight: 600, marginBottom: 4 }}>{t('today_tasks_lbl')}</div>
+          <div style={{ fontSize: 32, fontWeight: 800, color: '#D97706' }}>{todayTaskCount}</div>
+          <div style={{ fontSize: 12, color: '#D97706', marginTop: 4 }}>{t('due_today_desc')}</div>
+        </div>
+        <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 12, padding: '18px 20px', cursor: 'pointer' }}
+          onClick={() => navigate('/sales/funnel', { state: { filter: 'Onboarding', view: 'board' } })}>
+          <div style={{ fontSize: 12, color: '#059669', fontWeight: 600, marginBottom: 4 }}>{t('onboarding_lbl')}</div>
+          <div style={{ fontSize: 32, fontWeight: 800, color: '#059669' }}>{onboardingCount}</div>
+          <div style={{ fontSize: 12, color: '#059669', marginTop: 4 }}>{t('onboarding_in_progress_desc')}</div>
         </div>
       </div>
 
       {/* Top Leads + Owner 성과 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+      <div className="g2">
         {/* Top Leads */}
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px' }}>
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>🏆 {t('s_top_leads')}</div>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
             <tbody>
               {topLeads.map((l, i) => (
@@ -189,11 +193,13 @@ export default function SalesDashboard() {
               {topLeads.length === 0 && <tr><td colSpan={3} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>{t('no_leads_short')}</td></tr>}
             </tbody>
           </table>
+          </div>
         </div>
 
         {/* 담당자별 현황 */}
         <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px' }}>
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>👤 {t('s_owner_perf')}</div>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--accent)' }}>
@@ -208,7 +214,7 @@ export default function SalesDashboard() {
                 <tr key={o.owner} style={{ borderBottom: '0.5px solid var(--border)' }}>
                   <td style={{ padding: '9px 8px' }}>
                     <button onClick={() => navigate('/sales/leads', { state: { filter: { owner: o.owner } } })}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: 'var(--accent)', textDecoration: 'underline', padding: 0 }}>
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: 'var(--accent)', textDecoration: 'underline', padding: isMobile ? '11px 0' : 0, minHeight: 44 }}>
                       {o.owner}
                     </button>
                   </td>
@@ -228,6 +234,7 @@ export default function SalesDashboard() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
 
@@ -237,7 +244,7 @@ export default function SalesDashboard() {
         if (!events.length) return null
         return (
           <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px', marginTop: 20 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
               <span>🏛 {t('s_event_leads')}</span>
               <button onClick={() => navigate('/sales/reports')}
                 style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }}>
@@ -297,8 +304,14 @@ export default function SalesDashboard() {
         <LeadDetailPanel
           leadId={selectedLeadId}
           onClose={() => setSelectedLeadId(null)}
-          onRefresh={() => {
-            supabase.from('sales_leads').select('*').then(({ data }) => { if (data) setLeads(data as SalesLead[]) })
+          onRefresh={async () => {
+            try {
+              const { data, error } = await supabase.from('sales_leads').select('*')
+              if (error) throw error
+              setLeads((data || []) as SalesLead[])
+            } catch (err: any) {
+              console.error('SalesDashboard onRefresh error:', err?.message)
+            }
           }}
         />
       )}

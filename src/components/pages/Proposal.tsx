@@ -103,7 +103,58 @@ export default function Proposal() {
   const [parseResult, setParseResult] = useState<ParsedProposal | null>(null)
 
   useEffect(() => {
-    load()
+    let cancelled = false
+    async function loadOnMount() {
+      try {
+        const [{ data: exhData }, { data: propData }] = await Promise.all([
+          supabase.from('exhibitions').select('*').order('name'),
+          supabase.from('proposals').select('*').order('year'),
+        ])
+        if (cancelled) return
+        const exhList = (exhData || []) as Exhibition[]
+        const propList = ((propData || []) as unknown as ProposalType[])
+        setExhibitions(exhList)
+        setProposals(propList)
+
+        // Build saved proposals list
+        const list: SavedProposal[] = propList.map(p => {
+          const exh = exhList.find(e => e.id === p.exhibition_id)
+          const budgetItems = (p.budget as BudgetItem[]) || []
+          return {
+            key: exh?.key || '', exhId: p.exhibition_id,
+            name: exh?.name || '', year: p.year,
+            date: p.date_of_event,
+            total: budgetItems.reduce((s, b) => s + (b.curr || 0), 0),
+            color: exhColor(exh?.name || ''),
+          }
+        }).sort((a, b) => b.year - a.year || a.name.localeCompare(b.name))
+        setSavedList(list)
+
+        // Pre-fill if editing
+        if (initExhId) {
+          const exhProposals = propList.filter(p => p.exhibition_id === initExhId)
+          const latest = exhProposals[exhProposals.length - 1]
+          if (latest) {
+            setExhId(initExhId)
+            setYear(latest.year + 1)
+            setAuthor(latest.author || 'Andrew')
+            setDateOfEvent(latest.date_of_event)
+            const { start, end } = parseDateRange(latest.date_of_event)
+            setEventStartDate(start); setEventEndDate(end)
+            setVenue(latest.venue)
+            setObjective(latest.objective)
+            setProducts((latest.products as ProductTarget[]) || [{ product: 'GMEBIZ', target: '' }])
+            setExpectedResults((latest.expected_results as string[]) || [''])
+            const newBudget = ((latest.budget as BudgetItem[]) || []).map(b => ({ ...b, prev: b.curr, curr: b.curr }))
+            setBudget(newBudget.length ? newBudget : [{ item: 'Booth Fee', curr: 0, prev: 0, note: '', currency: 'KRW' }])
+          }
+        }
+      } catch (err) {
+        if (!cancelled) showToast('데이터 로드 실패: ' + (err instanceof Error ? err.message : String(err)))
+      }
+    }
+    loadOnMount()
+    return () => { cancelled = true }
   }, [initExhId])
 
   async function load() {
@@ -129,26 +180,6 @@ export default function Proposal() {
       }
     }).sort((a, b) => b.year - a.year || a.name.localeCompare(b.name))
     setSavedList(list)
-
-    // Pre-fill if editing
-    if (initExhId) {
-      const exhProposals = propList.filter(p => p.exhibition_id === initExhId)
-      const latest = exhProposals[exhProposals.length - 1]
-      if (latest) {
-        setExhId(initExhId)
-        setYear(latest.year + 1)
-        setAuthor(latest.author || 'Andrew')
-        setDateOfEvent(latest.date_of_event)
-        const { start, end } = parseDateRange(latest.date_of_event)
-        setEventStartDate(start); setEventEndDate(end)
-        setVenue(latest.venue)
-        setObjective(latest.objective)
-        setProducts((latest.products as ProductTarget[]) || [{ product: 'GMEBIZ', target: '' }])
-        setExpectedResults((latest.expected_results as string[]) || [''])
-        const newBudget = ((latest.budget as BudgetItem[]) || []).map(b => ({ ...b, prev: b.curr, curr: b.curr }))
-        setBudget(newBudget.length ? newBudget : [{ item: 'Booth Fee', curr: 0, prev: 0, note: '', currency: 'KRW' }])
-      }
-    }
   }
 
   function loadFromSaved(p: SavedProposal, isCopy = false) {
@@ -182,41 +213,49 @@ export default function Proposal() {
   async function save() {
     if (!year) return
     setSaving(true)
-    let finalExhId = exhId
-    if (isNewExh && newExhName) {
-      const key = newExhKey.trim().replace(/\s/g, '_') || newExhName.replace(/[^a-zA-Z]/g, '').substring(0, 10)
-      const { data } = await supabase.from('exhibitions').insert({ key, name: newExhName, recurring: newExhRecurring }).select().single()
-      finalExhId = data!.id
-    }
-    const proposalData = {
-      exhibition_id: finalExhId, year, proposal_date: propDate, author,
-      date_of_event: dateOfEvent, venue, objective,
-      products: products.filter(p => p.product) as unknown as never,
-      expected_results: expectedResults.filter(r => r) as unknown as never,
-      budget: budget.filter(b => b.curr > 0) as unknown as never,
-      explanations: {}
-    }
-    if (editingProposalId) {
-      // 기존 제안서 수정 — payments는 그대로 유지
-      await supabase.from('proposals').update(proposalData).eq('id', editingProposalId)
-    } else {
-      // 신규 또는 복사 — 제안서 + 결제 항목 모두 새로 생성
-      await supabase.from('proposals').insert(proposalData)
-      const exh = exhibitions.find(e => e.id === finalExhId)
-      const dbKey = (exh?.key || newExhName.replace(/[^a-zA-Z]/g, '').substring(0, 10)) + '_' + year
-      for (const b of budget.filter(b => b.curr > 0)) {
-        await supabase.from('payments').insert({
-          exhibition_key: dbKey, item: b.item, total: b.curr, currency: (b as any).currency || 'KRW',
-          deposit_amount: 0, deposit_due: null, deposit_paid: false,
-          final_amount: 0, final_due: null, final_paid: false,
-        })
+    try {
+      let finalExhId = exhId
+      if (isNewExh && newExhName) {
+        const key = newExhKey.trim().replace(/\s/g, '_') || newExhName.replace(/[^a-zA-Z]/g, '').substring(0, 10)
+        const { data, error } = await supabase.from('exhibitions').insert({ key, name: newExhName, recurring: newExhRecurring }).select().single()
+        if (error || !data) throw new Error(error?.message || '박람회 등록 실패')
+        finalExhId = data.id
       }
+      const proposalData = {
+        exhibition_id: finalExhId, year, proposal_date: propDate, author,
+        date_of_event: dateOfEvent, venue, objective,
+        products: products.filter(p => p.product) as unknown as never,
+        expected_results: expectedResults.filter(r => r) as unknown as never,
+        budget: budget.filter(b => b.curr > 0) as unknown as never,
+        explanations: {}
+      }
+      if (editingProposalId) {
+        // 기존 제안서 수정 — payments는 그대로 유지
+        const { error } = await supabase.from('proposals').update(proposalData).eq('id', editingProposalId)
+        if (error) throw new Error(error.message)
+      } else {
+        // 신규 또는 복사 — 제안서 + 결제 항목 모두 새로 생성
+        const { error } = await supabase.from('proposals').insert(proposalData)
+        if (error) throw new Error(error.message)
+        const exh = exhibitions.find(e => e.id === finalExhId)
+        const dbKey = (exh?.key || newExhName.replace(/[^a-zA-Z]/g, '').substring(0, 10)) + '_' + year
+        for (const b of budget.filter(b => b.curr > 0)) {
+          await supabase.from('payments').insert({
+            exhibition_key: dbKey, item: b.item, total: b.curr, currency: (b as any).currency || 'KRW',
+            deposit_amount: 0, deposit_due: null, deposit_paid: false,
+            final_amount: 0, final_due: null, final_paid: false,
+          })
+        }
+      }
+      setSaved(true)
+      setEditingProposalId(null)
+      await load()
+      setTimeout(() => { setSaved(false); setStep(1) }, 1500)
+    } catch (err) {
+      showToast('저장 실패: ' + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
-    setSaved(true)
-    setEditingProposalId(null)
-    await load()
-    setTimeout(() => { setSaved(false); setStep(1) }, 1500)
   }
 
   async function handleBudgetExcel(file: File) {
@@ -525,14 +564,12 @@ export default function Proposal() {
 
       {/* 파일 업로드 섹션 */}
       <div className="card" style={{ marginBottom: 20, border: '1.5px dashed var(--border2)', background: '#FDFBFB' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: showUpload ? 12 : 0 }}>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 700 }}>{t('prop_upload_title')}</div>
-            <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 3 }}>
-              {t('prop_upload_desc')}
-            </div>
+        <div style={{ marginBottom: showUpload ? 12 : 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>{t('prop_upload_title')}</div>
+          <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
+            {t('prop_upload_desc')}
           </div>
-          <button className="btn btn-purple btn-sm" onClick={() => {
+          <button className="btn btn-purple btn-sm" style={{ marginTop: 12 }} onClick={() => {
             if (showUpload) { setParseResult(null); setParseLoading(false); setUploadFileName('') }
             setShowUpload(v => !v)
           }}>
@@ -580,49 +617,53 @@ export default function Proposal() {
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)', marginBottom: 10 }}>
                   ✅ 파싱 완료 — "{uploadFileName}"
                 </div>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginBottom: 12 }}>
-                  <tbody>
-                    {([
-                      ['박람회명', parseResult.exhName],
-                      ['연도', String(parseResult.year)],
-                      ['장소', parseResult.venue],
-                      ['행사 기간', parseResult.dateOfEvent],
-                      ['목적', parseResult.objective],
-                    ] as [string, string][]).map(([label, value]) => (
-                      <tr key={label} style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '6px 10px', color: 'var(--muted)', fontWeight: 600, width: 90, whiteSpace: 'nowrap' }}>{label}</td>
-                        <td style={{ padding: '6px 10px' }}>{value}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginBottom: 12 }}>
+                    <tbody>
+                      {([
+                        ['박람회명', parseResult.exhName],
+                        ['연도', String(parseResult.year)],
+                        ['장소', parseResult.venue],
+                        ['행사 기간', parseResult.dateOfEvent],
+                        ['목적', parseResult.objective],
+                      ] as [string, string][]).map(([label, value]) => (
+                        <tr key={label} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td style={{ padding: '6px 10px', color: 'var(--muted)', fontWeight: 600, minWidth: 72 }}>{label}</td>
+                          <td style={{ padding: '6px 10px' }}>{value}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginBottom: 6 }}>예산 항목</div>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 16 }}>
-                  <thead>
-                    <tr style={{ background: 'var(--light)' }}>
-                      <th style={{ padding: '5px 10px', textAlign: 'left', fontWeight: 600 }}>항목</th>
-                      <th style={{ padding: '5px 10px', textAlign: 'right', fontWeight: 600 }}>금액</th>
-                      <th style={{ padding: '5px 10px', textAlign: 'center', fontWeight: 600 }}>통화</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {parseResult.budget.map((b, i) => (
-                      <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '5px 10px' }}>{b.item}</td>
-                        <td style={{ padding: '5px 10px', textAlign: 'right' }}>{b.amount.toLocaleString()}</td>
-                        <td style={{ padding: '5px 10px', textAlign: 'center', color: 'var(--muted)' }}>{b.currency}</td>
+                <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 16 }}>
+                    <thead>
+                      <tr style={{ background: 'var(--light)' }}>
+                        <th style={{ padding: '5px 10px', textAlign: 'left', fontWeight: 600 }}>항목</th>
+                        <th style={{ padding: '5px 10px', textAlign: 'right', fontWeight: 600 }}>금액</th>
+                        <th style={{ padding: '5px 10px', textAlign: 'center', fontWeight: 600 }}>통화</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => {
+                    </thead>
+                    <tbody>
+                      {parseResult.budget.map((b, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td style={{ padding: '5px 10px' }}>{b.item}</td>
+                          <td style={{ padding: '5px 10px', textAlign: 'right' }}>{b.amount.toLocaleString()}</td>
+                          <td style={{ padding: '5px 10px', textAlign: 'center', color: 'var(--muted)' }}>{b.currency}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button className="btn btn-outline" style={{ flex: 1, minWidth: 0 }} onClick={() => {
                     applyParsedToForm(parseResult, 1)
                     showToast('✅ 폼에 내용을 채웠습니다. 각 단계를 검토 후 저장하세요.')
                   }}>
                     ✏️ 폼에서 검토 후 저장
                   </button>
-                  <button className="btn btn-green" style={{ flex: 1 }} onClick={() => {
+                  <button className="btn btn-green" style={{ flex: 1, minWidth: 0 }} onClick={() => {
                     applyParsedToForm(parseResult, 4)
                     showToast('✅ 내용을 불러왔습니다. 아래에서 최종 확인 후 저장하세요.')
                   }}>
@@ -725,7 +766,7 @@ export default function Proposal() {
           <div className="form-row cols2" style={{ marginTop: 14 }}>
             <div>
               <label style={{ marginTop: 0 }}>{t('event_period')}</label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <input
                   type="date"
                   value={eventStartDate}
@@ -779,11 +820,11 @@ export default function Proposal() {
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>{t('product_lbl')}</div>
           <div id="products-area">
             {products.map((p, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
                 <input style={{ flex: 1 }} value={p.product} onChange={e => setProducts(arr => arr.map((x, j) => j === i ? { ...x, product: e.target.value } : x))} placeholder={t('product_name')} />
                 <input style={{ flex: 1 }} value={p.target} onChange={e => setProducts(arr => arr.map((x, j) => j === i ? { ...x, target: e.target.value } : x))} placeholder={t('target_lbl')} />
                 <button onClick={() => setProducts(arr => arr.filter((_, j) => j !== i))}
-                  style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 4px', flexShrink: 0 }}>✕</button>
+                  style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 12px', minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
               </div>
             ))}
           </div>
@@ -798,7 +839,7 @@ export default function Proposal() {
                 <input style={{ flex: 1 }} value={r} onChange={e => setExpectedResults(arr => arr.map((x, j) => j === i ? e.target.value : x))}
                   placeholder="Promote GME BIZ to potential merchants" />
                 <button onClick={() => setExpectedResults(arr => arr.filter((_, j) => j !== i))}
-                  style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 4px', flexShrink: 0 }}>✕</button>
+                  style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 12px', minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
               </div>
             ))}
           </div>
@@ -816,9 +857,9 @@ export default function Proposal() {
       {/* Step 3: 예산 */}
       {step === 3 && (
         <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div className="page-hdr-row" style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 15, fontWeight: 700 }}>{t('budget_title')}</div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div className="page-hdr-actions">
               <input id="budget-excel-input" type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }}
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleBudgetExcel(f); e.target.value = '' }} />
               <button className="btn btn-purple btn-sm" onClick={() => document.getElementById('budget-excel-input')?.click()}>
@@ -831,6 +872,7 @@ export default function Proposal() {
               {t('prev_loaded')}
             </div>
           )}
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <table className="budget-table">
             <thead>
               <tr><th>{t('item_col')}</th><th>{t('prev_yr')}</th><th>{t('this_yr')}</th><th>{t('currency_col')}</th><th>{t('diff_lbl')}</th><th>{t('note_col')}</th><th></th></tr>
@@ -876,7 +918,8 @@ export default function Proposal() {
               })}
             </tbody>
           </table>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, flexWrap: 'wrap', gap: 8 }}>
             <button className="btn btn-muted btn-sm"
               onClick={() => setBudget(b => [...b, { item: 'Booth Fee', curr: 0, prev: 0, note: '', currency: 'KRW' }])}>
               {t('add_item')}
@@ -913,14 +956,14 @@ export default function Proposal() {
               <div style={{ fontSize: 13, color: 'var(--muted)', padding: '10px 0' }}>{t('no_budget_changes')}</div>
             )}
           </div>
-          <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+          <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
             <button className="btn btn-purple" onClick={runAI} disabled={aiLoading}>
               {t('ai_btn')}
             </button>
             <button className="btn btn-muted" onClick={() => { setStep(3); window.scrollTo(0,0) }}>{t('prev')}</button>
           </div>
           <div className="ai-box" id="ai-output" style={{ whiteSpace: 'pre-wrap' }}>{aiOutput}</div>
-          <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+          <div style={{ display: 'flex', gap: 10, marginTop: 18, flexWrap: 'wrap' }}>
             <button className="btn btn-green" onClick={save} disabled={saving || saved}>
               📋 {saving ? t('saving') : saved ? '✓ ' + t('save') : t('save_history').replace('📋 ', '')}
             </button>
@@ -953,14 +996,14 @@ export default function Proposal() {
 
       {/* 저장된 Proposal 목록 */}
       <div style={{ marginTop: 32 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div className="page-hdr-row" style={{ marginBottom: 14 }}>
           <div className="sec-hdr" style={{ margin: 0 }}>
             <div className="bar" />
             <span className="txt">{t('saved_proposals')}</span>
             <span className="sub">{t('total_items')} {savedList.length} &nbsp;·&nbsp; {t('click_to_edit')}</span>
           </div>
           {totalPages > 1 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="page-hdr-actions">
               <span style={{ fontSize: 13, color: 'var(--muted)' }}>{proposalPage + 1} / {totalPages} {t('page_label')}</span>
               <button onClick={() => setProposalPage(p => Math.max(0, p - 1))} disabled={proposalPage === 0}
                 style={{ width: 32, height: 32, borderRadius: 8, border: '1.5px solid var(--border2)', background: 'white', cursor: 'pointer', fontSize: 15 }}>‹</button>

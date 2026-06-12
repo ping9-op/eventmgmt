@@ -22,11 +22,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      setLoading(false)
-    })
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        setSession(session)
+        setUser(session?.user ?? null)
+      })
+      .catch(() => {/* 네트워크 오류 무시 — loading만 해제 */})
+      .finally(() => setLoading(false))
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
@@ -48,6 +50,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) return { error: error.message }
     return { error: null }
   }
+
+
 
   async function signOut() {
     await supabase.auth.signOut()

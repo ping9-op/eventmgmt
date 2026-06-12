@@ -13,13 +13,23 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
   // 결제 기한 초과 건수 조회 (D-day 알림)
   useEffect(() => {
     if (!user) return
-    const today = new Date().toISOString().split('T')[0]
-    Promise.all([
-      supabase.from('payments').select('id').lt('deposit_due', today).eq('deposit_paid', false).not('deposit_due', 'is', null),
-      supabase.from('payments').select('id').lt('final_due', today).eq('final_paid', false).not('final_due', 'is', null),
-    ]).then(([dep, fin]) => {
-      setOverdueCount((dep.data?.length || 0) + (fin.data?.length || 0))
-    })
+    let cancelled = false
+    async function fetchOverdue() {
+      try {
+        const today = new Date().toISOString().split('T')[0]
+        const [dep, fin] = await Promise.all([
+          supabase.from('payments').select('id').lt('deposit_due', today).eq('deposit_paid', false).not('deposit_due', 'is', null),
+          supabase.from('payments').select('id').lt('final_due', today).eq('final_paid', false).not('final_due', 'is', null),
+        ])
+        if (!cancelled) {
+          setOverdueCount((dep.data?.length || 0) + (fin.data?.length || 0))
+        }
+      } catch (err) {
+        console.error('overdue fetch failed', err)
+      }
+    }
+    fetchOverdue()
+    return () => { cancelled = true }
   }, [user])
 
   return (
@@ -30,14 +40,16 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
       </button>
 
       <span className="logo" onClick={() => navigate('/')}>
-        ● <span className="logo-text">GME Event Management</span>
+        <span className="logo-text">● GME Event Management</span>
+        <span className="logo-mobile">EMSF</span>
       </span>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         {/* 결제 D-day 알림 뱃지 */}
         {overdueCount > 0 && (
           <button onClick={() => navigate('/expo/payments')}
-            style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px' }}
+            style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px',
+              minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             title={`결제 기한 초과 ${overdueCount}건`}>
             <span style={{ fontSize: 18 }}>🔔</span>
             <span style={{ position: 'absolute', top: 0, right: 0, background: '#DC2626', color: 'white',
@@ -61,8 +73,9 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
         <div style={{ display: 'flex', background: 'rgba(255,255,255,.1)', borderRadius: 8, padding: 3, gap: 2 }}>
           {([['ko', '한국어'], ['en', 'EN'], ['ja', '日本語']] as const).map(([l, label]) => (
             <button key={l} onClick={() => setLang(l as any)}
-              style={{ padding: '5px 10px', borderRadius: 6, fontSize: 12, fontWeight: lang === l ? 700 : 600,
-                border: 'none', cursor: 'pointer',
+              className={lang === l ? 'lang-active' : 'lang-inactive'}
+              style={{ padding: '10px 12px', borderRadius: 6, fontSize: 12, fontWeight: lang === l ? 700 : 600,
+                border: 'none', cursor: 'pointer', minHeight: 44,
                 background: lang === l ? 'var(--accent)' : 'transparent',
                 color: lang === l ? 'white' : 'rgba(255,255,255,.6)', transition: 'all .2s' }}>
               {label}
@@ -72,8 +85,9 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
 
         <button onClick={signOut}
           style={{ background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.2)',
-            color: 'rgba(255,255,255,.7)', borderRadius: 6, padding: '5px 10px', fontSize: 12, cursor: 'pointer' }}>
-          로그아웃
+            color: 'rgba(255,255,255,.7)', borderRadius: 6, padding: '10px 12px', fontSize: 12, cursor: 'pointer', minHeight: 44 }}>
+          <span className="logout-full">로그아웃</span>
+          <span className="logout-short">나가기</span>
         </button>
       </div>
     </div>

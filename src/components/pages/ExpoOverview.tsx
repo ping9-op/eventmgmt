@@ -38,50 +38,69 @@ export default function ExpoOverview() {
   const [payments, setPayments] = useState<Record<string, any[]>>({})
   const [loading, setLoading] = useState(true)
 
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+
   const reloadResults = useCallback(async () => {
-    const { data } = await supabase.from('results').select('exhibition_key,actual_costs')
-    const map: Record<string, { actual_costs: ActualCost[] }> = {}
-    for (const r of (data || []) as any[]) map[r.exhibition_key] = r
-    setResults(map)
+    try {
+      const { data } = await supabase.from('results').select('exhibition_key,actual_costs')
+      if (!mountedRef.current) return
+      const map: Record<string, { actual_costs: ActualCost[] }> = {}
+      for (const r of (data || []) as any[]) map[r.exhibition_key] = r
+      setResults(map)
+    } catch (e) {
+      console.error('reloadResults error:', e)
+    }
   }, [])
 
   useEffect(() => {
+    let cancelled = false
     async function load() {
-      const [{ data: exhData }, { data: propData }, { data: resultData }, { data: payData }] = await Promise.all([
-        supabase.from('exhibitions').select('*'),
-        supabase.from('proposals').select('*').order('year'),
-        supabase.from('results').select('exhibition_key,actual_costs'),
-        supabase.from('payments').select('*'),
-      ])
-      const exhMap: Record<string, Exhibition> = {}
-      for (const e of (exhData || [])) exhMap[e.id] = e
+      try {
+        const [{ data: exhData }, { data: propData }, { data: resultData }, { data: payData }] = await Promise.all([
+          supabase.from('exhibitions').select('*'),
+          supabase.from('proposals').select('*').order('year'),
+          supabase.from('results').select('exhibition_key,actual_costs'),
+          supabase.from('payments').select('*'),
+        ])
+        if (cancelled) return
+        const exhMap: Record<string, Exhibition> = {}
+        for (const e of (exhData || [])) exhMap[e.id] = e
 
-      const list: ExhEntry[] = ((propData || []) as unknown as any[]).map(p => {
-        const exh = exhMap[p.exhibition_id]
-        const budget = (p.budget as BudgetItem[]) || []
-        return {
-          key: exh?.key || '', exhId: exh?.id || '', name: exh?.name || '', year: p.year,
-          date: p.date_of_event, venue: p.venue,
-          budget, total: budget.reduce((s, b) => s + (b.curr || 0), 0),
-          recurring: exh?.recurring || false,
-          proposal_date: p.proposal_date || '', author: p.author || ''
+        const list: ExhEntry[] = ((propData || []) as unknown as any[]).map(p => {
+          const exh = exhMap[p.exhibition_id]
+          const budget = (p.budget as BudgetItem[]) || []
+          return {
+            key: exh?.key || '', exhId: exh?.id || '', name: exh?.name || '', year: p.year,
+            date: p.date_of_event, venue: p.venue,
+            budget, total: budget.reduce((s, b) => s + (b.curr || 0), 0),
+            recurring: exh?.recurring || false,
+            proposal_date: p.proposal_date || '', author: p.author || ''
+          }
+        })
+        setEntries(list)
+
+        const resMap: Record<string, { actual_costs: ActualCost[] }> = {}
+        for (const r of (resultData || []) as any[]) resMap[r.exhibition_key] = r
+        setResults(resMap)
+
+        const payMap: Record<string, any[]> = {}
+        for (const p of (payData || []) as any[]) {
+          if (!payMap[p.exhibition_key]) payMap[p.exhibition_key] = []
+          payMap[p.exhibition_key].push(p)
         }
-      })
-      setEntries(list)
-
-      const resMap: Record<string, { actual_costs: ActualCost[] }> = {}
-      for (const r of (resultData || []) as any[]) resMap[r.exhibition_key] = r
-      setResults(resMap)
-
-      const payMap: Record<string, any[]> = {}
-      for (const p of (payData || []) as any[]) {
-        if (!payMap[p.exhibition_key]) payMap[p.exhibition_key] = []
-        payMap[p.exhibition_key].push(p)
+        setPayments(payMap)
+      } catch (e) {
+        console.error('load error:', e)
+      } finally {
+        if (!cancelled) setLoading(false)
       }
-      setPayments(payMap)
-      setLoading(false)
     }
     load()
+    return () => { cancelled = true }
   }, [])
 
   // results 실시간 동기화 — Supabase Realtime + visibilitychange 폴백
@@ -305,7 +324,7 @@ export default function ExpoOverview() {
                   {e.budget.length > 3 && <div className="exh-item-row"><span style={{ color: 'var(--muted)' }}>+{e.budget.length - 3}{t('others_count')}</span></div>}
                 </div>
 
-                <div style={{ display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 12 }}>
+                <div style={{ display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 12, flexWrap: 'wrap' }}>
                   <button className="btn btn-primary btn-sm" style={{ flex: 1 }}
                     onClick={ev => { ev.stopPropagation(); navigate('/expo/create', { state: { exhId: e.exhId } }) }}>
                     ✏️ {t('btn_proposal')}
@@ -350,6 +369,7 @@ export default function ExpoOverview() {
 
       {/* 순위 테이블 */}
       <div className="sec-hdr"><div className="bar" /><div className="txt">{t('rank')}</div></div>
+      <div className="table-scroll-wrapper">
       <table className="rank-table">
         <thead>
           <tr><th>{t('col_rank')}</th><th>{t('col_name')}</th><th>{t('col_year')}</th><th>{t('col_date')}</th><th>{t('col_venue')}</th><th>{t('col_budget')}</th><th>{t('col_booth')}</th></tr>
@@ -372,6 +392,7 @@ export default function ExpoOverview() {
           <tr><td></td><td><strong>{t('total')}</strong></td><td></td><td></td><td></td><td><strong>{krw(totalAll)}</strong></td><td></td></tr>
         </tfoot>
       </table>
+      </div>
     </div>
   )
 }
@@ -441,13 +462,13 @@ function YearDonutSection({ entries, latestSorted }: { entries: ExhEntry[]; late
   return (
     <>
       <div className="sec-hdr"><div className="bar" /><div className="txt">{t('yearly')}</div></div>
-      <div className="donuts-wrapper" style={{ padding: '0 24px' }}>
+      <div className="donuts-wrapper">
         {/* Left nav */}
         <div className={`donuts-nav left${canLeft ? '' : ' disabled'}`}
           onClick={canLeft ? () => setOffset(o => o - 1) : undefined}>
           ‹
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 12 }}>
+        <div className="donuts-row">
           {visibleYears.map(yr => {
             const yEntries = yearGroups[yr]
             return (

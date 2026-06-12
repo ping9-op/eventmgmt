@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <linearGradient id="funnel-fill" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f8fafc" stop-opacity="0.97"/>
+      <stop offset="100%" stop-color="#e2e8f0" stop-opacity="0.88"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="55%" r="50%">
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="dot-shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+    <filter id="funnel-shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+
+  <!-- Glow overlay -->
+  <ellipse cx="256" cy="280" rx="256" ry="256" fill="url(#glow)"/>
+
+  <!-- Subtle top highlight -->
+  <rect width="512" height="200" rx="96" fill="rgba(255,255,255,0.03)"/>
+
+  <!-- Event dot: left (sky blue) -->
+  <circle cx="148" cy="118" r="38" fill="#38BDF8" filter="url(#dot-shadow)"/>
+  <!-- Calendar icon in dot -->
+  <rect x="132" y="104" width="32" height="28" rx="5" fill="rgba(255,255,255,0.9)"/>
+  <rect x="132" y="104" width="32" height="10" rx="5" fill="rgba(255,255,255,0.9)"/>
+  <rect x="132" y="110" width="32" height="4" fill="#38BDF8"/>
+  <circle cx="141" cy="101" r="3" fill="rgba(255,255,255,0.7)"/>
+  <circle cx="159" cy="101" r="3" fill="rgba(255,255,255,0.7)"/>
+
+  <!-- Event dot: center (emerald, larger) -->
+  <circle cx="256" cy="94" r="44" fill="#10B981" filter="url(#dot-shadow)"/>
+  <rect x="238" y="78" width="36" height="32" rx="5" fill="rgba(255,255,255,0.9)"/>
+  <rect x="238" y="78" width="36" height="11" rx="5" fill="rgba(255,255,255,0.9)"/>
+  <rect x="238" y="85" width="36" height="4" fill="#10B981"/>
+  <circle cx="248" cy="75" r="3.5" fill="rgba(255,255,255,0.7)"/>
+  <circle cx="268" cy="75" r="3.5" fill="rgba(255,255,255,0.7)"/>
+
+  <!-- Event dot: right (amber) -->
+  <circle cx="364" cy="118" r="38" fill="#F59E0B" filter="url(#dot-shadow)"/>
+  <rect x="348" y="104" width="32" height="28" rx="5" fill="rgba(255,255,255,0.9)"/>
+  <rect x="348" y="104" width="32" height="10" rx="5" fill="rgba(255,255,255,0.9)"/>
+  <rect x="348" y="110" width="32" height="4" fill="#F59E0B"/>
+  <circle cx="357" cy="101" r="3" fill="rgba(255,255,255,0.7)"/>
+  <circle cx="375" cy="101" r="3" fill="rgba(255,255,255,0.7)"/>
+
+  <!-- Connector lines from dots to funnel -->
+  <path d="M148,156 Q162,180 184,196" stroke="rgba(255,255,255,0.25)" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <path d="M256,138 L256,196" stroke="rgba(255,255,255,0.25)" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <path d="M364,156 Q350,180 328,196" stroke="rgba(255,255,255,0.25)" stroke-width="3" stroke-linecap="round" fill="none"/>
+
+  <!-- Funnel: top pill bar -->
+  <rect x="80" y="196" width="352" height="52" rx="26" fill="url(#funnel-fill)" filter="url(#funnel-shadow)"/>
+
+  <!-- Funnel: trapezoid body -->
+  <path d="M120,248 L392,248 L308,352 L204,352 Z" fill="url(#funnel-fill)" filter="url(#funnel-shadow)"/>
+
+  <!-- Funnel: inner flow lines -->
+  <line x1="172" y1="275" x2="228" y2="265" stroke="rgba(99,102,241,0.15)" stroke-width="2.5"/>
+  <line x1="168" y1="292" x2="222" y2="283" stroke="rgba(99,102,241,0.12)" stroke-width="2"/>
+  <line x1="163" y1="309" x2="215" y2="301" stroke="rgba(99,102,241,0.1)" stroke-width="1.5"/>
+
+  <!-- Funnel: neck tube -->
+  <rect x="204" y="352" width="104" height="76" rx="18" fill="url(#funnel-fill)" filter="url(#funnel-shadow)"/>
+
+  <!-- Funnel: bottom arrow/drop -->
+  <path d="M222,428 L290,428 L256,462 Z" fill="white" opacity="0.92"/>
+
+  <!-- Small star sparkle in funnel -->
+  <g transform="translate(256,300)" opacity="0.25">
+    <path d="M0,-8 L2,-2 L8,0 L2,2 L0,8 L-2,2 L-8,0 L-2,-2 Z" fill="white"/>
+  </g>
+</svg>

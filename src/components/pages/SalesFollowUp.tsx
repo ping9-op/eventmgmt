@@ -57,9 +57,35 @@ export default function SalesFollowUp() {
   })
 
   useEffect(() => {
+    let cancelled = false
     const state = (location.state as any)
     if (state?.filter) setTaskFilter(state.filter as TaskFilter)
+    async function load() {
+      try {
+        const [{ data: taskData, error: te }, { data: leadData, error: le }] = await Promise.all([
+          supabase.from('sales_tasks').select('*').order('due_date'),
+          supabase.from('sales_leads').select('*'),
+        ])
+        if (cancelled) return
+        if (te) throw te
+        if (le) throw le
+        const rawTasks = (taskData || []) as SalesTask[]
+        const processedTasks = rawTasks.map(t => {
+          if (t.status === 'Done') return t
+          if (t.due_date < today) return { ...t, status: 'Overdue' }
+          if (t.status === 'Overdue') return { ...t, status: 'Pending' }
+          return t
+        })
+        if (!cancelled) setTasks(processedTasks)
+        if (!cancelled) setLeads((leadData || []) as SalesLead[])
+      } catch (err: any) {
+        if (!cancelled) showToast('⚠️ 데이터 로드 실패: ' + (err?.message || '알 수 없는 오류'))
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
     load()
+    return () => { cancelled = true }
   }, [])
 
   async function load() {
@@ -170,17 +196,19 @@ export default function SalesFollowUp() {
 
   return (
     <div className="view wide">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div className="sec-hdr" style={{ margin: 0 }}>
+      <div className="page-hdr-row">
+        <div className="sec-hdr">
           <div className="bar" />
           <div className="txt">{t('s_followup_title')}</div>
           <div className="sub">{t('s_followup_sub')}</div>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={() => setShowAddTask(true)}>{t('add_task_title')}</button>
+        <div className="page-hdr-actions">
+          <button className="btn btn-primary btn-sm" onClick={() => setShowAddTask(true)}>{t('add_task_title')}</button>
+        </div>
       </div>
 
       {/* 필터 카드 4개 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 20, marginTop: 16 }}>
+      <div className="g4" style={{ gap: 14, marginBottom: 20, marginTop: 16 }}>
         {filterCards.map(k => {
           const active = taskFilter === k.filter
           return (
@@ -197,7 +225,7 @@ export default function SalesFollowUp() {
 
       {/* 필터 배지 */}
       {taskFilter && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, background: '#FFF8F0', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, background: '#FFF8F0', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 14px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13 }}>🔍 필터: <strong>{filterCards.find(c => c.filter === taskFilter)?.lbl}</strong> ({shown.length}개)</span>
           <button onClick={() => setTaskFilter(null)} style={{ padding: '3px 10px', borderRadius: 5, background: 'white', border: '1px solid var(--border2)', fontSize: 12, cursor: 'pointer', marginLeft: 'auto' }}>{t('clear_filter')}</button>
         </div>
@@ -206,7 +234,7 @@ export default function SalesFollowUp() {
       {/* 테이블 */}
       <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, overflow: 'hidden' }}>
         {/* 액션 바 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid var(--border)', background: '#FAFAFA' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid var(--border)', background: '#FAFAFA', flexWrap: 'wrap' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
             <input type="checkbox" checked={allIds.length > 0 && allIds.every(i => checked.has(i))} onChange={() => toggleCheck('', allIds)} style={{ width: 16, height: 16, accentColor: 'var(--accent)', cursor: 'pointer' }} />
             {t('select_all')}
@@ -268,12 +296,12 @@ export default function SalesFollowUp() {
                       <div style={{ display: 'flex', gap: 5 }}>
                         {task.status !== 'Done' && (
                           <button onClick={() => markDone(task.id)}
-                            style={{ padding: '4px 10px', borderRadius: 6, background: '#059669', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                            style={{ padding: '4px 10px', borderRadius: 6, background: '#059669', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', minHeight: 44 }}>
                             {t('mark_done')}
                           </button>
                         )}
                         <button onClick={() => deleteTask(task.id)}
-                          style={{ padding: '4px 8px', borderRadius: 6, background: '#FFF0F0', color: '#DC2626', border: '1px solid #FFC5C5', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
+                          style={{ padding: '4px 8px', borderRadius: 6, background: '#FFF0F0', color: '#DC2626', border: '1px solid #FFC5C5', fontSize: 11, cursor: 'pointer', fontWeight: 600, minHeight: 44 }}>
                           🗑️
                         </button>
                       </div>
@@ -292,7 +320,7 @@ export default function SalesFollowUp() {
       {/* Task 추가 모달 */}
       {showAddTask && (
         <div className="modal-bg open">
-          <div className="modal" style={{ maxWidth: 520 }}>
+          <div className="modal" style={{ width: 520, maxWidth: '95vw' }}>
             <div className="modal-hdr">
               <h3>{t('add_task_title')}</h3>
               <button className="modal-close" onClick={() => setShowAddTask(false)}>✕</button>

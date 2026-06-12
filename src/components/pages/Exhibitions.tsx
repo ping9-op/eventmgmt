@@ -97,43 +97,53 @@ export default function Exhibitions() {
   const [apResults, setApResults] = useState<string[]>([''])
   const [apBudget, setApBudget] = useState<BudgetRow[]>(defaultBudgetRows())
 
-  async function load() {
-    const [{ data: exhData, error: exhErr }, { data: propData, error: propErr }] = await Promise.all([
-      supabase.from('exhibitions').select('*').order('name'),
-      supabase.from('proposals').select('*').order('year', { ascending: true }),
-    ])
-    if (exhErr) { console.error('exhibitions fetch error:', exhErr); setLoading(false); return }
-    if (propErr) { console.error('proposals fetch error:', propErr); setLoading(false); return }
-    const exhList = exhData || []
-    const propList = (propData || []) as unknown as Proposal[]
-    const knownExhIds = new Set(exhList.map(e => e.id))
+  async function load(cancelled?: { current: boolean }) {
+    try {
+      const [{ data: exhData, error: exhErr }, { data: propData, error: propErr }] = await Promise.all([
+        supabase.from('exhibitions').select('*').order('name'),
+        supabase.from('proposals').select('*').order('year', { ascending: true }),
+      ])
+      if (cancelled?.current) return
+      if (exhErr) { console.error('exhibitions fetch error:', exhErr); return }
+      if (propErr) { console.error('proposals fetch error:', propErr); return }
+      const exhList = exhData || []
+      const propList = (propData || []) as unknown as Proposal[]
+      const knownExhIds = new Set(exhList.map(e => e.id))
 
-    const entries: ExhEntry[] = exhList.map(exh => ({
-      exh,
-      proposals: propList
-        .filter(p => p.exhibition_id === exh.id)
-        .map(p => ({ ...p, budget: (p.budget as unknown as BudgetItem[]) || [] }))
-    }))
+      const entries: ExhEntry[] = exhList.map(exh => ({
+        exh,
+        proposals: propList
+          .filter(p => p.exhibition_id === exh.id)
+          .map(p => ({ ...p, budget: (p.budget as unknown as BudgetItem[]) || [] }))
+      }))
 
-    // exhibition이 없는 orphaned proposals → 가상 exhibition 카드로 표시
-    const orphaned = propList.filter(p => !knownExhIds.has(p.exhibition_id))
-    const orphanedByExhId: Record<string, Proposal[]> = {}
-    for (const p of orphaned) {
-      if (!orphanedByExhId[p.exhibition_id]) orphanedByExhId[p.exhibition_id] = []
-      orphanedByExhId[p.exhibition_id].push(p)
+      // exhibition이 없는 orphaned proposals → 가상 exhibition 카드로 표시
+      const orphaned = propList.filter(p => !knownExhIds.has(p.exhibition_id))
+      const orphanedByExhId: Record<string, Proposal[]> = {}
+      for (const p of orphaned) {
+        if (!orphanedByExhId[p.exhibition_id]) orphanedByExhId[p.exhibition_id] = []
+        orphanedByExhId[p.exhibition_id].push(p)
+      }
+      for (const [exhId, props] of Object.entries(orphanedByExhId)) {
+        entries.push({
+          exh: { id: exhId, key: '?', name: '(미연결 박람회)', recurring: false } as any,
+          proposals: props.map(p => ({ ...p, budget: (p.budget as unknown as BudgetItem[]) || [] }))
+        })
+      }
+
+      if (!cancelled?.current) setData(entries)
+    } catch (e) {
+      console.error('load error:', e)
+    } finally {
+      if (!cancelled?.current) setLoading(false)
     }
-    for (const [exhId, props] of Object.entries(orphanedByExhId)) {
-      entries.push({
-        exh: { id: exhId, key: '?', name: '(미연결 박람회)', recurring: false } as any,
-        proposals: props.map(p => ({ ...p, budget: (p.budget as unknown as BudgetItem[]) || [] }))
-      })
-    }
-
-    setData(entries)
-    setLoading(false)
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    const cancelled = { current: false }
+    load(cancelled)
+    return () => { cancelled.current = true }
+  }, [])
 
   function onApExhSel(id: string) {
     setApExhSel(id)
@@ -260,28 +270,35 @@ export default function Exhibitions() {
   }
 
   async function deleteExhibition(exhId: string) {
-    const exh = data.find(d => d.exh.id === exhId)?.exh
-    if (exh?.key) {
-      await supabase.from('payments').delete().like('exhibition_key', `${exh.key}_%`)
+    try {
+      const exh = data.find(d => d.exh.id === exhId)?.exh
+      if (exh?.key) {
+        const { error: payErr } = await supabase.from('payments').delete().like('exhibition_key', `${exh.key}_%`)
+        if (payErr) { showToast('⚠️ 결제 항목 삭제 실패: ' + payErr.message); return }
+      }
+      const { error: propErr } = await supabase.from('proposals').delete().eq('exhibition_id', exhId)
+      if (propErr) { showToast('⚠️ Proposal 삭제 실패: ' + propErr.message); return }
+      const { error: exhErr } = await supabase.from('exhibitions').delete().eq('id', exhId)
+      if (exhErr) { showToast('⚠️ 박람회 삭제 실패: ' + exhErr.message); return }
+      setDeleteConfirm(null)
+      showToast('박람회가 삭제되었습니다.')
+      load()
+    } catch (e: any) {
+      showToast('⚠️ 삭제 중 오류 발생: ' + (e?.message || String(e)))
     }
-    await supabase.from('proposals').delete().eq('exhibition_id', exhId)
-    await supabase.from('exhibitions').delete().eq('id', exhId)
-    setDeleteConfirm(null)
-    showToast('박람회가 삭제되었습니다.')
-    load()
   }
 
   if (loading) return <div className="view"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
 
   return (
     <div className="view">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="page-hdr-row">
         <div className="sec-hdr" style={{ margin: 0 }}>
           <div className="bar" />
           <div className="txt">{t('exh_list')}</div>
           <div className="sub">{t('exh_sub')}</div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="page-hdr-actions">
           <button className="btn btn-primary btn-sm" onClick={() => setShowAddModal(true)}>{t('add_past')}</button>
           <button className="btn btn-outline btn-sm" onClick={() => { setLoading(true); load() }}>{t('refresh')}</button>
         </div>
@@ -319,7 +336,7 @@ export default function Exhibitions() {
                       {proposals.length >= 2 ? t('badge_existing') : t('badge_new')}
                     </span>
                     <button onClick={() => setDeleteConfirm(exh.id)}
-                      style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 5, color: 'var(--muted)', cursor: 'pointer', fontSize: 11, padding: '2px 8px' }}>
+                      style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 5, color: 'var(--muted)', cursor: 'pointer', fontSize: 11, padding: '2px 8px', minHeight: 44 }}>
                       {t('btn_delete')}
                     </button>
                   </div>
@@ -332,13 +349,13 @@ export default function Exhibitions() {
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6, fontWeight: 500 }}>{t('hist_count')} {proposals.length}{t('times')}</div>
                 <div style={{ height: 110, overflowY: 'auto', border: '0.5px solid var(--border)', borderRadius: 8, padding: '4px 10px', background: '#FDFBFB', marginBottom: 12 }}>
                   {[...proposals].reverse().map((p, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '0.5px solid var(--border)' }}>
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '0.5px solid var(--border)', flexWrap: 'wrap', gap: 4 }}>
                       <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap', marginRight: 8 }}>
                         {p.year} · {formatEventDate(p.date_of_event, p.year)}
                       </span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                         <span style={{ fontSize: 12, fontWeight: 700, color, whiteSpace: 'nowrap' }}>{budgetStr(p.budget)}</span>
-                        <button className="btn btn-outline btn-sm" style={{ padding: '2px 8px', fontSize: 10 }}
+                        <button className="btn btn-outline btn-sm" style={{ padding: '2px 8px', fontSize: 10, minHeight: 44 }}
                           onClick={() => setEpModal({
                             propId: p.id, exhName: exh.name, exhKey: exh.key, year: p.year,
                             initialDate: p.date_of_event, initialVenue: p.venue,
@@ -379,7 +396,7 @@ export default function Exhibitions() {
       {/* 과거 Proposal 등록 모달 */}
       {showAddModal && (
         <div className="modal-bg open">
-          <div className="modal" style={{ width: 680 }}>
+          <div className="modal" style={{ maxWidth: 680, width: '100%' }}>
             <div className="modal-hdr">
               <h3>{t('reg_past_proposal')}</h3>
               <button className="modal-close" onClick={() => { setShowAddModal(false); resetForm() }}>✕</button>
@@ -434,7 +451,7 @@ export default function Exhibitions() {
             <div className="form-row cols2">
               <div>
                 <label>{t('event_period')}</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <input type="date" value={apStartDate}
                     onChange={e => {
                       const s = e.target.value
@@ -473,6 +490,7 @@ export default function Exhibitions() {
               onClick={() => setApResults(r => [...r, ''])}>{t('add_result')}</button>
 
             <label style={{ marginTop: 8 }}>{t('budget_items')}</label>
+            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             <table className="budget-table" style={{ marginBottom: 8 }}>
               <thead>
                 <tr><th>{t('item_col')}</th><th>{t('amount_col')}</th><th>{t('currency_col')}</th><th>{t('note_col')}</th><th></th></tr>
@@ -481,7 +499,7 @@ export default function Exhibitions() {
                 {apBudget.map((row, i) => (
                   <tr key={i}>
                     <td>
-                      <input list="cost-items" value={row.item} onChange={e => updateBudgetRow(i, 'item', e.target.value)} style={{ width: 130 }} />
+                      <input list="cost-items" value={row.item} onChange={e => updateBudgetRow(i, 'item', e.target.value)} style={{ width: '100%', minWidth: 80 }} />
                       <datalist id="cost-items">{COST_ITEMS.map(c => <option key={c} value={c} />)}</datalist>
                     </td>
                     <td>
@@ -501,6 +519,7 @@ export default function Exhibitions() {
                 ))}
               </tbody>
             </table>
+            </div>
             <button className="btn btn-muted btn-sm" onClick={() => setApBudget(prev => [...prev, { item: '', curr: 0, currency: 'KRW', note: '' }])}>
               {t('add_item')}
             </button>

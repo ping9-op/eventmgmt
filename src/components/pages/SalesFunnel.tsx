@@ -44,12 +44,32 @@ export default function SalesFunnel() {
   const [tableSearch, setTableSearch] = useState('')
 
   useEffect(() => {
+    let cancelled = false
     const state = (location.state as any)
     if (state?.filter) {
       if (state.filter !== null) setFilterStage(state.filter)
     }
     if (state?.view) setTab(state.view as TabType)
-    load()
+
+    async function loadOnMount() {
+      try {
+        const [{ data: leadData, error: le }, { data: propData, error: pe }] = await Promise.all([
+          supabase.from('sales_leads').select('*'),
+          supabase.from('sales_proposals').select('*'),
+        ])
+        if (cancelled) return
+        if (le) throw le
+        if (pe) throw pe
+        setLeads((leadData || []) as SalesLead[])
+        setProposals((propData || []) as SalesProposal[])
+      } catch (err: any) {
+        console.error('SalesFunnel load error:', err?.message)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    loadOnMount()
+    return () => { cancelled = true }
   }, [])
 
   // '__active__' 필터는 여러 스테이지에 걸쳐 있어 Board View와 맞지 않으므로 자동으로 Table View로 전환
@@ -140,20 +160,22 @@ export default function SalesFunnel() {
 
   return (
     <div className="view wide">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div className="sec-hdr" style={{ margin: 0 }}>
+      <div className="page-hdr-row">
+        <div className="sec-hdr">
           <div className="bar" />
           <div className="txt">{t('s_funnel_title')}</div>
           <div className="sub">{t('s_funnel_sub')}</div>
         </div>
-        <select value={filterOwner} onChange={e => setFilterOwner(e.target.value)} style={{ width: 130 }}>
-          <option value="">{t('all_owners')}</option>
-          {OWNERS.map(o => <option key={o}>{o}</option>)}
-        </select>
+        <div className="page-hdr-actions">
+          <select value={filterOwner} onChange={e => setFilterOwner(e.target.value)} style={{ minWidth: 130, width: '100%' }}>
+            <option value="">{t('all_owners')}</option>
+            {OWNERS.map(o => <option key={o}>{o}</option>)}
+          </select>
+        </div>
       </div>
 
       {/* 탭 바 (프로토타입 스타일 - 언더라인) */}
-      <div style={{ display: 'flex', background: '#F5F0F0', borderBottom: '1px solid var(--border2)', padding: '0 0', gap: 0, marginTop: 12 }}>
+      <div style={{ display: 'flex', overflowX: 'auto', background: '#F5F0F0', borderBottom: '1px solid var(--border2)', padding: '0 0', gap: 0, marginTop: 12 }}>
         {tabs.map(t => (
           <div key={t.id} onClick={() => setTab(t.id)}
             style={{
@@ -171,7 +193,7 @@ export default function SalesFunnel() {
 
       <div style={{ paddingTop: 16 }}>
         {/* KPI 카드 8개 */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8,1fr)', gap: 10, marginBottom: 14 }}>
+        <div className="g4" style={{ gap: 10, marginBottom: 14 }}>
           {KPI_CARDS.map(k => {
             const active = k.stage !== null && k.stage !== '__conv__' && filterStage === k.stage
             const clickable = k.stage !== null && k.stage !== '__conv__'
@@ -231,7 +253,7 @@ export default function SalesFunnel() {
                           {l.next_action && <div style={{ fontSize: 10, color: '#4F46E5', marginBottom: 6 }}>→ {l.next_action}</div>}
                           <div onClick={e => e.stopPropagation()}>
                             <select value={stage} onChange={e => { e.stopPropagation(); moveStage(l.id, e.target.value) }} onClick={e => e.stopPropagation()}
-                              style={{ width: '100%', fontSize: 11, padding: '3px 5px', border: '1px solid var(--border2)', borderRadius: 5, background: c.light, cursor: 'pointer' }}>
+                              style={{ width: '100%', fontSize: 11, padding: '3px 5px', border: '1px solid var(--border2)', borderRadius: 5, background: c.light, cursor: 'pointer', minHeight: 44 }}>
                               {STAGE_ORDER.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                           </div>
@@ -256,7 +278,7 @@ export default function SalesFunnel() {
               <span style={{ fontSize: 12, color: 'var(--muted)' }}>{tableFiltered.length}개</span>
             </div>
             {/* 액션 바 */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid var(--border)', background: '#FAFAFA' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '10px 16px', borderBottom: '1px solid var(--border)', background: '#FAFAFA' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
                 <input type="checkbox" checked={allIds.length > 0 && allIds.every(i => checked.has(i))} onChange={() => toggleCheck('', allIds)} style={{ width: 16, height: 16, accentColor: 'var(--accent)', cursor: 'pointer' }} />
                 {t('select_all')}
@@ -355,7 +377,7 @@ function ProposalContractView({ leads, proposals, onUpdate, onOpenLead }: {
 
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 10, marginBottom: 16 }}>
+      <div className="g3" style={{ gap: 10, marginBottom: 16 }}>
         {kpiCards.map(k => (
           <div key={k.lbl} style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 10, padding: '12px 14px', textAlign: 'center' }}>
             <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 4 }}>{k.lbl}</div>

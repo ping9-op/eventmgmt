@@ -44,19 +44,19 @@ function EditableCard({
       </div>
 
       {/* 추가 입력 */}
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8 }}>
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <input
           ref={inputRef}
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') submit() }}
           placeholder={addPlaceholder}
-          style={{ flex: 1, padding: '7px 10px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13 }}
+          style={{ flex: 1, minWidth: 0, padding: '7px 10px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, minHeight: 44 }}
         />
         <button
           onClick={submit}
           disabled={saving}
-          style={{ padding: '7px 14px', borderRadius: 7, background: 'var(--accent)', color: 'white', border: 'none', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}
+          style={{ padding: '7px 14px', borderRadius: 7, background: 'var(--accent)', color: 'white', border: 'none', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, flexShrink: 0 }}
         >
           + {addBtnLabel}
         </button>
@@ -68,20 +68,20 @@ function EditableCard({
           <div style={{ padding: '12px 6px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>{t('no_items')}</div>
         )}
         {items.map((v, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '8px 12px', background: 'var(--light)', borderRadius: 7, gap: 10 }}>
+          <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '8px 12px', background: 'var(--light)', borderRadius: 7, gap: 10, flexWrap: 'wrap' }}>
             <span style={{ width: 20, textAlign: 'center', fontSize: 11, color: 'var(--muted)', fontWeight: 600, flexShrink: 0 }}>{i + 1}</span>
             <span style={{ flex: 1, fontSize: 13 }}>{v}</span>
             {confirmIdx === i ? (
-              <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 11, color: '#DC2626', fontWeight: 600 }}>삭제?</span>
                 <button onClick={() => { onRemove(i); setConfirmIdx(null) }}
-                  style={{ padding: '2px 8px', borderRadius: 5, background: '#DC2626', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>Yes</button>
+                  style={{ padding: '2px 8px', minHeight: 44, borderRadius: 5, background: '#DC2626', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>Yes</button>
                 <button onClick={() => setConfirmIdx(null)}
-                  style={{ padding: '2px 8px', borderRadius: 5, background: 'white', color: 'var(--muted)', border: '1px solid var(--border2)', fontSize: 11, cursor: 'pointer' }}>No</button>
+                  style={{ padding: '2px 8px', minHeight: 44, borderRadius: 5, background: 'white', color: 'var(--muted)', border: '1px solid var(--border2)', fontSize: 11, cursor: 'pointer' }}>No</button>
               </div>
             ) : (
               <button onClick={() => setConfirmIdx(i)}
-                style={{ padding: '2px 9px', borderRadius: 5, background: 'white', border: '1px solid #FCA5A5', fontSize: 11, cursor: 'pointer', color: '#DC2626', flexShrink: 0 }}>
+                style={{ padding: '2px 9px', minHeight: 44, borderRadius: 5, background: 'white', border: '1px solid #FCA5A5', fontSize: 11, cursor: 'pointer', color: '#DC2626', flexShrink: 0 }}>
                 {deleteBtnLabel}
               </button>
             )}
@@ -126,6 +126,8 @@ export default function SalesSettings() {
   const [saving, setSaving] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [dbError, setDbError] = useState(false)
+  const mountedRef = useRef(true)
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false } }, [])
 
   // 설정 그룹 정의 (번역 적용)
   const EDITABLE_GROUPS: { key: keyof SalesSettingsData; label: string; desc: string; icon: string }[] = [
@@ -158,12 +160,15 @@ export default function SalesSettings() {
     setSaving(key)
     try {
       await saveSetting(key, updated)
-      showToast(t('saved_ok'))
+      if (mountedRef.current) showToast(t('saved_ok'))
     } catch {
-      showToast('저장 실패. 네트워크를 확인하세요.')
-      setSettings(s => s ? { ...s, [key]: s[key].filter(v => v !== val) } : s)
+      if (mountedRef.current) {
+        showToast('저장 실패. 네트워크를 확인하세요.')
+        setSettings(s => s ? { ...s, [key]: s[key].filter(v => v !== val) } : s)
+      }
+    } finally {
+      if (mountedRef.current) setSaving(null)
     }
-    setSaving(null)
   }
 
   async function handleRemove(key: keyof SalesSettingsData, idx: number) {
@@ -173,12 +178,20 @@ export default function SalesSettings() {
     setSaving(key)
     try {
       await saveSetting(key, updated)
-      showToast('삭제되었습니다.')
+      if (mountedRef.current) showToast('삭제되었습니다.')
     } catch {
-      showToast('삭제 실패.')
-      setSettings(await loadAllSettings())
+      if (mountedRef.current) {
+        showToast('삭제 실패.')
+        try {
+          const restored = await loadAllSettings()
+          if (mountedRef.current) setSettings(restored)
+        } catch {
+          // rollback fetch failed — leave optimistic state as-is
+        }
+      }
+    } finally {
+      if (mountedRef.current) setSaving(null)
     }
-    setSaving(null)
   }
 
   if (loading) return (
@@ -195,7 +208,7 @@ export default function SalesSettings() {
           <code>sales_settings</code> 테이블이 존재하지 않습니다.<br />
           Supabase 대시보드 → SQL Editor에서 아래 파일을 실행해주세요:
         </div>
-        <code style={{ display: 'block', background: '#F5F0F0', padding: '8px 12px', borderRadius: 7, fontSize: 12 }}>
+        <code style={{ display: 'block', background: '#F5F0F0', padding: '8px 12px', borderRadius: 7, fontSize: 12, wordBreak: 'break-all', overflowX: 'auto' }}>
           supabase_settings_migration.sql
         </code>
         <button
@@ -222,7 +235,7 @@ export default function SalesSettings() {
         <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 12 }}>
           {t('editable_settings')}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div className="g2">
           {EDITABLE_GROUPS.map(g => (
             <EditableCard
               key={g.key}
@@ -247,7 +260,7 @@ export default function SalesSettings() {
         <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 12 }}>
           {t('readonly_settings')}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div className="g2">
           {READONLY_GROUPS.map(g => (
             <ReadonlyCard key={g.label} icon={g.icon} label={g.label} desc={g.desc} items={g.items} systemFixedLabel={t('system_fixed')} />
           ))}

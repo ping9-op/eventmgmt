@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { STAGE_ORDER, STAGE_COLORS } from '../../lib/utils'
+import { useIsMobile } from '../../hooks/useBreakpoint'
 import { logStageChange } from '../../lib/stageHistory'
 import { loadAllSettings, CONTRACT_STATUSES as SYSTEM_CONTRACT_STATUSES, ONBOARD_STATUSES as SYSTEM_ONBOARD_STATUSES, type SalesSettingsData } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
@@ -49,6 +50,7 @@ export default function LeadDetailPanel({
 }) {
   const { t, lang } = useLang()
   const { showToast } = useToast()
+  const isMobile = useIsMobile()
   const [settings, setSettings] = useState<SalesSettingsData | null>(null)
   const [tab, setTab] = useState<TabId>('basic')
   const [lead, setLead] = useState<SalesLead | null>(null)
@@ -73,25 +75,32 @@ export default function LeadDetailPanel({
   }, [])
 
   useEffect(() => {
+    let cancelled = false
     async function load() {
-      const [{ data: lData }, { data: aData }, { data: tData }, { data: pData }] = await Promise.all([
-        supabase.from('sales_leads').select('*').eq('id', leadId).single(),
-        supabase.from('sales_activities').select('*').eq('lead_id', leadId).order('activity_date', { ascending: false }),
-        supabase.from('sales_tasks').select('*').eq('lead_id', leadId).order('due_date'),
-        supabase.from('sales_proposals').select('*').eq('lead_id', leadId).single(),
-      ])
-      if (lData) {
-        setLead(lData as SalesLead)
-        setForm(lData as SalesLead)
-      }
-      setActivities((aData || []) as SalesActivity[])
-      setTasks((tData || []) as SalesTask[])
-      if (pData) {
-        setProposal(pData as SalesProposal)
-        setPropForm(pData as SalesProposal)
+      try {
+        const [{ data: lData }, { data: aData }, { data: tData }, { data: pData }] = await Promise.all([
+          supabase.from('sales_leads').select('*').eq('id', leadId).single(),
+          supabase.from('sales_activities').select('*').eq('lead_id', leadId).order('activity_date', { ascending: false }),
+          supabase.from('sales_tasks').select('*').eq('lead_id', leadId).order('due_date'),
+          supabase.from('sales_proposals').select('*').eq('lead_id', leadId).single(),
+        ])
+        if (cancelled) return
+        if (lData) {
+          setLead(lData as SalesLead)
+          setForm(lData as SalesLead)
+        }
+        setActivities((aData || []) as SalesActivity[])
+        setTasks((tData || []) as SalesTask[])
+        if (pData) {
+          setProposal(pData as SalesProposal)
+          setPropForm(pData as SalesProposal)
+        }
+      } catch (err: any) {
+        if (!cancelled) showToast('⚠️ 데이터 로딩 실패: ' + (err?.message || '알 수 없는 오류'))
       }
     }
     load()
+    return () => { cancelled = true }
   }, [leadId])
 
   async function save() {
@@ -164,23 +173,27 @@ export default function LeadDetailPanel({
   }
 
   async function addActivity() {
-    const { error } = await supabase.from('sales_activities').insert({
-      lead_id: leadId,
-      activity_type: actType,
-      activity_result: actResult,
-      activity_date: actDate,
-      note: actNote,
-      created_by: form.owner || lead?.owner || '',
-    })
-    if (error) { showToast('⚠️ Activity 저장 실패: ' + error.message); return }
-    setActNote(''); setShowActForm(false); setActDate(new Date().toISOString().split('T')[0])
-    const [{ data: aData }, { data: tData }] = await Promise.all([
-      supabase.from('sales_activities').select('*').eq('lead_id', leadId).order('activity_date', { ascending: false }),
-      supabase.from('sales_tasks').select('*').eq('lead_id', leadId).order('due_date'),
-    ])
-    setActivities((aData || []) as SalesActivity[])
-    setTasks((tData || []) as SalesTask[])
-    onRefresh()
+    try {
+      const { error } = await supabase.from('sales_activities').insert({
+        lead_id: leadId,
+        activity_type: actType,
+        activity_result: actResult,
+        activity_date: actDate,
+        note: actNote,
+        created_by: form.owner || lead?.owner || '',
+      })
+      if (error) { showToast('⚠️ Activity 저장 실패: ' + error.message); return }
+      setActNote(''); setShowActForm(false); setActDate(new Date().toISOString().split('T')[0])
+      const [{ data: aData }, { data: tData }] = await Promise.all([
+        supabase.from('sales_activities').select('*').eq('lead_id', leadId).order('activity_date', { ascending: false }),
+        supabase.from('sales_tasks').select('*').eq('lead_id', leadId).order('due_date'),
+      ])
+      setActivities((aData || []) as SalesActivity[])
+      setTasks((tData || []) as SalesTask[])
+      onRefresh()
+    } catch (err: any) {
+      showToast('⚠️ Activity 저장 실패: ' + (err?.message || '알 수 없는 오류'))
+    }
   }
 
   async function deleteActivity(actId: string) {
@@ -190,7 +203,8 @@ export default function LeadDetailPanel({
   }
 
   async function markTaskDone(taskId: string) {
-    await supabase.from('sales_tasks').update({ status: 'Done', completed_at: new Date().toISOString().split('T')[0] }).eq('id', taskId)
+    const { error } = await supabase.from('sales_tasks').update({ status: 'Done', completed_at: new Date().toISOString().split('T')[0] }).eq('id', taskId)
+    if (error) { showToast('⚠️ 완료 처리 실패: ' + error.message); return }
     const { data } = await supabase.from('sales_tasks').select('*').eq('lead_id', leadId).order('due_date')
     setTasks((data || []) as SalesTask[])
     onRefresh()
@@ -199,11 +213,17 @@ export default function LeadDetailPanel({
   async function updateStageInline(stage: string) {
     const prev = lead?.current_stage || null
     setForm(f => ({ ...f, current_stage: stage }))
-    await supabase.from('sales_leads').update({ current_stage: stage }).eq('id', leadId)
-    logStageChange(leadId, prev, stage, lead?.owner || undefined)
-    const { data } = await supabase.from('sales_leads').select('*').eq('id', leadId).single()
-    if (data) { setLead(data as SalesLead); setForm(data as SalesLead) }
-    onRefresh()
+    try {
+      const { error } = await supabase.from('sales_leads').update({ current_stage: stage }).eq('id', leadId)
+      if (error) throw error
+      logStageChange(leadId, prev, stage, lead?.owner || undefined)
+      const { data } = await supabase.from('sales_leads').select('*').eq('id', leadId).single()
+      if (data) { setLead(data as SalesLead); setForm(data as SalesLead) }
+      onRefresh()
+    } catch (err: any) {
+      setForm(f => ({ ...f, current_stage: prev || undefined }))
+      showToast('⚠️ 스테이지 변경 실패: ' + (err?.message || '알 수 없는 오류'))
+    }
   }
 
   if (!lead) return null
@@ -221,32 +241,32 @@ export default function LeadDetailPanel({
     <>
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 9999, display: 'flex', justifyContent: 'flex-end' }}
         onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-        <div style={{ width: 700, background: 'white', height: '100%', display: 'flex', flexDirection: 'column', boxShadow: '-6px 0 30px rgba(0,0,0,.2)', overflow: 'hidden' }}
+        <div style={{ width: '100%', maxWidth: isMobile ? undefined : 700, background: 'white', height: '100%', display: 'flex', flexDirection: 'column', boxShadow: '-6px 0 30px rgba(0,0,0,.2)', overflow: 'hidden' }}
           onClick={e => e.stopPropagation()}>
 
           {/* Header */}
-          <div style={{ background: 'var(--sb)', padding: '16px 22px', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+          <div style={{ background: 'var(--sb)', padding: '16px 22px', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.company_name}</div>
               <div style={{ fontSize: 12, color: '#B0A0A0' }}>{lead.contact_person} · {lead.event_name.replace(/ 20\d\d$/, '')}</div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
-              <span style={{ display: 'inline-block', padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 700, color: 'white', background: stageBg }}>
+              <span style={{ display: 'inline-block', padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 700, color: 'white', background: stageBg, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {form.current_stage || lead.current_stage}
               </span>
               <button onClick={save} disabled={saving}
-                style={{ background: 'var(--accent)', border: 'none', color: 'white', padding: '6px 14px', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
-                {saving ? t('saving') : `💾 ${t('save')}`}
+                style={{ background: 'var(--accent)', border: 'none', color: 'white', padding: isMobile ? '10px 10px' : '6px 14px', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 700, minHeight: 44 }}>
+                {saving ? t('saving') : isMobile ? '💾' : `💾 ${t('save')}`}
               </button>
               <button onClick={onClose}
-                style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: 'white', width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>
+                style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: 'white', width: 44, height: 44, borderRadius: '50%', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>
                 ✕
               </button>
             </div>
           </div>
 
           {/* Tabs */}
-          <div style={{ display: 'flex', background: '#F5F0F0', borderBottom: '1px solid var(--border2)', flexShrink: 0 }}>
+          <div style={{ display: 'flex', background: '#F5F0F0', borderBottom: '1px solid var(--border2)', flexShrink: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch' as any }}>
             {tabs.map(tb => (
               <div key={tb.id} onClick={() => setTab(tb.id)}
                 style={{ padding: '11px 16px', fontSize: 12, fontWeight: tab === tb.id ? 700 : 500, cursor: 'pointer',
@@ -263,7 +283,7 @@ export default function LeadDetailPanel({
 
             {/* 기본 정보 */}
             {tab === 'basic' && (
-              <div style={{ padding: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div className="g2" style={{ padding: isMobile ? 14 : 20 }}>
                 <Field label="Company Name *">
                   <input value={form.company_name || ''} onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))} placeholder="회사명" />
                 </Field>
@@ -311,7 +331,7 @@ export default function LeadDetailPanel({
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 5 }}>Expected Volume (Monthly)</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8 }}>
                     <input type="number" value={form.expected_monthly_volume || 0} onChange={e => setForm(f => ({ ...f, expected_monthly_volume: parseInt(e.target.value) || 0 }))} />
-                    <select value={form.volume_currency || 'USD'} onChange={e => setForm(f => ({ ...f, volume_currency: e.target.value }))} style={{ minWidth: 80 }}>
+                    <select value={form.volume_currency || 'USD'} onChange={e => setForm(f => ({ ...f, volume_currency: e.target.value }))} style={{ flex: '0 0 auto' }}>
                       <option>USD</option><option>KRW</option>
                     </select>
                   </div>
@@ -348,7 +368,7 @@ export default function LeadDetailPanel({
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div className="g2">
                   <Field label="First Contact Done">
                     <select value={String(form.first_contact_done ?? lead.first_contact_done)} onChange={e => setForm(f => ({ ...f, first_contact_done: e.target.value === 'true' }))}>
                       <option value="true">✅ Yes</option>
@@ -406,7 +426,7 @@ export default function LeadDetailPanel({
             {/* Activity */}
             {tab === 'activity' && (
               <div style={{ padding: 20 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
                   <div style={{ fontSize: 14, fontWeight: 700 }}>
                     Activity Timeline
                     <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--muted)', marginLeft: 8 }}>({activities.length}건)</span>
@@ -419,7 +439,7 @@ export default function LeadDetailPanel({
 
                 {showActForm && (
                   <div style={{ background: '#F9F5F5', border: '1.5px solid var(--border2)', borderRadius: 10, padding: 16, marginBottom: 16 }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+                    <div className="g3" style={{ gap: 10, marginBottom: 10 }}>
                       <div>
                         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>{t('type_lbl')}</div>
                         <select value={actType} onChange={e => setActType(e.target.value)}>
@@ -521,8 +541,9 @@ export default function LeadDetailPanel({
                         <div key={tk.id} style={{ background: isDone ? '#F0FFF4' : isOverdue ? '#FEF2F2' : 'var(--light)',
                           borderRadius: 8, padding: '10px 14px', marginBottom: 8,
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          border: `1px solid ${isDone ? '#A7F3D0' : isOverdue ? '#FECACA' : 'var(--border)'}` }}>
-                          <div>
+                          border: `1px solid ${isDone ? '#A7F3D0' : isOverdue ? '#FECACA' : 'var(--border)'}`,
+                          flexWrap: 'wrap', gap: 8 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 13, fontWeight: 600, color: isOverdue ? '#DC2626' : 'var(--text)', textDecoration: isDone ? 'line-through' : 'none' }}>
                               {tk.task_title}
                             </div>
@@ -532,8 +553,8 @@ export default function LeadDetailPanel({
                             </div>
                           </div>
                           {isDone
-                            ? <span style={{ color: '#059669', fontWeight: 700, fontSize: 12 }}>✅ Done</span>
-                            : <button onClick={() => markTaskDone(tk.id)} style={{ padding: '4px 12px', borderRadius: 6, background: '#059669', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 700 }}>완료</button>
+                            ? <span style={{ color: '#059669', fontWeight: 700, fontSize: 12, flexShrink: 0 }}>✅ Done</span>
+                            : <button onClick={() => markTaskDone(tk.id)} style={{ padding: '4px 12px', borderRadius: 6, background: '#059669', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 700, flexShrink: 0 }}>완료</button>
                           }
                         </div>
                       )
@@ -545,7 +566,7 @@ export default function LeadDetailPanel({
 
             {/* Proposal/Contract */}
             {tab === 'proposal' && (
-              <div style={{ padding: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div className="g2" style={{ padding: isMobile ? 14 : 20 }}>
                 <Field label="Proposal Sent Date">
                   <input type="date" value={propForm.proposal_sent_date || proposal?.proposal_sent_date || ''} onChange={e => setPropForm(f => ({ ...f, proposal_sent_date: e.target.value }))} />
                 </Field>
@@ -566,7 +587,7 @@ export default function LeadDetailPanel({
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 5 }}>Expected Volume</div>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <input type="number" value={propForm.expected_monthly_volume ?? (proposal?.expected_monthly_volume || 0)} onChange={e => setPropForm(f => ({ ...f, expected_monthly_volume: parseInt(e.target.value) || null }))} style={{ flex: 1 }} />
-                    <select value={propForm.volume_currency || proposal?.volume_currency || 'USD'} onChange={e => setPropForm(f => ({ ...f, volume_currency: e.target.value }))} style={{ minWidth: 80 }}>
+                    <select value={propForm.volume_currency || proposal?.volume_currency || 'USD'} onChange={e => setPropForm(f => ({ ...f, volume_currency: e.target.value }))} style={{ flex: '0 0 auto' }}>
                       <option>USD</option><option>KRW</option>
                     </select>
                   </div>

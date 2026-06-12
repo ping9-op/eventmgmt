@@ -24,7 +24,7 @@ function InlineStageSelect({ lead, onUpdate }: { lead: SalesLead; onUpdate: (id:
     <select value={lead.current_stage}
       onChange={e => { e.stopPropagation(); onUpdate(lead.id, e.target.value) }}
       onClick={e => e.stopPropagation()}
-      style={{ fontSize: 12, padding: '4px 7px', border: '1.5px solid var(--border2)', borderRadius: 6, background: 'white', cursor: 'pointer', maxWidth: 170, minWidth: 120 }}>
+      style={{ fontSize: 12, padding: '4px 7px', border: '1.5px solid var(--border2)', borderRadius: 6, background: 'white', cursor: 'pointer', maxWidth: 170, minWidth: 120, minHeight: 44 }}>
       {STAGE_ORDER.map(s => <option key={s} value={s}>{s}</option>)}
     </select>
   )
@@ -88,14 +88,34 @@ export default function SalesLeads() {
         setViewMode('detail')
       }
     }
-    load()
-    loadAllSettings().then(setSettings)
+    let cancelled = false
+    async function run() {
+      try {
+        const { data } = await supabase.from('sales_leads').select('*').order('registered_date', { ascending: false })
+        const s = await loadAllSettings()
+        if (!cancelled) {
+          setLeads((data || []) as SalesLead[])
+          setSettings(s)
+        }
+      } catch (e) {
+        console.error('load error:', e)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    run()
+    return () => { cancelled = true }
   }, [])
 
   async function load() {
-    const { data } = await supabase.from('sales_leads').select('*').order('registered_date', { ascending: false })
-    setLeads((data || []) as SalesLead[])
-    setLoading(false)
+    try {
+      const { data } = await supabase.from('sales_leads').select('*').order('registered_date', { ascending: false })
+      setLeads((data || []) as SalesLead[])
+    } catch (e) {
+      console.error('load error:', e)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function updateStage(leadId: string, stage: string) {
@@ -111,7 +131,7 @@ export default function SalesLeads() {
       const n = parseInt(l.serial_no.replace(/\D/g, '')) || 0
       return n > max ? n : max
     }, 0)
-    await supabase.from('sales_leads').insert({
+    const { error } = await supabase.from('sales_leads').insert({
       serial_no: `L${String(maxSerial + 1).padStart(3, '0')}`,
       company_name: form.company_name || '',
       contact_person: form.contact_person || '',
@@ -131,6 +151,7 @@ export default function SalesLeads() {
       expected_monthly_volume: form.expected_monthly_volume || null,
       remarks: form.remarks || null,
     })
+    if (error) { showToast('⚠️ 등록 실패: ' + error.message); return }
     setShowRegister(false)
     resetForm()
     showToast('✅ Lead가 등록되었습니다.')
@@ -196,35 +217,38 @@ export default function SalesLeads() {
 
   async function bulkRegisterLeads(rows: Partial<SalesLead>[]) {
     setImporting(true)
-    const maxSerial = leads.reduce((max, l) => {
-      const n = parseInt(l.serial_no.replace(/\D/g, '')) || 0
-      return n > max ? n : max
-    }, 0)
-    const inserts = rows.map((r, i) => ({
-      serial_no: `L${String(maxSerial + i + 1).padStart(3, '0')}`,
-      company_name: r.company_name || '',
-      contact_person: r.contact_person || '',
-      phone: r.phone || null,
-      email: r.email || null,
-      lead_source: r.lead_source || 'Expo',
-      event_name: r.event_name || '',
-      owner: r.owner || 'Andrew',
-      priority: r.priority || 'Medium',
-      current_stage: (r.current_stage && STAGE_ORDER.includes(r.current_stage)) ? r.current_stage : 'New Lead',
-      country_corridor: r.country_corridor || 'Korea → Japan',
-      business_type: r.business_type || 'Korean Restaurant',
-      expected_monthly_volume: r.expected_monthly_volume || null,
-      volume_currency: r.volume_currency || 'USD',
-      address: r.address || null,
-      remarks: r.remarks || null,
-      first_contact_done: false,
-      registered_date: new Date().toISOString().split('T')[0],
-    }))
-    await supabase.from('sales_leads').insert(inserts)
-    setImporting(false)
-    setExcelPreview(null)
-    showToast(`✅ ${rows.length}개 리드가 등록되었습니다.`)
-    load()
+    try {
+      const maxSerial = leads.reduce((max, l) => {
+        const n = parseInt(l.serial_no.replace(/\D/g, '')) || 0
+        return n > max ? n : max
+      }, 0)
+      const inserts = rows.map((r, i) => ({
+        serial_no: `L${String(maxSerial + i + 1).padStart(3, '0')}`,
+        company_name: r.company_name || '',
+        contact_person: r.contact_person || '',
+        phone: r.phone || null,
+        email: r.email || null,
+        lead_source: r.lead_source || 'Expo',
+        event_name: r.event_name || '',
+        owner: r.owner || 'Andrew',
+        priority: r.priority || 'Medium',
+        current_stage: (r.current_stage && STAGE_ORDER.includes(r.current_stage)) ? r.current_stage : 'New Lead',
+        country_corridor: r.country_corridor || 'Korea → Japan',
+        business_type: r.business_type || 'Korean Restaurant',
+        expected_monthly_volume: r.expected_monthly_volume || null,
+        volume_currency: r.volume_currency || 'USD',
+        address: r.address || null,
+        remarks: r.remarks || null,
+        first_contact_done: false,
+        registered_date: new Date().toISOString().split('T')[0],
+      }))
+      await supabase.from('sales_leads').insert(inserts)
+      setExcelPreview(null)
+      showToast(`✅ ${rows.length}개 리드가 등록되었습니다.`)
+      load()
+    } finally {
+      setImporting(false)
+    }
   }
 
   function exportCSV(ids?: string[]) {
@@ -327,7 +351,7 @@ export default function SalesLeads() {
             <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 500 }}>{t('s_group_by')}</span>
             {([['event', t('s_event')], ['date', t('s_date')], ['source', 'Source']] as const).map(([k, lbl]) => (
               <button key={k} onClick={() => setGroupBy(k)}
-                style={{ padding: '5px 12px', borderRadius: 7, fontSize: 13, cursor: 'pointer', fontWeight: 600, background: groupBy === k ? 'var(--accent)' : 'white', color: groupBy === k ? 'white' : 'var(--muted)', border: `1.5px solid ${groupBy === k ? 'var(--accent)' : 'var(--border2)'}` }}>
+                style={{ padding: '5px 12px', borderRadius: 7, fontSize: 13, cursor: 'pointer', fontWeight: 600, minHeight: 44, background: groupBy === k ? 'var(--accent)' : 'white', color: groupBy === k ? 'white' : 'var(--muted)', border: `1.5px solid ${groupBy === k ? 'var(--accent)' : 'var(--border2)'}` }}>
                 {lbl}
               </button>
             ))}
@@ -401,7 +425,7 @@ export default function SalesLeads() {
               <span className="sub">{detailLeads.length}개</span>
             </div>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('search_short')}
-              style={{ padding: '7px 12px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, width: 200 }} />
+              style={{ padding: '7px 12px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, flex: 1, minWidth: 140, maxWidth: 200 }} />
             <button className="btn btn-primary btn-sm" onClick={() => setShowRegister(true)}>+ 등록</button>
           </div>
 
@@ -426,7 +450,7 @@ export default function SalesLeads() {
           </div>
 
           {/* 액션 바 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid var(--border)', background: '#FAFAFA', marginBottom: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '10px 16px', borderBottom: '1px solid var(--border)', background: '#FAFAFA', marginBottom: 0 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
               <input type="checkbox" checked={allDetailIds.length > 0 && allDetailIds.every(i => checked.has(i))} onChange={() => toggleCheck('', allDetailIds)} style={{ width: 16, height: 16, accentColor: 'var(--accent)', cursor: 'pointer' }} />
               {t('select_all')}
@@ -493,7 +517,7 @@ export default function SalesLeads() {
           </div>
           {/* 페이지네이션 */}
           {totalDetailPages > 1 && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 16px', background: 'white', border: '0.5px solid var(--border2)', borderTop: '1px solid var(--border)', borderRadius: '0 0 12px 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap', padding: '12px 16px', background: 'white', border: '0.5px solid var(--border2)', borderTop: '1px solid var(--border)', borderRadius: '0 0 12px 12px' }}>
               <button onClick={() => setDetailPage(0)} disabled={detailPage === 0}
                 style={{ padding: '5px 10px', borderRadius: 6, border: '1.5px solid var(--border2)', background: detailPage === 0 ? 'var(--light)' : 'white', cursor: detailPage === 0 ? 'default' : 'pointer', fontSize: 12, opacity: detailPage === 0 ? 0.4 : 1 }}>
                 «
@@ -521,7 +545,7 @@ export default function SalesLeads() {
       {/* Excel 미리보기 모달 */}
       {excelPreview && (
         <div className="modal-bg open">
-          <div className="modal" style={{ width: 760 }}>
+          <div className="modal" style={{ maxWidth: 760, width: 'min(760px, 95vw)' }}>
             <div className="modal-hdr">
               <h3>📤 Excel 업로드 미리보기</h3>
               <button className="modal-close" onClick={() => setExcelPreview(null)}>✕</button>
@@ -577,7 +601,7 @@ export default function SalesLeads() {
       {/* Lead 등록 모달 */}
       {showRegister && (
         <div className="modal-bg open">
-          <div className="modal" style={{ width: 640 }}>
+          <div className="modal" style={{ maxWidth: 640, width: '95vw' }}>
             <div className="modal-hdr">
               <h3>{t('register_lead_title')}</h3>
               <button className="modal-close" onClick={() => { setShowRegister(false); resetForm() }}>✕</button>

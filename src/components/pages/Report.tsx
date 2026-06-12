@@ -57,48 +57,60 @@ export default function Report() {
   const [propCache, setPropCache] = useState<Record<string, { prop: Proposal; exhName: string }>>({})
   const photoInputRef = useRef<HTMLInputElement>(null)
 
-  async function load() {
-    const [{ data: exhData }, { data: propData }, { data: resultData }] = await Promise.all([
-      supabase.from('exhibitions').select('*'),
-      supabase.from('proposals').select('*').order('year'),
-      supabase.from('results').select('*'),
-    ])
-    const exhMap: Record<string, Exhibition> = {}
-    for (const e of (exhData || [])) exhMap[e.id] = e
+  useEffect(() => {
+    let cancelled = false
 
-    // Proposal 캐시 구성 (exhibition_key → 최신 proposal)
-    const cache: Record<string, { prop: Proposal; exhName: string }> = {}
-    for (const p of (propData || []) as unknown as Proposal[]) {
-      const exh = exhMap[p.exhibition_id]
-      if (!exh) continue
-      const k = `${exh.key}_${p.year}`
-      cache[k] = { prop: p, exhName: exh.name }
-    }
-    setPropCache(cache)
+    async function load() {
+      try {
+        const [{ data: exhData }, { data: propData }, { data: resultData }] = await Promise.all([
+          supabase.from('exhibitions').select('*'),
+          supabase.from('proposals').select('*').order('year'),
+          supabase.from('results').select('*'),
+        ])
+        if (cancelled) return
 
-    const keys: ReportKey[] = Object.entries(cache).map(([k, { exhName, prop }]) => ({
-      label: `${exhName} ${prop.year}`,
-      exhibition_key: k,
-    })).sort((a, b) => b.label.localeCompare(a.label))
-    setReportKeys(keys)
+        const exhMap: Record<string, Exhibition> = {}
+        for (const e of (exhData || [])) exhMap[e.id] = e
 
-    const resultMap: Record<string, Result> = {}
-    for (const r of (resultData || []) as unknown as Result[]) resultMap[r.exhibition_key] = r
+        // Proposal 캐시 구성 (exhibition_key → 최신 proposal)
+        const cache: Record<string, { prop: Proposal; exhName: string }> = {}
+        for (const p of (propData || []) as unknown as Proposal[]) {
+          const exh = exhMap[p.exhibition_id]
+          if (!exh) continue
+          const k = `${exh.key}_${p.year}`
+          cache[k] = { prop: p, exhName: exh.name }
+        }
+        if (!cancelled) setPropCache(cache)
 
-    const sel = initKey || keys[0]?.exhibition_key
-    if (sel) {
-      setSelected(sel)
-      // 기존 저장된 보고서가 있으면 로드, 없으면 Proposal에서 자동 생성
-      if (resultMap[sel]) {
-        setReport(resultMap[sel])
-      } else if (cache[sel]) {
-        setReport(buildDefaultFromProposal(sel, cache[sel].prop, cache[sel].exhName) as unknown as Result)
+        const keys: ReportKey[] = Object.entries(cache).map(([k, { exhName, prop }]) => ({
+          label: `${exhName} ${prop.year}`,
+          exhibition_key: k,
+        })).sort((a, b) => b.label.localeCompare(a.label))
+        if (!cancelled) setReportKeys(keys)
+
+        const resultMap: Record<string, Result> = {}
+        for (const r of (resultData || []) as unknown as Result[]) resultMap[r.exhibition_key] = r
+
+        const sel = initKey || keys[0]?.exhibition_key
+        if (sel && !cancelled) {
+          setSelected(sel)
+          // 기존 저장된 보고서가 있으면 로드, 없으면 Proposal에서 자동 생성
+          if (resultMap[sel]) {
+            setReport(resultMap[sel])
+          } else if (cache[sel]) {
+            setReport(buildDefaultFromProposal(sel, cache[sel].prop, cache[sel].exhName) as unknown as Result)
+          }
+        }
+      } catch (e) {
+        console.error('load error:', e)
+      } finally {
+        if (!cancelled) setLoading(false)
       }
     }
-    setLoading(false)
-  }
 
-  useEffect(() => { load() }, [])
+    load()
+    return () => { cancelled = true }
+  }, [])
 
   async function selectKey(k: string) {
     setSelected(k)
@@ -116,23 +128,26 @@ export default function Report() {
   async function uploadPhotos(files: File[]) {
     if (!selected || files.length === 0) return
     setUploadingPhoto(true)
-    const urls: string[] = []
-    for (const file of files) {
-      const ext = file.name.split('.').pop() || 'jpg'
-      const path = `${selected}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
-      const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(path, file, { upsert: false })
-      if (error) {
-        showToast('⚠️ 사진 업로드 실패: ' + error.message)
-        continue
+    try {
+      const urls: string[] = []
+      for (const file of files) {
+        const ext = file.name.split('.').pop() || 'jpg'
+        const path = `${selected}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
+        const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(path, file, { upsert: false })
+        if (error) {
+          showToast('⚠️ 사진 업로드 실패: ' + error.message)
+          continue
+        }
+        const { data: urlData } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
+        if (urlData?.publicUrl) urls.push(urlData.publicUrl)
       }
-      const { data: urlData } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
-      if (urlData?.publicUrl) urls.push(urlData.publicUrl)
+      if (urls.length > 0) {
+        updateField('marketing_photos', [...(report?.marketing_photos || []), ...urls])
+      }
+      if (photoInputRef.current) photoInputRef.current.value = ''
+    } finally {
+      setUploadingPhoto(false)
     }
-    if (urls.length > 0) {
-      updateField('marketing_photos', [...(report?.marketing_photos || []), ...urls])
-    }
-    setUploadingPhoto(false)
-    if (photoInputRef.current) photoInputRef.current.value = ''
   }
 
   async function deletePhoto(url: string) {
@@ -150,20 +165,23 @@ export default function Report() {
   async function saveReport() {
     if (!report || !selected) return
     setSaving(true)
-    const { data: existing } = await supabase.from('results').select('id').eq('exhibition_key', selected).single()
-    if (existing) {
-      await supabase.from('results').update(report as unknown as never).eq('id', existing.id)
-    } else {
-      await supabase.from('results').insert({ ...report, exhibition_key: selected } as unknown as never)
+    try {
+      const { data: existing } = await supabase.from('results').select('id').eq('exhibition_key', selected).single()
+      if (existing) {
+        await supabase.from('results').update(report as unknown as never).eq('id', existing.id)
+      } else {
+        await supabase.from('results').insert({ ...report, exhibition_key: selected } as unknown as never)
+      }
+      showToast('보고서가 저장되었습니다.')
+      // ExpoOverview가 mount될 때 fresh 데이터를 fetching하도록 overview로 이동
+      if (initKey) navigate('/expo/overview', { state: { from: 'report', key: selected } })
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
-    showToast('보고서가 저장되었습니다.')
-    // ExpoOverview가 mount될 때 fresh 데이터를 fetching하도록 overview로 이동
-    if (initKey) navigate('/expo/overview', { state: { from: 'report', key: selected } })
   }
 
   async function exportPPT() {
-    if (!r || !selected) return
+    if (!report || !selected) return
 
     async function imgToBase64(url: string): Promise<string> {
       const res = await fetch(url)
@@ -450,9 +468,9 @@ export default function Report() {
             {/* 커버 슬라이드 */}
             <div style={{ background: 'var(--light)', borderRadius: 10, padding: '14px 16px', marginBottom: 16, border: '1px solid var(--border2)' }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 10 }}>{t('cover_slide')}</div>
-              <div className="form-row cols3">
+              <div className="g3">
                 <div><label style={{ marginTop: 0 }}>{t('cover_title_lbl')}</label><input value={r.cover_title || ''} onChange={e => updateField('cover_title', e.target.value)} /></div>
-                <div><label style={{ marginTop: 0 }}>{t('cover_date_lbl')}</label><input type="date" value={r.cover_date || ''} onChange={e => updateField('cover_date', e.target.value)} /></div>
+                <div style={{ minWidth: 0, overflow: 'hidden' }}><label style={{ marginTop: 0 }}>{t('cover_date_lbl')}</label><input type="date" value={r.cover_date || ''} onChange={e => updateField('cover_date', e.target.value)} style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }} /></div>
                 <div><label style={{ marginTop: 0 }}>{t('cover_author_lbl')}</label><input value={r.cover_author || 'Andrew'} onChange={e => updateField('cover_author', e.target.value)} /></div>
               </div>
             </div>
@@ -475,6 +493,7 @@ export default function Report() {
             <SectionHeader num={3} title={t('cost_vs_budget')} enabled={r.sections_enabled?.['3'] !== false} onToggle={v => updateField('sections_enabled', { ...r.sections_enabled, '3': v })} />
 
             {/* Actual costs */}
+            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             <table className="actual-table" style={{ marginBottom: 6 }}>
               <thead><tr><th>{t('item_col')}</th><th style={{ textAlign: 'right' }}>{t('budgeted')}</th><th style={{ textAlign: 'right' }}>{t('actual')}</th><th style={{ textAlign: 'right' }}>{t('diff')}</th><th>{t('note_col')}</th><th></th></tr></thead>
               <tbody>
@@ -510,19 +529,21 @@ export default function Report() {
                 </tr>
               </tfoot>
             </table>
+            </div>
             <button className="add-row-btn" onClick={addCost} style={{ marginBottom: 16 }}>{t('add_cost_item')}</button>
 
             {/* Section 4: Marketing Activities */}
             <SectionHeader num={4} title="Marketing Activities" enabled={r.sections_enabled?.['4'] !== false} onToggle={v => updateField('sections_enabled', { ...r.sections_enabled, '4': v })} />
             <div className="card" style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div className="page-hdr-row" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
                 <h4 style={{ fontSize: 15, fontWeight: 700 }}>{t('marketing_activities')}</h4>
                 <button className="btn btn-muted btn-sm" onClick={() => updateField('marketing_activities', [...(r.marketing_activities || []), { type: '', description: '', result: '' }])}>{t('add_marketing')}</button>
               </div>
+              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    <th style={{ padding: '6px 8px', textAlign: 'left', color: 'var(--muted)', fontWeight: 500, width: 100 }}>{t('type_lbl')}</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'left', color: 'var(--muted)', fontWeight: 500, width: '100px' }}>{t('type_lbl')}</th>
                     <th style={{ padding: '6px 8px', textAlign: 'left', color: 'var(--muted)', fontWeight: 500 }}>{t('content_lbl')}</th>
                     <th style={{ padding: '6px 8px', textAlign: 'left', color: 'var(--muted)', fontWeight: 500 }}>{t('result_col')}</th>
                     <th style={{ width: 30 }}></th>
@@ -552,6 +573,7 @@ export default function Report() {
                   )}
                 </tbody>
               </table>
+              </div>
             </div>
 
             {/* Section 5: Registration Results */}
@@ -576,8 +598,8 @@ export default function Report() {
                 </div>
               ))}
             </div>
-            <div style={{ marginBottom: 16, display: 'flex', alignItems: 'flex-start', gap: 16 }}>
-              <div className="card-sm" style={{ textAlign: 'center', maxWidth: 280 }}>
+            <div style={{ marginBottom: 16, display: 'flex', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+              <div className="card-sm" style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 6 }}>{t('per_person_cost')}</div>
                 <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--accent)' }}>
                   {(() => {
@@ -600,7 +622,7 @@ export default function Report() {
 
             {/* Photo gallery */}
             <div className="card" style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div className="page-hdr-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
                 <div>
                   <span style={{ fontSize: 15, fontWeight: 700 }}>{t('photos_title')}</span>
                   <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--muted)', marginLeft: 8 }}>{t('photos_sub')}</span>
@@ -618,7 +640,7 @@ export default function Report() {
               )}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                 {(r.marketing_photos || []).map((photo, i) => (
-                  <div key={i} style={{ position: 'relative', width: 160, height: 120, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border2)' }}>
+                  <div key={i} style={{ position: 'relative', width: 'calc(50% - 5px)', maxWidth: 160, height: 120, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border2)' }}>
                     <img src={photo} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={`Photo ${i + 1}`}
                       onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
                     <button onClick={() => deletePhoto(photo)}
@@ -627,7 +649,7 @@ export default function Report() {
                   </div>
                 ))}
                 {uploadingPhoto && (
-                  <div style={{ width: 160, height: 120, borderRadius: 8, border: '2px dashed var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F9F5F5' }}>
+                  <div style={{ width: 'calc(50% - 5px)', maxWidth: 160, height: 120, borderRadius: 8, border: '2px dashed var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F9F5F5' }}>
                     <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 12 }}>
                       <div style={{ fontSize: 20, marginBottom: 4 }}>⏳</div>업로드 중...
                     </div>
@@ -646,7 +668,7 @@ export default function Report() {
               <div key={field}>
                 <SectionHeader num={num} title={title} enabled={r.sections_enabled?.[String(num)] !== false} onToggle={v => updateField('sections_enabled', { ...r.sections_enabled, [String(num)]: v })} />
                 <div className="card" style={{ marginBottom: 16 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <div className="page-hdr-row" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
                     <h4 style={{ fontSize: 15, fontWeight: 700 }}>{title}</h4>
                     <button className="btn btn-muted btn-sm" onClick={() => addBullet(field)}>{t('add_marketing')}</button>
                   </div>
@@ -668,11 +690,11 @@ export default function Report() {
               <textarea value={r.conclusion || ''} onChange={e => updateField('conclusion', e.target.value)} rows={4} />
             </div>
 
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button className="btn btn-green" onClick={saveReport} disabled={saving} style={{ flex: 1, padding: 14 }}>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button className="btn btn-green" onClick={saveReport} disabled={saving} style={{ flex: 1, minWidth: 140, padding: 14 }}>
                 {saving ? t('saving') : t('save_report')}
               </button>
-              <button className="btn btn-primary" onClick={exportPPT} style={{ flex: 1, padding: 14 }}>
+              <button className="btn btn-primary" onClick={exportPPT} style={{ flex: 1, minWidth: 140, padding: 14 }}>
                 {t('export_ppt')}
               </button>
             </div>
@@ -688,8 +710,8 @@ export default function Report() {
 function SectionHeader({ num, title, enabled, onToggle }: { num: number; title: string; enabled: boolean; onToggle: (v: boolean) => void }) {
   const { t } = useLang()
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '28px 0 14px', paddingBottom: 9, borderBottom: '2px solid var(--accent)' }}>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 0, margin: 0, cursor: 'pointer' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '28px 0 14px', paddingBottom: 9, borderBottom: '2px solid var(--accent)' }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 0, margin: 0, cursor: 'pointer', minHeight: 44, padding: '0 8px 0 0' }}>
         <input type="checkbox" checked={enabled} onChange={e => onToggle(e.target.checked)} style={{ width: 18, height: 18, accentColor: 'var(--accent)', cursor: 'pointer', margin: 0 }} />
       </label>
       <div style={{ background: enabled ? 'var(--accent)' : 'var(--muted)', color: 'white', fontSize: 13, fontWeight: 700, width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{num}</div>
