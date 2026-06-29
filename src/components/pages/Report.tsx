@@ -195,15 +195,42 @@ export default function Report() {
     setGeneratingPPT(true)
     try {
 
-    // Returns "image/xxx;base64,yyy" (no "data:" prefix) — pptxgenjs data field format
+    // Returns base64 string (no "data:" prefix) for template backgrounds
     async function imgToBase64(url: string): Promise<string> {
       const res = await fetch(url)
       const blob = await res.blob()
       return new Promise(resolve => {
         const reader = new FileReader()
-        reader.onloadend = () => resolve((reader.result as string).slice(5)) // strip "data:"
+        reader.onloadend = () => resolve((reader.result as string).slice(5))
         reader.readAsDataURL(blob)
       })
+    }
+
+    // For user photos: corrects EXIF rotation via canvas, returns b64 + corrected dims
+    async function photoToBase64(url: string): Promise<{ b64: string; w: number; h: number }> {
+      const res = await fetch(url)
+      const blob = await res.blob()
+      try {
+        const bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' } as any)
+        const canvas = document.createElement('canvas')
+        canvas.width = bitmap.width
+        canvas.height = bitmap.height
+        canvas.getContext('2d')!.drawImage(bitmap, 0, 0)
+        bitmap.close()
+        return { b64: canvas.toDataURL('image/jpeg', 0.92).slice(5), w: canvas.width, h: canvas.height }
+      } catch {
+        return new Promise(resolve => {
+          const reader = new FileReader()
+          reader.onloadend = () => {
+            const img = new Image()
+            const dataUrl = reader.result as string
+            img.onload = () => resolve({ b64: dataUrl.slice(5), w: img.naturalWidth, h: img.naturalHeight })
+            img.onerror = () => resolve({ b64: dataUrl.slice(5), w: 4, h: 3 })
+            img.src = dataUrl
+          }
+          reader.readAsDataURL(blob)
+        })
+      }
     }
 
     const [coverB64, contentB64] = await Promise.all([
@@ -234,16 +261,33 @@ export default function Report() {
       return sl
     }
 
-    // 불릿: 템플릿 기준 x=1.2, y=1.1, w=11, 24pt
-    const addBullets = (sl: ReturnType<typeof pptx.addSlide>, items: string[], x = 1.2, y = 1.1, w = 11.0, h = 5.8) => {
+    // 불릿: title bold 20pt / description 16pt — "Title: desc" or "Title\ndesc" split
+    const addBullets = (sl: ReturnType<typeof pptx.addSlide>, items: string[], x = 1.1, y = 1.1, w = 11.1, h = 5.8) => {
       const valid = items.filter(s => s && s.trim())
       if (!valid.length) return
       const runs: any[] = []
-      valid.forEach((s, i) => {
-        runs.push({ text: '▶  ', options: { bold: true, color: RED, fontSize: 24 } })
-        runs.push({ text: s, options: { bold: false, color: DARK, fontSize: 24, breakLine: i < valid.length - 1 } })
+      valid.forEach((s, idx) => {
+        const isLast = idx === valid.length - 1
+        runs.push({ text: '▶  ', options: { bold: true, color: RED, fontSize: 20 } })
+        const nlIdx = s.indexOf('\n')
+        const colIdx = s.indexOf(':')
+        if (nlIdx > 0) {
+          const title = s.slice(0, nlIdx).trim()
+          const desc = s.slice(nlIdx + 1).trim()
+          runs.push({ text: title, options: { bold: true, color: DARK, fontSize: 20 } })
+          if (desc) runs.push({ text: '\n    ' + desc, options: { bold: false, color: '555555', fontSize: 16, breakLine: !isLast } })
+          else if (!isLast) runs.push({ text: '', options: { breakLine: true } })
+        } else if (colIdx > 0 && colIdx < 40) {
+          const title = s.slice(0, colIdx + 1)
+          const desc = s.slice(colIdx + 1).trim()
+          runs.push({ text: title, options: { bold: true, color: DARK, fontSize: 20 } })
+          if (desc) runs.push({ text: '  ' + desc, options: { bold: false, color: '555555', fontSize: 16, breakLine: !isLast } })
+          else if (!isLast) runs.push({ text: '', options: { breakLine: true } })
+        } else {
+          runs.push({ text: s, options: { bold: true, color: DARK, fontSize: 20, breakLine: !isLast } })
+        }
       })
-      sl.addText(runs, { x, y, w, h, fontFace: FONT, valign: 'top', paraSpaceAfter: 14, lineSpacingMultiple: 1.35 })
+      sl.addText(runs, { x, y, w, h, fontFace: FONT, valign: 'top', paraSpaceAfter: 18, lineSpacingMultiple: 1.3 })
     }
 
     // ── 활성 섹션 계산 ──────────────────────────────────────
@@ -251,16 +295,17 @@ export default function Report() {
     const on = (key: string) => se[key] !== false
 
     const sectionDefs = [
-      { key: '1',  title: 'Objective',                   hasContent: !!r.objective },
-      { key: '2',  title: 'Event Overview',              hasContent: !!(r.event_date || r.event_venue) },
-      { key: '3',  title: 'Cost — Budget vs Actual',     hasContent: costs.length > 0 },
-      { key: '4',  title: 'Marketing Activities',        hasContent: (r.marketing_activities || []).length > 0 },
-      { key: '5',  title: 'Lead Generation',             hasContent: !!(regR || regC || regB || regO || regM) },
-      { key: '6',  title: 'Shortcomings',                hasContent: (r.shortcomings || []).length > 0 },
-      { key: '7',  title: 'Strengths & Improvements',   hasContent: (r.improvements || []).length > 0 },
-      { key: '8',  title: 'Recommendations & Follow-up', hasContent: (r.recommendations || []).length > 0 },
-      { key: '9',  title: 'Requests',                    hasContent: (r.requests || []).length > 0 },
-      { key: '10', title: 'Conclusion',                  hasContent: !!r.conclusion },
+      { key: '1',      title: 'Objective',                   hasContent: !!r.objective },
+      { key: '2',      title: 'Event Overview',              hasContent: !!(r.event_date || r.event_venue) },
+      { key: '3',      title: 'Cost — Budget vs Actual',     hasContent: costs.length > 0 },
+      { key: '4',      title: 'Marketing Activities',        hasContent: (r.marketing_activities || []).length > 0 },
+      { key: 'photos', title: 'Photos',                      hasContent: (r.marketing_photos || []).length > 0 },
+      { key: '5',      title: 'Lead Generation',             hasContent: !!(regR || regC || regB || regO || regM) },
+      { key: '6',      title: 'Shortcomings',                hasContent: (r.shortcomings || []).length > 0 },
+      { key: '7',      title: 'Strengths & Improvements',   hasContent: (r.improvements || []).length > 0 },
+      { key: '8',      title: 'Recommendations & Follow-up', hasContent: (r.recommendations || []).length > 0 },
+      { key: '9',      title: 'Requests',                    hasContent: (r.requests || []).length > 0 },
+      { key: '10',     title: 'Conclusion',                  hasContent: !!r.conclusion },
     ]
 
     const activeSections = sectionDefs
@@ -302,9 +347,9 @@ export default function Report() {
     if (sNum('1') !== undefined) {
       const sl = newSlide(sNum('1')!, 'Objective')
       sl.addText(r.objective, {
-        x: 1.59, y: 1.14, w: 9.94, h: 5.76,
-        fontSize: 24, color: DARK, fontFace: FONT, valign: 'top',
-        paraSpaceAfter: 8, lineSpacingMultiple: 1.5
+        x: 1.4, y: 1.1, w: 10.5, h: 4.6,
+        fontSize: 22, color: DARK, fontFace: FONT, valign: 'middle',
+        paraSpaceAfter: 10, lineSpacingMultiple: 1.6
       })
     }
 
@@ -330,31 +375,39 @@ export default function Report() {
     if (sNum('3') !== undefined) {
       const sl = newSlide(sNum('3')!, 'Cost — Budget vs Actual')
       const hdr = [
-        { text: 'Item',            options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 14, align: 'center' as any } },
-        { text: 'Approved Budget', options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 14, align: 'right' as any } },
-        { text: 'Actual Spend',    options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 14, align: 'right' as any } },
-        { text: 'Difference',      options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 14, align: 'right' as any } },
+        { text: 'Item',            options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'left' as any } },
+        { text: 'Approved Budget', options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'right' as any } },
+        { text: 'Actual Spend',    options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'right' as any } },
+        { text: 'Difference',      options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'right' as any } },
+        { text: 'Note / 비고',     options: { bold: true, color: WHITE, fill: { color: RED }, fontSize: 13, align: 'left' as any } },
       ]
+      const rowH = 0.48
       const costRows = costs.map((a, ri) => {
-        const d = (a.actual || 0) - (a.budgeted || 0)
+        const d = (a.actual ?? 0) - (a.budgeted || 0)
         const bg = ri % 2 === 0 ? GRAY : WHITE
         const cur = (a as any).currency || 'KRW'
         const sym = cur === 'JPY' ? '¥' : '₩'
+        const hasActual = typeof a.actual === 'number'
         return [
-          { text: a.item || '',                                                                                                            options: { color: DARK,    fill: { color: bg }, fontSize: 13 } },
-          { text: a.budgeted ? sym + a.budgeted.toLocaleString() : '-',                                                                   options: { color: '444444', align: 'right' as any, fill: { color: bg }, fontSize: 13 } },
-          { text: a.actual   ? sym + a.actual.toLocaleString()   : '-',                                                                   options: { color: DARK,    align: 'right' as any, fill: { color: bg }, fontSize: 13 } },
-          { text: a.actual   ? (d > 0 ? `▲ ${sym}${d.toLocaleString()}` : d < 0 ? `▼ ${sym}${Math.abs(d).toLocaleString()}` : '—') : '-', options: { color: d > 0 ? 'C00000' : d < 0 ? '2E7D51' : '888888', align: 'right' as any, bold: !!a.actual, fill: { color: bg }, fontSize: 13 } },
+          { text: a.item || '',                                                                                                                         options: { color: DARK,    fill: { color: bg }, fontSize: 12 } },
+          { text: a.budgeted != null ? sym + (a.budgeted || 0).toLocaleString() : '-',                                                                 options: { color: '444444', align: 'right' as any, fill: { color: bg }, fontSize: 12 } },
+          { text: hasActual ? sym + (a.actual || 0).toLocaleString() : '-',                                                                            options: { color: DARK,    align: 'right' as any, fill: { color: bg }, fontSize: 12 } },
+          { text: hasActual ? (d > 0 ? `▲ ${sym}${d.toLocaleString()}` : d < 0 ? `▼ ${sym}${Math.abs(d).toLocaleString()}` : '—') : '-',              options: { color: d > 0 ? 'C00000' : d < 0 ? '2E7D51' : '888888', align: 'right' as any, bold: hasActual && d !== 0, fill: { color: bg }, fontSize: 12 } },
+          { text: (a as any).note || '',                                                                                                                options: { color: '666666', fill: { color: bg }, fontSize: 11, italic: !!(a as any).note } },
         ]
       })
       const tD = totalA - totalB
       const totalRow = [
-        { text: 'Total',                                                                                                                      options: { bold: true, color: DARK, fill: { color: LGRAY }, fontSize: 14 } },
-        { text: '₩' + totalB.toLocaleString(),                                                                                               options: { bold: true, align: 'right' as any, fill: { color: LGRAY }, fontSize: 14, color: DARK } },
-        { text: totalA ? '₩' + totalA.toLocaleString() : '-',                                                                               options: { bold: true, align: 'right' as any, fill: { color: LGRAY }, fontSize: 14, color: DARK } },
-        { text: totalA ? (tD > 0 ? `▲ ₩${tD.toLocaleString()} over` : tD < 0 ? `▼ ₩${Math.abs(tD).toLocaleString()} saved` : 'same') : '-', options: { bold: true, color: tD > 0 ? 'C00000' : tD < 0 ? '2E7D51' : DARK, align: 'right' as any, fill: { color: LGRAY }, fontSize: 14 } },
+        { text: 'Total',                                                                                                                       options: { bold: true, color: DARK, fill: { color: LGRAY }, fontSize: 13 } },
+        { text: '₩' + totalB.toLocaleString(),                                                                                                options: { bold: true, align: 'right' as any, fill: { color: LGRAY }, fontSize: 13, color: DARK } },
+        { text: '₩' + totalA.toLocaleString(),                                                                                                options: { bold: true, align: 'right' as any, fill: { color: LGRAY }, fontSize: 13, color: DARK } },
+        { text: tD > 0 ? `▲ ₩${tD.toLocaleString()} over` : tD < 0 ? `▼ ₩${Math.abs(tD).toLocaleString()} saved` : '—',                    options: { bold: true, color: tD > 0 ? 'C00000' : tD < 0 ? '2E7D51' : DARK, align: 'right' as any, fill: { color: LGRAY }, fontSize: 13 } },
+        { text: '',                                                                                                                            options: { fill: { color: LGRAY } } },
       ]
-      sl.addTable([hdr, ...costRows, totalRow], { x: 0.4, y: 0.9, w: 12.5, rowH: 0.52, colW: [4.2, 2.8, 2.8, 2.7], border: { pt: 0.5, color: 'DDDDDD' }, autoPage: false })
+      const numRows = 1 + costs.length + 1
+      const tableH = rowH * numRows
+      const tableY = Math.max(0.85 + (6.5 - tableH) / 2, 0.95)
+      sl.addTable([hdr, ...costRows, totalRow], { x: 0.4, y: tableY, w: 12.5, rowH, colW: [3.4, 2.1, 2.1, 2.0, 2.9], border: { pt: 0.5, color: 'DDDDDD' }, autoPage: false })
     }
 
     // ── 4. Marketing Activities ───────────────────────────
@@ -365,27 +418,29 @@ export default function Report() {
       ))
     }
 
-    // ── 4b. Marketing Photos ─────────────────────────────
+    // ── Photos slide (numbered via sectionDefs) ───────────
     const photos = r.marketing_photos || []
-    if (photos.length > 0) {
+    if (sNum('photos') !== undefined && photos.length > 0) {
+      const slotW = 5.8, slotH = 2.9
       const positions = [
-        { x: 0.4, y: 0.9 }, { x: 6.9, y: 0.9 },
-        { x: 0.4, y: 4.1 }, { x: 6.9, y: 4.1 },
+        { x: 0.55, y: 0.95 }, { x: 7.0, y: 0.95 },
+        { x: 0.55, y: 4.15 }, { x: 7.0, y: 4.15 },
       ]
       for (let start = 0; start < photos.length; start += 4) {
-        const sl = pptx.addSlide()
-        sl.addImage({ data: contentB64, x: 0, y: 0, w: 13.33, h: 7.5 })
-        sl.addText('Photos', {
-          x: 0, y: 0.06, w: 13.33, h: 0.71,
-          fontSize: 36, bold: true, color: WHITE, fontFace: FONT, valign: 'middle', align: 'center' as any
-        })
+        const sl = newSlide(sNum('photos')!, 'Photos')
         const batch = photos.slice(start, start + 4)
         for (let i = 0; i < batch.length; i++) {
           try {
-            const b64 = await imgToBase64(batch[i])
+            const { b64, w: iw, h: ih } = await photoToBase64(batch[i])
             const pos = positions[i]
-            sl.addImage({ data: b64, x: pos.x, y: pos.y, w: 6.2, h: 3.1 })
-          } catch { /* 개별 사진 실패는 건너뜀 */ }
+            const ratio = iw > 0 && ih > 0 ? iw / ih : 4 / 3
+            let pw: number, ph: number
+            if (ratio > slotW / slotH) { pw = slotW; ph = slotW / ratio }
+            else { ph = slotH; pw = slotH * ratio }
+            const px = pos.x + (slotW - pw) / 2
+            const py = pos.y + (slotH - ph) / 2
+            sl.addImage({ data: b64, x: px, y: py, w: pw, h: ph })
+          } catch { /* skip failed photo */ }
         }
       }
     }
@@ -400,17 +455,34 @@ export default function Report() {
         { lbl: 'Onboarded',     val: regO, col: 'C47D1A' },
         { lbl: 'New Merchants', val: regM, col: '3A5FA0' },
       ].filter(k => k.val > 0)
-      const gap = 0.3, cardW = (12.5 - gap * (kpis.length - 1)) / kpis.length
+      const gap = 0.3
+      const cardW = (12.5 - gap * (kpis.length - 1)) / kpis.length
+      const cardY = 1.25, cardH = 4.0
       kpis.forEach((k, i) => {
         const x = 0.4 + i * (cardW + gap)
-        sl.addShape('rect' as any, { x, y: 1.2, w: cardW, h: 3.8, fill: { color: 'FAFAFA' }, line: { color: 'DDDDDD', width: 1 } })
-        sl.addText(String(k.val), { x, y: 1.6, w: cardW, h: 2.0, fontSize: 72, bold: true, color: k.col, fontFace: FONT, align: 'center' as any, valign: 'middle' })
-        sl.addText(k.lbl,         { x, y: 3.8, w: cardW, h: 0.7, fontSize: 16, color: '555555', fontFace: FONT, align: 'center' as any })
+        // Card base
+        sl.addShape('rect' as any, { x, y: cardY, w: cardW, h: cardH, fill: { color: 'FAFAFA' }, line: { color: 'E0E0E0', width: 0.75 } })
+        // Colored top accent bar
+        sl.addShape('rect' as any, { x, y: cardY, w: cardW, h: 0.2, fill: { color: k.col }, line: { color: k.col, width: 0 } })
+        // KPI number
+        sl.addText(String(k.val), {
+          x, y: cardY + 0.25, w: cardW, h: 2.4,
+          fontSize: 54, bold: true, color: k.col, fontFace: FONT, align: 'center' as any, valign: 'middle'
+        })
+        // Thin separator
+        sl.addShape('rect' as any, { x: x + cardW * 0.15, y: cardY + 2.9, w: cardW * 0.7, h: 0.02, fill: { color: 'DEDEDE' }, line: { color: 'DEDEDE', width: 0 } })
+        // Label
+        sl.addText(k.lbl, {
+          x, y: cardY + 3.0, w: cardW, h: 0.55,
+          fontSize: 13, color: '666666', fontFace: FONT, align: 'center' as any
+        })
       })
-      if (r.reg_followup) sl.addText(`Follow-up: ${r.reg_followup}`, {
-        x: 0.43, y: 5.3, w: 12.26, h: 1.04, fontSize: 20, italic: true, color: DARK, fontFace: FONT, valign: 'middle',
-        lineSpacingMultiple: 1.4
-      })
+      if (r.reg_followup) {
+        sl.addShape('rect' as any, { x: 0.4, y: 5.55, w: 12.5, h: 0.6, fill: { color: 'F5F5F5' }, line: { color: 'E0E0E0', width: 0.5 } })
+        sl.addText(`Follow-up:  ${r.reg_followup}`, {
+          x: 0.6, y: 5.55, w: 12.1, h: 0.6, fontSize: 16, italic: true, color: '444444', fontFace: FONT, valign: 'middle'
+        })
+      }
     }
 
     // ── 6–9. Bullet sections ──────────────────────────────
@@ -547,8 +619,8 @@ export default function Report() {
                   return (
                     <tr key={i}>
                       <td><input value={c.item} onChange={e => updateCost(i, 'item', e.target.value)} /></td>
-                      <td><input type="number" value={c.budgeted || ''} style={{ textAlign: 'right' }} onChange={e => updateCost(i, 'budgeted', parseInt(e.target.value) || 0)} /></td>
-                      <td><input type="number" value={c.actual || ''} style={{ textAlign: 'right' }} onChange={e => updateCost(i, 'actual', parseInt(e.target.value) || 0)} /></td>
+                      <td><input type="number" value={c.budgeted ?? ''} style={{ textAlign: 'right' }} onChange={e => updateCost(i, 'budgeted', e.target.value === '' ? 0 : Number(e.target.value))} /></td>
+                      <td><input type="number" value={c.actual ?? ''} style={{ textAlign: 'right' }} onChange={e => updateCost(i, 'actual', e.target.value === '' ? 0 : Number(e.target.value))} /></td>
                       <td style={{ textAlign: 'right' }}>
                         <span className={diff > 0 ? 'over' : diff < 0 ? 'under' : ''}>
                           {c.actual ? (diff > 0 ? `▲ ${krw(diff)}` : diff < 0 ? `▼ ${krw(Math.abs(diff))}` : '-') : '-'}
