@@ -615,7 +615,7 @@ export default function Report() {
               <thead><tr><th>{t('item_col')}</th><th style={{ textAlign: 'right' }}>{t('budgeted')}</th><th style={{ textAlign: 'right' }}>{t('actual')}</th><th style={{ textAlign: 'right' }}>{t('diff')}</th><th>{t('note_col')}</th><th></th></tr></thead>
               <tbody>
                 {(r.actual_costs || []).map((c, i) => {
-                  const diff = (c.actual || 0) - (c.budgeted || 0)
+                  const diff = (c.actual ?? 0) - (c.budgeted ?? 0)
                   return (
                     <tr key={i}>
                       <td><input value={c.item} onChange={e => updateCost(i, 'item', e.target.value)} /></td>
@@ -623,7 +623,7 @@ export default function Report() {
                       <td><input type="number" value={c.actual ?? ''} style={{ textAlign: 'right' }} onChange={e => updateCost(i, 'actual', e.target.value === '' ? 0 : Number(e.target.value))} /></td>
                       <td style={{ textAlign: 'right' }}>
                         <span className={diff > 0 ? 'over' : diff < 0 ? 'under' : ''}>
-                          {c.actual ? (diff > 0 ? `▲ ${krw(diff)}` : diff < 0 ? `▼ ${krw(Math.abs(diff))}` : '-') : '-'}
+                          {c.actual != null ? (diff > 0 ? `▲ ${krw(diff)}` : diff < 0 ? `▼ ${krw(Math.abs(diff))}` : '—') : '-'}
                         </span>
                       </td>
                       <td><input value={(c as any).note || ''} placeholder={t('cost_note_placeholder')} onChange={e => updateCost(i, 'note' as any, e.target.value)} /></td>
