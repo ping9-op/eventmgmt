@@ -68,6 +68,7 @@ export default function SalesLeads() {
   const importEventNameRef = useRef<string>('')
   const groupExcelInputRef = useRef<HTMLInputElement>(null)
   const groupPdfInputRef = useRef<HTMLInputElement>(null)
+  const [dragOver, setDragOver] = useState(false)
 
   // Register form
   const [form, setForm] = useState<Partial<SalesLead>>({
@@ -467,22 +468,22 @@ export default function SalesLeads() {
                       const isEmpty = ls.length === 0
                       return (
                         <tr key={k}
-                          style={{ cursor: isEmpty ? 'default' : 'pointer', transition: 'background .1s', opacity: isEmpty ? 0.6 : 1 }}
-                          onClick={() => { if (!isEmpty) { setGroupKey(k); setViewMode('detail') } }}
-                          onMouseOver={e => { if (!isEmpty) Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = '#FDF5F5')) }}
+                          style={{ cursor: 'pointer', transition: 'background .1s' }}
+                          onClick={() => { setGroupKey(k); setViewMode('detail') }}
+                          onMouseOver={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = '#FDF5F5'))}
                           onMouseOut={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = ''))}>
-                          <td style={{ padding: '11px 14px', fontWeight: 700, color: isEmpty ? 'var(--muted)' : 'var(--accent)' }}>
+                          <td style={{ padding: '11px 14px', fontWeight: 700, color: 'var(--accent)' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                               {k || '(미지정)'}
                               {isExhEvent && (
-                                <span style={{ fontSize: 9, fontWeight: 700, background: isEmpty ? '#F0F0F0' : '#FFF0F0', color: isEmpty ? '#9CA3AF' : 'var(--accent)', padding: '2px 6px', borderRadius: 99, border: `1px solid ${isEmpty ? '#E5E7EB' : 'var(--accent)'}`, whiteSpace: 'nowrap' }}>
+                                <span style={{ fontSize: 9, fontWeight: 700, background: '#FFF0F0', color: 'var(--accent)', padding: '2px 6px', borderRadius: 99, border: '1px solid var(--accent)', whiteSpace: 'nowrap' }}>
                                   박람회
                                 </span>
                               )}
                             </div>
                           </td>
                           <td style={{ padding: '11px 10px', textAlign: 'center', fontWeight: 700 }}>
-                            {isEmpty ? <span style={{ color: 'var(--muted)', fontSize: 12 }}>—</span> : ls.length}
+                            {isEmpty ? <span style={{ color: 'var(--muted)', fontSize: 12 }}>0</span> : ls.length}
                           </td>
                           {STAGE_ORDER.map(s => {
                             const cnt = ls.filter(l => l.current_stage === s).length
@@ -525,6 +526,52 @@ export default function SalesLeads() {
             <button className="btn btn-primary btn-sm" onClick={() => setShowRegister(true)}>+ 등록</button>
             {groupBy === 'event' && groupKey && (
               <button className="btn btn-outline btn-sm" onClick={() => openGroupUpload(groupKey)}>📤 Excel 업로드</button>
+            )}
+          </div>
+
+          {/* 드래그앤드랍 업로드 존 */}
+          <div
+            onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={e => {
+              e.preventDefault()
+              setDragOver(false)
+              const file = e.dataTransfer.files?.[0]
+              if (!file) return
+              const ext = file.name.split('.').pop()?.toLowerCase()
+              if (['xlsx', 'xls', 'csv'].includes(ext || '')) {
+                handleExcelFile(file, groupKey && groupBy === 'event' ? groupKey : undefined)
+              } else {
+                showToast('⚠️ Excel 파일(.xlsx/.xls/.csv)만 지원합니다.')
+              }
+            }}
+            onClick={() => {
+              importEventNameRef.current = (groupBy === 'event' && groupKey) ? groupKey : ''
+              groupExcelInputRef.current?.click()
+            }}
+            style={{
+              marginBottom: 12,
+              padding: detailLeads.length === 0 ? '40px 20px' : '12px 20px',
+              border: `2px dashed ${dragOver ? 'var(--accent)' : 'var(--border2)'}`,
+              borderRadius: 10,
+              background: dragOver ? '#FFF5F5' : detailLeads.length === 0 ? '#FAFAFA' : 'white',
+              textAlign: 'center',
+              cursor: 'pointer',
+              transition: 'all .15s',
+            }}>
+            {detailLeads.length === 0 ? (
+              <div>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>📂</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: dragOver ? 'var(--accent)' : 'var(--muted)', marginBottom: 4 }}>
+                  {groupKey ? `"${groupKey}" 리드 파일을 여기에 드래그하거나 클릭하여 업로드` : '파일을 드래그하거나 클릭하여 업로드'}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--muted)' }}>Excel (.xlsx / .xls / .csv) 지원</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 12, color: dragOver ? 'var(--accent)' : 'var(--muted)', fontWeight: 600 }}>
+                <span style={{ fontSize: 16 }}>📤</span>
+                {dragOver ? '여기에 놓으세요' : `Excel 파일 드래그 또는 클릭하여 업로드${groupKey ? ` (행사명 자동: ${groupKey})` : ''}`}
+              </div>
             )}
           </div>
 
