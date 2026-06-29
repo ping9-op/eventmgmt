@@ -69,6 +69,7 @@ export default function SalesLeads() {
   const groupExcelInputRef = useRef<HTMLInputElement>(null)
   const groupPdfInputRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
+  const isFirstRender = useRef(true)
 
   // Register form
   const [form, setForm] = useState<Partial<SalesLead>>({
@@ -135,6 +136,16 @@ export default function SalesLeads() {
     run()
     return () => { cancelled = true }
   }, [])
+
+  // 사이드바에서 같은 메뉴 재클릭 시 그룹뷰로 리셋
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return }
+    setViewMode('group')
+    setGroupKey(null)
+    setStageFilter(null)
+    setSearch('')
+    setChecked(new Set())
+  }, [location.key])
 
   async function load() {
     try {
