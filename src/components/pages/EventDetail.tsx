@@ -1048,9 +1048,9 @@ function PayCard({ p, onTogglePaid, onSave, onDelete, deleteConfirm, onSetDelete
       {mode === 'lump' ? (
         <div style={{ ...rowBase, flexWrap: 'wrap', background: p.deposit_paid ? '#ECFDF5' : '#FFFBEB', borderColor: p.deposit_paid ? '#6EE7B7' : '#FDE68A' }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', width: 36 }}>납부</span>
-          <input type="number" value={depAmt} onChange={e => setDepAmt(e.target.value)}
+          <input type="number" value={depAmt} onChange={e => setDepAmt(e.target.value)} onBlur={handleSave}
             style={{ width: 130, padding: '5px 8px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13, textAlign: 'right', boxSizing: 'border-box' }} />
-          <input type="date" value={depDue} onChange={e => setDepDue(e.target.value)}
+          <input type="date" value={depDue} onChange={e => setDepDue(e.target.value)} onBlur={handleSave}
             style={{ padding: '5px 8px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13 }} />
           <PaidToggle paid={p.deposit_paid} onToggle={() => onTogglePaid(p.id, 'deposit')} />
         </div>
@@ -1065,6 +1065,7 @@ function PayCard({ p, onTogglePaid, onSave, onDelete, deleteConfirm, onSetDelete
                 setDepPct(v)
                 if (p.total > 0) { const d = Math.round(p.total * v / 100); setDepAmt(String(d)); setFinAmt(String(p.total - d)) }
               }}
+              onBlur={handleSave}
               style={{ width: 50, padding: '3px 6px', border: '1.5px solid var(--border2)', borderRadius: 6, fontSize: 12, textAlign: 'center' }} />
             <span>% / 잔금 <strong>{100 - depPct}%</strong></span>
             {p.total > 0 && (
@@ -1082,9 +1083,9 @@ function PayCard({ p, onTogglePaid, onSave, onDelete, deleteConfirm, onSetDelete
               borderColor: box.paid ? '#6EE7B7' : box.type === 'deposit' ? '#C7D7F8' : '#A7F3D0',
             }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', width: 36 }}>{box.label}</span>
-              <input type="number" value={box.amt} onChange={e => box.setAmt(e.target.value)}
+              <input type="number" value={box.amt} onChange={e => box.setAmt(e.target.value)} onBlur={handleSave}
                 style={{ width: 130, padding: '5px 8px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13, textAlign: 'right', boxSizing: 'border-box' }} />
-              <input type="date" value={box.due} onChange={e => box.setDue(e.target.value)}
+              <input type="date" value={box.due} onChange={e => box.setDue(e.target.value)} onBlur={handleSave}
                 style={{ padding: '5px 8px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13 }} />
               <PaidToggle paid={box.paid} onToggle={() => onTogglePaid(p.id, box.type)} />
             </div>

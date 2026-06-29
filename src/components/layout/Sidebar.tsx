@@ -20,7 +20,7 @@ function NavItem({
   locationPathname: string
   onNavigate: (path: string) => void
 }) {
-  const isActive = locationPathname === path
+  const isActive = locationPathname === path || (path === '/expo/exhibitions' && locationPathname.startsWith('/expo/event/'))
   return (
     <div
       className={`nav-item${sub ? ' sub' : ''}${isActive ? ' active' : ''}`}
