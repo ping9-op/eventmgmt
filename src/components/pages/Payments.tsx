@@ -125,17 +125,18 @@ export default function Payments() {
   async function applyInvoiceToPayments() {
     if (!invoiceParsed || !selected) return
     const pays = payments[selected] || []
-    let count = 0
+    let count = 0, failed = 0
     for (const inv of invoiceParsed.items) {
       const pay = pays.find(p => p.item === inv.item)
       if (!pay) continue
       const update = inv.type === 'deposit'
         ? { deposit_amount: inv.amount, deposit_due: inv.dueDate }
         : { final_amount: inv.amount, final_due: inv.dueDate }
-      await supabase.from('payments').update(update).eq('id', pay.id)
-      count++
+      const { error } = await supabase.from('payments').update(update).eq('id', pay.id)
+      if (error) failed++; else count++
     }
-    showToast(count > 0 ? `✅ ${count}개 항목에 납부일이 반영되었습니다.` : '⚠️ 매칭 항목 없음. 수동으로 입력해주세요.')
+    if (failed > 0) showToast(`⚠️ ${failed}개 항목 저장 실패`)
+    else showToast(count > 0 ? `✅ ${count}개 항목에 납부일이 반영되었습니다.` : '⚠️ 매칭 항목 없음. 수동으로 입력해주세요.')
     setInvoiceParsed(null)
     setShowInvoice(false)
     if (count > 0) load()
@@ -183,31 +184,35 @@ export default function Payments() {
 
   async function deleteItem(payId: string) {
     if (!confirm('이 항목을 삭제하시겠습니까?')) return
-    await supabase.from('payments').delete().eq('id', payId)
+    const { error } = await supabase.from('payments').delete().eq('id', payId)
+    if (error) { showToast('⚠️ 삭제 실패: ' + error.message); return }
     showToast('🗑️ 삭제되었습니다.')
     load()
   }
 
   async function togglePaid(payId: string, type: 'deposit' | 'final', current: boolean) {
-    if (type === 'deposit') await supabase.from('payments').update({ deposit_paid: !current }).eq('id', payId)
-    else await supabase.from('payments').update({ final_paid: !current }).eq('id', payId)
+    const update = type === 'deposit' ? { deposit_paid: !current } : { final_paid: !current }
+    const { error } = await supabase.from('payments').update(update).eq('id', payId)
+    if (error) { showToast('⚠️ 저장 실패: ' + error.message); return }
     load()
   }
 
   async function saveCurrency(payId: string, currency: string) {
     setSaving(payId)
-    await supabase.from('payments').update({ currency }).eq('id', payId)
+    const { error } = await supabase.from('payments').update({ currency }).eq('id', payId)
     setSaving(null)
+    if (error) { showToast('⚠️ 저장 실패: ' + error.message); return }
     load()
   }
 
   async function saveAmounts(pay: Payment, depositAmt: number, depositDue: string, finalAmt: number, finalDue: string) {
     setSaving(pay.id)
-    await supabase.from('payments').update({
+    const { error } = await supabase.from('payments').update({
       deposit_amount: depositAmt, deposit_due: depositDue || null,
       final_amount: finalAmt, final_due: finalDue || null,
     }).eq('id', pay.id)
     setSaving(null)
+    if (error) { showToast('⚠️ 저장 실패: ' + error.message); return }
     showToast('💾 저장되었습니다.')
     load()
   }

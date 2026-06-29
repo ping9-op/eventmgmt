@@ -301,11 +301,13 @@ export default function EventDetail() {
     if (type === 'deposit') {
       const newVal = !pay.deposit_paid
       const { error } = await supabase.from('payments').update({ deposit_paid: newVal }).eq('id', payId)
-      if (!error) setPayments(prev => prev.map(p => p.id === payId ? { ...p, deposit_paid: newVal } : p))
+      if (error) { showToast('⚠️ 저장 실패: ' + error.message); return }
+      setPayments(prev => prev.map(p => p.id === payId ? { ...p, deposit_paid: newVal } : p))
     } else {
       const newVal = !pay.final_paid
       const { error } = await supabase.from('payments').update({ final_paid: newVal }).eq('id', payId)
-      if (!error) setPayments(prev => prev.map(p => p.id === payId ? { ...p, final_paid: newVal } : p))
+      if (error) { showToast('⚠️ 저장 실패: ' + error.message); return }
+      setPayments(prev => prev.map(p => p.id === payId ? { ...p, final_paid: newVal } : p))
     }
   }
 
@@ -918,7 +920,7 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
         ) : (
           <>
             {payments.map((p) => (
-              <PayCard key={p.id} p={p}
+              <PayCard key={`${p.id}-${p.deposit_amount}-${p.final_amount}-${p.deposit_due}-${p.final_due}`} p={p}
                 onTogglePaid={onTogglePaid}
                 onSave={onSavePayRow}
                 onDelete={onDeletePayRow}

@@ -178,9 +178,11 @@ export default function Report() {
     try {
       const { data: existing } = await supabase.from('results').select('id').eq('exhibition_key', selected).single()
       if (existing) {
-        await supabase.from('results').update(report as unknown as never).eq('id', existing.id)
+        const { error } = await supabase.from('results').update(report as unknown as never).eq('id', existing.id)
+        if (error) throw error
       } else {
-        await supabase.from('results').insert({ ...report, exhibition_key: selected } as unknown as never)
+        const { error } = await supabase.from('results').insert({ ...report, exhibition_key: selected } as unknown as never)
+        if (error) throw error
       }
       showToast('보고서가 저장되었습니다.')
       // ExpoOverview가 mount될 때 fresh 데이터를 fetching하도록 overview로 이동
@@ -192,6 +194,7 @@ export default function Report() {
 
   async function exportPPT() {
     if (!report || !selected) return
+    const r = report
     setGeneratingPPT(true)
     try {
 
@@ -636,10 +639,10 @@ export default function Report() {
                 <tr>
                   <td><strong>{t('budget_total')}</strong></td>
                   <td style={{ textAlign: 'right' }}><strong>{krw(totalBudgeted)}</strong></td>
-                  <td style={{ textAlign: 'right' }}><strong style={{ color: (totalActual - totalBudgeted) > 0 ? 'var(--danger)' : (totalActual - totalBudgeted) < 0 ? 'var(--green)' : 'inherit' }}>{totalActual ? krw(totalActual) : '-'}</strong></td>
+                  <td style={{ textAlign: 'right' }}><strong style={{ color: (totalActual - totalBudgeted) > 0 ? 'var(--danger)' : (totalActual - totalBudgeted) < 0 ? 'var(--green)' : 'inherit' }}>{totalActual != null ? krw(totalActual) : '-'}</strong></td>
                   <td style={{ textAlign: 'right' }}>
                     <span className={totalActual - totalBudgeted > 0 ? 'over' : totalActual - totalBudgeted < 0 ? 'under' : ''}>
-                      {totalActual ? (totalActual - totalBudgeted > 0 ? `▲ ${krw(totalActual - totalBudgeted)} ${t('over_lbl')}` : totalActual - totalBudgeted < 0 ? `▼ ${krw(Math.abs(totalActual - totalBudgeted))} ${t('under_lbl')}` : t('same_lbl')) : '-'}
+                      {totalActual != null ? (totalActual - totalBudgeted > 0 ? `▲ ${krw(totalActual - totalBudgeted)} ${t('over_lbl')}` : totalActual - totalBudgeted < 0 ? `▼ ${krw(Math.abs(totalActual - totalBudgeted))} ${t('under_lbl')}` : t('same_lbl')) : '-'}
                     </span>
                   </td>
                   <td colSpan={2} />

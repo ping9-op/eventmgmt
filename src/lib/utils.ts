@@ -83,7 +83,7 @@ export function costColor(item: string): string {
 }
 
 export function krw(n: number | null | undefined): string {
-  return n ? '₩' + Number(n).toLocaleString() : '-'
+  return n != null ? '₩' + Number(n).toLocaleString() : '-'
 }
 
 export function parseEventDate(str: string, year?: number): Date | null {
@@ -142,7 +142,8 @@ export function daysUntil(dateStr: string): number | null {
 }
 
 export function formatTodayStr(): string {
-  return TODAY.toISOString().split('T')[0]
+  const d = TODAY
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
 
 export const STAGE_ORDER = [

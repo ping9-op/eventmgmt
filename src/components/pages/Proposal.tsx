@@ -210,11 +210,12 @@ export default function Proposal() {
         const exh = exhibitions.find(e => e.id === finalExhId)
         const dbKey = (exh?.key || newExhName.replace(/[^a-zA-Z]/g, '').substring(0, 10)) + '_' + year
         for (const b of budget.filter(b => b.curr > 0)) {
-          await supabase.from('payments').insert({
+          const { error: payErr } = await supabase.from('payments').insert({
             exhibition_key: dbKey, item: b.item, total: b.curr, currency: (b as any).currency || 'KRW',
             deposit_amount: 0, deposit_due: null, deposit_paid: false,
             final_amount: 0, final_due: null, final_paid: false,
           })
+          if (payErr) throw new Error('결제 항목 저장 실패: ' + payErr.message)
         }
       }
       setSaved(true)

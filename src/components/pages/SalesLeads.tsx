@@ -123,7 +123,8 @@ export default function SalesLeads() {
 
   async function updateStage(leadId: string, stage: string) {
     const prev = leads.find(l => l.id === leadId)?.current_stage || null
-    await supabase.from('sales_leads').update({ current_stage: stage }).eq('id', leadId)
+    const { error } = await supabase.from('sales_leads').update({ current_stage: stage }).eq('id', leadId)
+    if (error) { showToast('⚠️ Stage 변경 실패: ' + error.message); return }
     setLeads(p => p.map(l => l.id === leadId ? { ...l, current_stage: stage } : l))
     logStageChange(leadId, prev, stage)
   }
@@ -245,7 +246,8 @@ export default function SalesLeads() {
         first_contact_done: false,
         registered_date: new Date().toISOString().split('T')[0],
       }))
-      await supabase.from('sales_leads').insert(inserts)
+      const { error } = await supabase.from('sales_leads').insert(inserts)
+      if (error) { showToast('⚠️ 등록 실패: ' + error.message); return }
       setExcelPreview(null)
       showToast(`✅ ${rows.length}개 리드가 등록되었습니다.`)
       load()
