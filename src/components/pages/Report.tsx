@@ -134,9 +134,16 @@ export default function Report() {
     try {
       const urls: string[] = []
       for (const file of files) {
-        const ext = file.name.split('.').pop() || 'jpg'
+        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+        const mimeMap: Record<string, string> = {
+          jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+          gif: 'image/gif', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif',
+        }
+        const contentType = (file.type && file.type !== 'application/octet-stream')
+          ? file.type
+          : (mimeMap[ext] || 'image/jpeg')
         const path = `${selected}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
-        const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(path, file, { upsert: false })
+        const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(path, file, { upsert: false, contentType })
         if (error) {
           showToast('⚠️ 사진 업로드 실패: ' + error.message)
           continue
