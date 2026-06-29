@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { STAGE_ORDER, STAGE_COLORS, priorityColor } from '../../lib/utils'
@@ -14,7 +14,7 @@ import LoadingSpinner from '../LoadingSpinner'
 type GroupBy = 'event' | 'date' | 'source'
 type ViewMode = 'group' | 'detail'
 
-interface ExcelPreview { rows: Partial<SalesLead>[]; fileName: string }
+interface ExcelPreview { rows: Partial<SalesLead>[]; fileName: string; eventName?: string }
 
 function StageBadge({ stage }: { stage: string }) {
   const c = STAGE_COLORS[stage] || { bg: '#6B7280' }
@@ -41,6 +41,7 @@ export default function SalesLeads() {
   const PRIORITIES = ['High', 'Medium', 'Low']
 
   const [leads, setLeads] = useState<SalesLead[]>([])
+  const [exhEventNames, setExhEventNames] = useState<string[]>([]) // 박람회에서 온 이벤트명 목록
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<ViewMode>('group')
   const [groupBy, setGroupBy] = useState<GroupBy>('event')
@@ -57,6 +58,16 @@ export default function SalesLeads() {
   const [excelPreview, setExcelPreview] = useState<ExcelPreview | null>(null)
   const [importing, setImporting] = useState(false)
   const [pdfFileName, setPdfFileName] = useState('')
+
+  // 일괄 Stage 변경
+  const [bulkStageTarget, setBulkStageTarget] = useState<string>('')
+  const [showBulkStage, setShowBulkStage] = useState(false)
+  const [bulkStaging, setBulkStaging] = useState(false)
+
+  // 그룹별 업로드용 이벤트명 ref
+  const importEventNameRef = useRef<string>('')
+  const groupExcelInputRef = useRef<HTMLInputElement>(null)
+  const groupPdfInputRef = useRef<HTMLInputElement>(null)
 
   // Register form
   const [form, setForm] = useState<Partial<SalesLead>>({
@@ -94,11 +105,25 @@ export default function SalesLeads() {
     let cancelled = false
     async function run() {
       try {
-        const { data } = await supabase.from('sales_leads').select('*').order('registered_date', { ascending: false })
-        const s = await loadAllSettings()
+        const [{ data: leadsData }, { data: propData }, { data: exhData }, s] = await Promise.all([
+          supabase.from('sales_leads').select('*').order('registered_date', { ascending: false }),
+          supabase.from('proposals').select('year, exhibition_id'),
+          supabase.from('exhibitions').select('id, name, key'),
+          loadAllSettings(),
+        ])
         if (!cancelled) {
-          setLeads((data || []) as SalesLead[])
+          setLeads((leadsData || []) as SalesLead[])
           setSettings(s)
+
+          // 박람회 × 연도 조합으로 이벤트명 구성
+          const exhMap: Record<string, { name: string; key: string }> = {}
+          for (const e of (exhData || [])) exhMap[e.id] = { name: e.name, key: e.key }
+          const names = new Set<string>()
+          for (const p of (propData || [])) {
+            const exh = exhMap[p.exhibition_id]
+            if (exh) names.add(`${exh.name} ${p.year}`)
+          }
+          setExhEventNames([...names].sort().reverse())
         }
       } catch (e) {
         showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error')
@@ -127,6 +152,21 @@ export default function SalesLeads() {
     if (error) { showToast('⚠️ Stage 변경 실패: ' + error.message); return }
     setLeads(p => p.map(l => l.id === leadId ? { ...l, current_stage: stage } : l))
     logStageChange(leadId, prev, stage)
+  }
+
+  async function bulkUpdateStage(ids: string[], stage: string) {
+    if (!ids.length || !stage) return
+    setBulkStaging(true)
+    try {
+      const { error } = await supabase.from('sales_leads').update({ current_stage: stage }).in('id', ids)
+      if (error) { showToast('⚠️ 일괄 변경 실패: ' + error.message); return }
+      setLeads(p => p.map(l => ids.includes(l.id) ? { ...l, current_stage: stage } : l))
+      setChecked(new Set())
+      setShowBulkStage(false)
+      showToast(`✅ ${ids.length}개 리드 → ${stage}`)
+    } finally {
+      setBulkStaging(false)
+    }
   }
 
   async function register() {
@@ -185,7 +225,7 @@ export default function SalesLeads() {
     showToast('📋 템플릿이 다운로드되었습니다.')
   }
 
-  async function handleExcelFile(file: File) {
+  async function handleExcelFile(file: File, overrideEventName?: string) {
     const XLSX = await import('xlsx')
     const reader = new FileReader()
     reader.onload = e => {
@@ -195,13 +235,14 @@ export default function SalesLeads() {
       const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '' })
       const parsed: Partial<SalesLead>[] = rows.map(r => {
         const rawStage = String(r.current_stage || r['Stage'] || r['스테이지'] || '')
+        const rawEvent = String(r.event_name || r['Event'] || r['행사명'] || '')
         return {
           company_name: String(r.company_name || r['Company'] || r['회사명'] || ''),
           contact_person: String(r.contact_person || r['Contact'] || r['담당자'] || ''),
           phone: String(r.phone || r['Phone'] || r['연락처'] || r['전화'] || '') || null,
           email: String(r.email || r['Email'] || r['이메일'] || '') || null,
           lead_source: String(r.lead_source || r['Source'] || 'Expo'),
-          event_name: String(r.event_name || r['Event'] || r['행사명'] || ''),
+          event_name: overrideEventName || rawEvent,
           owner: String(r.owner || r['Owner'] || 'Andrew'),
           priority: String(r.priority || r['Priority'] || 'Medium'),
           current_stage: STAGE_ORDER.includes(rawStage) ? rawStage : 'New Lead',
@@ -214,9 +255,14 @@ export default function SalesLeads() {
         }
       }).filter(r => r.company_name)
       if (!parsed.length) { showToast('⚠️ 유효한 데이터가 없습니다. 템플릿을 확인해주세요.'); return }
-      setExcelPreview({ rows: parsed, fileName: file.name })
+      setExcelPreview({ rows: parsed, fileName: file.name, eventName: overrideEventName })
     }
     reader.readAsArrayBuffer(file)
+  }
+
+  function openGroupUpload(eventName: string) {
+    importEventNameRef.current = eventName
+    groupExcelInputRef.current?.click()
   }
 
   async function bulkRegisterLeads(rows: Partial<SalesLead>[]) {
@@ -287,8 +333,14 @@ export default function SalesLeads() {
   if (filterStage) filteredLeads = filteredLeads.filter(l => l.current_stage === filterStage)
   if (filterCorridor) filteredLeads = filteredLeads.filter(l => l.country_corridor === filterCorridor)
 
-  // Build groups
+  // Build groups — include expo-registered events even if 0 leads
   const groups: Record<string, SalesLead[]> = {}
+  // 먼저 박람회 등록 이벤트를 빈 배열로 미리 추가 (event 그룹일 때만)
+  if (groupBy === 'event') {
+    for (const name of exhEventNames) {
+      if (!groups[name]) groups[name] = []
+    }
+  }
   filteredLeads.forEach(l => {
     const key = groupBy === 'event' ? l.event_name : groupBy === 'date' ? l.registered_date : l.lead_source
     if (!groups[key]) groups[key] = []
@@ -320,11 +372,20 @@ export default function SalesLeads() {
   const totalDetailPages = Math.ceil(detailLeads.length / DETAIL_PER_PAGE)
   const pagedDetailLeads = detailLeads.slice(detailPage * DETAIL_PER_PAGE, (detailPage + 1) * DETAIL_PER_PAGE)
   const allDetailIds = pagedDetailLeads.map(l => l.id)
+  const checkedDetailIds = allDetailIds.filter(id => checked.has(id))
 
   if (loading) return <div className="view wide"><LoadingSpinner /></div>
 
   return (
     <div className="view wide">
+      {/* 그룹별 업로드용 hidden input */}
+      <input ref={groupExcelInputRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }}
+        onChange={e => {
+          const f = e.target.files?.[0]
+          if (f) handleExcelFile(f, importEventNameRef.current || undefined)
+          e.target.value = ''
+        }} />
+
       {viewMode === 'group' ? (
         <>
           <div className="sec-hdr">
@@ -395,25 +456,54 @@ export default function SalesLeads() {
                     {STAGE_ORDER.map(s => (
                       <th key={s} style={{ padding: '10px 6px', textAlign: 'center', fontSize: 10, whiteSpace: 'nowrap' }}>{s}</th>
                     ))}
+                    {groupBy === 'event' && <th style={{ padding: '10px 8px', textAlign: 'center', fontSize: 11 }}>업로드</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(groupSearchFiltered).filter(([, ls]) => ls.length > 0).map(([k, ls]) => (
-                    <tr key={k} style={{ cursor: 'pointer', transition: 'background .1s' }}
-                      onClick={() => { setGroupKey(k); setViewMode('detail') }}
-                      onMouseOver={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = '#FDF5F5'))}
-                      onMouseOut={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = ''))}>
-                      <td style={{ padding: '11px 14px', fontWeight: 700, color: 'var(--accent)' }}>{k}</td>
-                      <td style={{ padding: '11px 10px', textAlign: 'center', fontWeight: 700 }}>{ls.length}</td>
-                      {STAGE_ORDER.map(s => {
-                        const cnt = ls.filter(l => l.current_stage === s).length
-                        const col = STAGE_COLORS[s]?.bg || '#888'
-                        return <td key={s} style={{ padding: '11px 6px', textAlign: 'center', color: col, fontWeight: 600 }}>{cnt || '—'}</td>
-                      })}
-                    </tr>
-                  ))}
+                  {Object.entries(groupSearchFiltered)
+                    .filter(([k, ls]) => ls.length > 0 || exhEventNames.includes(k))
+                    .map(([k, ls]) => {
+                      const isExhEvent = exhEventNames.includes(k)
+                      const isEmpty = ls.length === 0
+                      return (
+                        <tr key={k}
+                          style={{ cursor: isEmpty ? 'default' : 'pointer', transition: 'background .1s', opacity: isEmpty ? 0.6 : 1 }}
+                          onClick={() => { if (!isEmpty) { setGroupKey(k); setViewMode('detail') } }}
+                          onMouseOver={e => { if (!isEmpty) Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = '#FDF5F5')) }}
+                          onMouseOut={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = ''))}>
+                          <td style={{ padding: '11px 14px', fontWeight: 700, color: isEmpty ? 'var(--muted)' : 'var(--accent)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                              {k || '(미지정)'}
+                              {isExhEvent && (
+                                <span style={{ fontSize: 9, fontWeight: 700, background: isEmpty ? '#F0F0F0' : '#FFF0F0', color: isEmpty ? '#9CA3AF' : 'var(--accent)', padding: '2px 6px', borderRadius: 99, border: `1px solid ${isEmpty ? '#E5E7EB' : 'var(--accent)'}`, whiteSpace: 'nowrap' }}>
+                                  박람회
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td style={{ padding: '11px 10px', textAlign: 'center', fontWeight: 700 }}>
+                            {isEmpty ? <span style={{ color: 'var(--muted)', fontSize: 12 }}>—</span> : ls.length}
+                          </td>
+                          {STAGE_ORDER.map(s => {
+                            const cnt = ls.filter(l => l.current_stage === s).length
+                            const col = STAGE_COLORS[s]?.bg || '#888'
+                            return <td key={s} style={{ padding: '11px 6px', textAlign: 'center', color: col, fontWeight: 600 }}>{cnt || '—'}</td>
+                          })}
+                          {groupBy === 'event' && (
+                            <td style={{ padding: '11px 8px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                              <button
+                                onClick={() => openGroupUpload(k)}
+                                title={`"${k}" 리드 Excel 업로드`}
+                                style={{ padding: '4px 8px', borderRadius: 6, border: '1.5px solid var(--border2)', background: 'white', cursor: 'pointer', fontSize: 13, color: 'var(--muted)', lineHeight: 1 }}>
+                                📤
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      )
+                    })}
                   {Object.keys(groupSearchFiltered).length === 0 && (
-                    <tr><td colSpan={2 + STAGE_ORDER.length} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>{t('no_leads')}</td></tr>
+                    <tr><td colSpan={2 + STAGE_ORDER.length + (groupBy === 'event' ? 1 : 0)} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>{t('no_leads')}</td></tr>
                   )}
                 </tbody>
               </table>
@@ -433,6 +523,9 @@ export default function SalesLeads() {
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('search_short')}
               style={{ padding: '7px 12px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, flex: 1, minWidth: 140, maxWidth: 200 }} />
             <button className="btn btn-primary btn-sm" onClick={() => setShowRegister(true)}>+ 등록</button>
+            {groupBy === 'event' && groupKey && (
+              <button className="btn btn-outline btn-sm" onClick={() => openGroupUpload(groupKey)}>📤 Excel 업로드</button>
+            )}
           </div>
 
           {/* Stage 필터 바 */}
@@ -469,6 +562,58 @@ export default function SalesLeads() {
                 {t('select_all')}
               </label>
               <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700, minWidth: 70 }}>{checked.size > 0 ? `${checked.size}개 선택됨` : ''}</span>
+
+              {/* 일괄 Stage 변경 */}
+              {checked.size > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}>
+                  <button
+                    onClick={() => setShowBulkStage(v => !v)}
+                    style={{ padding: '6px 12px', borderRadius: 7, background: 'var(--accent)', color: 'white', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                    📊 Stage 일괄 변경
+                  </button>
+                  {showBulkStage && (
+                    <div style={{ position: 'absolute', top: 36, left: 0, background: 'white', border: '1px solid var(--border2)', borderRadius: 10, boxShadow: '0 4px 16px rgba(0,0,0,.12)', zIndex: 100, padding: 10, minWidth: 220 }}>
+                      <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8, fontWeight: 600 }}>
+                        {checked.size}개 리드의 Stage를 변경합니다
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {STAGE_ORDER.map(s => {
+                          const c = STAGE_COLORS[s] || { bg: '#6B7280' }
+                          return (
+                            <button key={s} disabled={bulkStaging}
+                              onClick={() => bulkUpdateStage([...checked], s)}
+                              style={{ padding: '6px 10px', borderRadius: 6, border: `1.5px solid ${c.bg}`, background: 'white', color: c.bg, fontSize: 12, fontWeight: 700, cursor: 'pointer', textAlign: 'left', opacity: bulkStaging ? 0.5 : 1 }}>
+                              {s}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <button onClick={() => setShowBulkStage(false)} style={{ marginTop: 8, width: '100%', padding: '5px', borderRadius: 6, background: 'var(--light)', border: '1px solid var(--border2)', fontSize: 12, cursor: 'pointer', color: 'var(--muted)' }}>닫기</button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 이 그룹 전체 Stage 변경 */}
+              {groupKey && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>전체 ({detailLeads.length}개):</span>
+                  <select
+                    value=""
+                    onChange={e => {
+                      if (!e.target.value) return
+                      if (window.confirm(`"${groupKey}" 전체 ${detailLeads.length}개 리드를 "${e.target.value}"으로 변경합니까?`)) {
+                        bulkUpdateStage(detailLeads.map(l => l.id), e.target.value)
+                      }
+                      e.target.value = ''
+                    }}
+                    style={{ padding: '5px 8px', borderRadius: 6, border: '1.5px solid var(--border2)', fontSize: 12, cursor: 'pointer', color: 'var(--muted)' }}>
+                    <option value="">전체 Stage 변경…</option>
+                    {STAGE_ORDER.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              )}
+
               <div style={{ marginLeft: 'auto' }}>
                 <button onClick={() => exportCSV()} style={{ padding: '6px 14px', borderRadius: 7, background: 'white', border: '1.5px solid #059669', color: '#059669', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
                   {t('export_excel')}
@@ -603,6 +748,11 @@ export default function SalesLeads() {
             </div>
             <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 12 }}>
               📎 "{excelPreview.fileName}" — 총 <strong>{excelPreview.rows.length}</strong>개 리드가 감지되었습니다.
+              {excelPreview.eventName && (
+                <span style={{ marginLeft: 10, background: '#FFF0F0', color: 'var(--accent)', padding: '2px 10px', borderRadius: 99, fontWeight: 700, fontSize: 12 }}>
+                  📌 행사명 자동 적용: {excelPreview.eventName}
+                </span>
+              )}
             </div>
             <div style={{ overflowX: 'auto', maxHeight: 320, overflowY: 'auto', border: '0.5px solid var(--border2)', borderRadius: 8 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -625,7 +775,7 @@ export default function SalesLeads() {
                       <td style={{ padding: '6px 10px', fontWeight: 700 }}>{r.company_name}</td>
                       <td style={{ padding: '6px 10px' }}>{r.contact_person || '—'}</td>
                       <td style={{ padding: '6px 10px', fontSize: 11 }}>{r.phone || '—'}<br /><span style={{ color: 'var(--muted)' }}>{r.email || '—'}</span></td>
-                      <td style={{ padding: '6px 10px', fontSize: 11 }}>{r.event_name || '—'}</td>
+                      <td style={{ padding: '6px 10px', fontSize: 11, fontWeight: excelPreview.eventName ? 700 : 400, color: excelPreview.eventName ? 'var(--accent)' : 'inherit' }}>{r.event_name || '—'}</td>
                       <td style={{ padding: '6px 10px', textAlign: 'center' }}>{r.owner}</td>
                       <td style={{ padding: '6px 10px', textAlign: 'center' }}>{r.priority}</td>
                       <td style={{ padding: '6px 10px', textAlign: 'center' }}>
@@ -672,7 +822,9 @@ export default function SalesLeads() {
                 <label style={{ marginTop: 0 }}>{t('event_name_lbl')}</label>
                 <select value={form.event_name || ''} onChange={e => setForm(f => ({ ...f, event_name: e.target.value }))}>
                   <option value="">{t('select_event')}</option>
-                  {(settings?.event_names || []).map(ev => <option key={ev}>{ev}</option>)}
+                  {/* 박람회 등록 이벤트 우선, 설정 이벤트 추가 */}
+                  {exhEventNames.map(ev => <option key={ev}>{ev}</option>)}
+                  {(settings?.event_names || []).filter(ev => !exhEventNames.includes(ev)).map(ev => <option key={ev}>{ev}</option>)}
                 </select>
               </div>
               <div>
