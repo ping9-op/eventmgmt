@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import { ToastProvider } from './contexts/ToastContext'
@@ -6,20 +6,22 @@ import { supabase } from './lib/supabase'
 import { initExhColors } from './lib/utils'
 import Layout from './components/layout/Layout'
 import LoginPage from './components/auth/LoginPage'
-import Dashboard from './components/pages/Dashboard'
-import Exhibitions from './components/pages/Exhibitions'
-import Schedule from './components/pages/Schedule'
-import Payments from './components/pages/Payments'
-import ExpoOverview from './components/pages/ExpoOverview'
-import Proposal from './components/pages/Proposal'
-import Report from './components/pages/Report'
-import SalesDashboard from './components/pages/SalesDashboard'
-import SalesLeads from './components/pages/SalesLeads'
-import SalesFunnel from './components/pages/SalesFunnel'
-import SalesFollowUp from './components/pages/SalesFollowUp'
-import SalesReports from './components/pages/SalesReports'
-import SalesSettings from './components/pages/SalesSettings'
-import EventDetail from './components/pages/EventDetail'
+import LoadingSpinner from './components/LoadingSpinner'
+
+const Dashboard = lazy(() => import('./components/pages/Dashboard'))
+const Exhibitions = lazy(() => import('./components/pages/Exhibitions'))
+const Schedule = lazy(() => import('./components/pages/Schedule'))
+const Payments = lazy(() => import('./components/pages/Payments'))
+const ExpoOverview = lazy(() => import('./components/pages/ExpoOverview'))
+const Proposal = lazy(() => import('./components/pages/Proposal'))
+const Report = lazy(() => import('./components/pages/Report'))
+const SalesDashboard = lazy(() => import('./components/pages/SalesDashboard'))
+const SalesLeads = lazy(() => import('./components/pages/SalesLeads'))
+const SalesFunnel = lazy(() => import('./components/pages/SalesFunnel'))
+const SalesFollowUp = lazy(() => import('./components/pages/SalesFollowUp'))
+const SalesReports = lazy(() => import('./components/pages/SalesReports'))
+const SalesSettings = lazy(() => import('./components/pages/SalesSettings'))
+const EventDetail = lazy(() => import('./components/pages/EventDetail'))
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -46,21 +48,21 @@ export default function App() {
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
       <Route path="/" element={<RequireAuth><Layout /></RequireAuth>}>
-        <Route index element={<Dashboard />} />
-        <Route path="expo/overview" element={<ExpoOverview />} />
-        <Route path="expo/exhibitions" element={<Exhibitions />} />
-        <Route path="expo/schedule" element={<Schedule />} />
-        <Route path="expo/payments" element={<Payments />} />
-        <Route path="expo/create" element={<Proposal />} />
-        <Route path="expo/report" element={<Report />} />
-        <Route path="sales/dashboard" element={<SalesDashboard />} />
-        <Route path="sales/leads" element={<SalesLeads />} />
-        <Route path="sales/funnel" element={<SalesFunnel />} />
-        <Route path="sales/followup" element={<SalesFollowUp />} />
-        <Route path="sales/reports" element={<SalesReports />} />
-        <Route path="sales/settings" element={<SalesSettings />} />
-        <Route path="settings" element={<SalesSettings />} />
-        <Route path="expo/event/:key/:year" element={<EventDetail />} />
+        <Route index element={<Suspense fallback={<LoadingSpinner />}><Dashboard /></Suspense>} />
+        <Route path="expo/overview" element={<Suspense fallback={<LoadingSpinner />}><ExpoOverview /></Suspense>} />
+        <Route path="expo/exhibitions" element={<Suspense fallback={<LoadingSpinner />}><Exhibitions /></Suspense>} />
+        <Route path="expo/schedule" element={<Suspense fallback={<LoadingSpinner />}><Schedule /></Suspense>} />
+        <Route path="expo/payments" element={<Suspense fallback={<LoadingSpinner />}><Payments /></Suspense>} />
+        <Route path="expo/create" element={<Suspense fallback={<LoadingSpinner />}><Proposal /></Suspense>} />
+        <Route path="expo/report" element={<Suspense fallback={<LoadingSpinner />}><Report /></Suspense>} />
+        <Route path="sales/dashboard" element={<Suspense fallback={<LoadingSpinner />}><SalesDashboard /></Suspense>} />
+        <Route path="sales/leads" element={<Suspense fallback={<LoadingSpinner />}><SalesLeads /></Suspense>} />
+        <Route path="sales/funnel" element={<Suspense fallback={<LoadingSpinner />}><SalesFunnel /></Suspense>} />
+        <Route path="sales/followup" element={<Suspense fallback={<LoadingSpinner />}><SalesFollowUp /></Suspense>} />
+        <Route path="sales/reports" element={<Suspense fallback={<LoadingSpinner />}><SalesReports /></Suspense>} />
+        <Route path="sales/settings" element={<Suspense fallback={<LoadingSpinner />}><SalesSettings /></Suspense>} />
+        <Route path="settings" element={<Suspense fallback={<LoadingSpinner />}><SalesSettings /></Suspense>} />
+        <Route path="expo/event/:key/:year" element={<Suspense fallback={<LoadingSpinner />}><EventDetail /></Suspense>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
