@@ -15,6 +15,7 @@ interface AuthContextType {
   session: Session | null
   loading: boolean
   isAdmin: boolean
+  salesOwner: string | null
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
 }
@@ -80,6 +81,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     )
   )
 
+  // 세일즈 매니저 계정 식별자 — user_metadata.sales_owner (sales_settings의 owners 목록 값과 일치해야 함)
+  // sales_leads.owner를 이 값과 매칭해 RLS가 자기 리드만 노출/수정 가능하도록 함
+  const salesOwner = (user?.user_metadata as any)?.sales_owner || null
+
   async function signIn(email: string, password: string) {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) return { error: error.message }
@@ -93,7 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, isAdmin, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, isAdmin, salesOwner, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   )

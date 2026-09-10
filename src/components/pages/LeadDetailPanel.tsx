@@ -7,6 +7,7 @@ import { loadAllSettings, CONTRACT_STATUSES as SYSTEM_CONTRACT_STATUSES, ONBOARD
 import { useToast } from '../../contexts/ToastContext'
 import type { SalesLead, SalesActivity, SalesTask, SalesProposal } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
+import { useAuth } from '../../contexts/AuthContext'
 
 const CONTRACT_STATUSES = SYSTEM_CONTRACT_STATUSES
 const ONBOARD_STATUSES = SYSTEM_ONBOARD_STATUSES
@@ -51,6 +52,7 @@ export default function LeadDetailPanel({
   const { t, lang } = useLang()
   const { showToast } = useToast()
   const isMobile = useIsMobile()
+  const { isAdmin } = useAuth()
   const [settings, setSettings] = useState<SalesSettingsData | null>(null)
   const [tab, setTab] = useState<TabId>('basic')
   const [lead, setLead] = useState<SalesLead | null>(null)
@@ -308,9 +310,13 @@ export default function LeadDetailPanel({
                   </select>
                 </Field>
                 <Field label="Owner">
-                  <select value={form.owner || ''} onChange={e => setForm(f => ({ ...f, owner: e.target.value }))}>
-                    {(settings?.owners || []).map(o => <option key={o}>{o}</option>)}
-                  </select>
+                  {isAdmin ? (
+                    <select value={form.owner || ''} onChange={e => setForm(f => ({ ...f, owner: e.target.value }))}>
+                      {(settings?.owners || []).map(o => <option key={o}>{o}</option>)}
+                    </select>
+                  ) : (
+                    <input value={form.owner || ''} disabled style={{ background: 'var(--light)', color: 'var(--muted)' }} />
+                  )}
                 </Field>
                 <Field label="Priority">
                   <select value={form.priority || ''} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>

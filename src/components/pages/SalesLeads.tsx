@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
 import { STAGE_ORDER, STAGE_COLORS, priorityColor } from '../../lib/utils'
 import type { SalesLead } from '../../types/database'
 import { loadAllSettings, type SalesSettingsData } from '../../lib/settings'
@@ -37,6 +38,7 @@ export default function SalesLeads() {
   const location = useLocation()
   const { showToast } = useToast()
   const isMobile = useIsMobile()
+  const { isAdmin, salesOwner } = useAuth()
   const [settings, setSettings] = useState<SalesSettingsData | null>(null)
   const PRIORITIES = ['High', 'Medium', 'Low']
 
@@ -76,7 +78,7 @@ export default function SalesLeads() {
     registered_date: new Date().toISOString().split('T')[0],
     lead_source: 'Expo', business_type: 'Korean Restaurant',
     country_corridor: 'Korea → Japan', priority: 'Medium',
-    owner: 'Andrew', current_stage: 'New Lead',
+    owner: salesOwner || 'Andrew', current_stage: 'New Lead',
     volume_currency: 'USD', first_contact_done: false,
   })
 
@@ -195,7 +197,8 @@ export default function SalesLeads() {
       business_type: form.business_type || '',
       country_corridor: form.country_corridor || '',
       priority: form.priority || 'Medium',
-      owner: form.owner || 'Andrew',
+      // 관리자가 아니면 owner를 임의로 지정할 수 없음 — 항상 본인 계정으로 등록 (RLS와 일치)
+      owner: isAdmin ? (form.owner || 'Andrew') : (salesOwner || form.owner || 'Andrew'),
       current_stage: 'New Lead',
       volume_currency: form.volume_currency || 'USD',
       first_contact_done: false,
@@ -219,7 +222,7 @@ export default function SalesLeads() {
       registered_date: new Date().toISOString().split('T')[0],
       lead_source: 'Expo', business_type: 'Korean Restaurant',
       country_corridor: 'Korea → Japan', priority: 'Medium',
-      owner: 'Andrew', current_stage: 'New Lead',
+      owner: salesOwner || 'Andrew', current_stage: 'New Lead',
       volume_currency: 'USD', first_contact_done: false,
     })
   }
@@ -292,7 +295,8 @@ export default function SalesLeads() {
         email: r.email || null,
         lead_source: r.lead_source || 'Expo',
         event_name: r.event_name || '',
-        owner: r.owner || 'Andrew',
+        // 관리자가 아니면 Excel의 Owner 컬럼값과 무관하게 본인 계정으로 등록 (RLS와 일치)
+        owner: isAdmin ? (r.owner || 'Andrew') : (salesOwner || r.owner || 'Andrew'),
         priority: r.priority || 'Medium',
         current_stage: (r.current_stage && STAGE_ORDER.includes(r.current_stage)) ? r.current_stage : 'New Lead',
         country_corridor: r.country_corridor || 'Korea → Japan',
@@ -887,9 +891,13 @@ export default function SalesLeads() {
               </div>
               <div>
                 <label style={{ marginTop: 0 }}>{t('owner_lbl')}</label>
-                <select value={form.owner || 'Andrew'} onChange={e => setForm(f => ({ ...f, owner: e.target.value }))}>
-                  {(settings?.owners || []).map(o => <option key={o}>{o}</option>)}
-                </select>
+                {isAdmin ? (
+                  <select value={form.owner || 'Andrew'} onChange={e => setForm(f => ({ ...f, owner: e.target.value }))}>
+                    {(settings?.owners || []).map(o => <option key={o}>{o}</option>)}
+                  </select>
+                ) : (
+                  <input value={salesOwner || ''} disabled style={{ background: 'var(--light)', color: 'var(--muted)' }} />
+                )}
               </div>
               <div>
                 <label style={{ marginTop: 0 }}>{t('priority_lbl')}</label>
