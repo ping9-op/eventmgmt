@@ -5,6 +5,11 @@ import { supabase } from '../lib/supabase'
 // 관리자 이메일 목록 — Supabase user_metadata.role='admin' 으로도 설정 가능
 const ADMIN_EMAILS = ['andrewc@gmeremit.com']
 
+// 자동 로그아웃: 2시간 이상 활동 없으면 로그아웃
+const IDLE_TIMEOUT_MS = 2 * 60 * 60 * 1000
+const LAST_ACTIVITY_KEY = 'gme_last_activity'
+const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart'] as const
+
 interface AuthContextType {
   user: User | null
   session: Session | null
@@ -37,6 +42,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => subscription.unsubscribe()
   }, [])
+
+  useEffect(() => {
+    if (!session) return
+
+    let lastWrite = 0
+    const markActivity = () => {
+      const now = Date.now()
+      if (now - lastWrite < 5000) return // 과도한 localStorage 쓰기 방지
+      lastWrite = now
+      localStorage.setItem(LAST_ACTIVITY_KEY, String(now))
+    }
+
+    const checkIdle = () => {
+      const last = Number(localStorage.getItem(LAST_ACTIVITY_KEY)) || Date.now()
+      if (Date.now() - last >= IDLE_TIMEOUT_MS) {
+        supabase.auth.signOut()
+      }
+    }
+
+    markActivity()
+    checkIdle() // 탭을 닫았다가 2시간 후 다시 열었을 때도 즉시 체크
+
+    ACTIVITY_EVENTS.forEach(e => window.addEventListener(e, markActivity))
+    const interval = setInterval(checkIdle, 60 * 1000)
+
+    return () => {
+      ACTIVITY_EVENTS.forEach(e => window.removeEventListener(e, markActivity))
+      clearInterval(interval)
+    }
+  }, [session])
 
   const isAdmin = !!(
     user && (
