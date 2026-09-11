@@ -70,7 +70,7 @@ body{display:flex;flex-direction:column;height:100%;overflow:hidden;overscroll-b
 .btn-sm{padding:6px 14px;font-size:12px;border-radius:6px}
 
 /* ── Badges ── */
-.badge{display:inline-block;font-size:11px;padding:3px 10px;border-radius:99px;color:white;font-weight:600}
+.badge{display:inline-block;font-size:11px;padding:3px 10px;border-radius:99px;color:white;font-weight:600;white-space:nowrap}
 
 /* ── Forms ── */
 input,select,textarea{font-family:inherit;font-size:14px;padding:10px 13px;border:1.5px solid var(--border2);border-radius:8px;width:100%;min-width:0;min-height:44px;outline:none;background:#FDFBFB;color:var(--text)}
