@@ -122,7 +122,7 @@ label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px;margin-t
 .dl{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:13px}
 .dl .dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
 .dl .dn{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dl .ds{font-size:10px;padding:2px 7px;border-radius:99px;color:white;flex-shrink:0}
+.dl .ds{font-size:10px;padding:2px 7px;border-radius:99px;color:white;flex-shrink:0;white-space:nowrap}
 .dl .dv{font-size:13px;font-weight:700;margin-left:4px;flex-shrink:0}
 
 /* ── Exhibition Cards ── */

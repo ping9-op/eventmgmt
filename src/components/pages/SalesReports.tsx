@@ -241,7 +241,7 @@ export default function SalesReports() {
                   onMouseOver={e => (e.currentTarget as HTMLTableRowElement).style.background = '#FDF5F5'}
                   onMouseOut={e => (e.currentTarget as HTMLTableRowElement).style.background = ''}>
                   <td style={{ padding: 8 }}>
-                    <span style={{ display: 'inline-block', padding: '3px 9px', borderRadius: 99, fontSize: 11, fontWeight: 700, color: 'white', background: r.col }}>{r.stage}</span>
+                    <span style={{ display: 'inline-block', padding: '3px 9px', borderRadius: 99, fontSize: 11, fontWeight: 700, color: 'white', background: r.col, whiteSpace: 'nowrap' }}>{r.stage}</span>
                   </td>
                   <td style={{ padding: 8, textAlign: 'center', fontWeight: 700 }}>{r.count}</td>
                   <td style={{ padding: 8, textAlign: 'right' }}>

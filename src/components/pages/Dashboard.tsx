@@ -277,7 +277,7 @@ export default function Dashboard() {
                   <div style={{ fontSize: 12, fontWeight: 700, color: '#1E3A5F' }}>
                     {l.expected_monthly_volume ? `${l.volume_currency} ${l.expected_monthly_volume.toLocaleString()}` : '-'}
                   </div>
-                  <span style={{ background: STAGE_COLORS[l.current_stage]?.bg || '#999', color: 'white', fontSize: 10, padding: '2px 7px', borderRadius: 99, fontWeight: 600 }}>{l.current_stage}</span>
+                  <span style={{ background: STAGE_COLORS[l.current_stage]?.bg || '#999', color: 'white', fontSize: 10, padding: '2px 7px', borderRadius: 99, fontWeight: 600, whiteSpace: 'nowrap' }}>{l.current_stage}</span>
                 </div>
               </div>
             ))}

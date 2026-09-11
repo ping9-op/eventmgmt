@@ -284,7 +284,7 @@ export default function SalesFollowUp() {
                     <td style={{ padding: '9px 14px' }}>{lead?.contact_person || '—'}</td>
                     <td style={{ padding: '9px 14px' }}>
                       {lead?.current_stage && stageBg
-                        ? <span style={{ display: 'inline-block', padding: '3px 9px', borderRadius: 99, fontSize: 11, fontWeight: 700, color: 'white', background: stageBg }}>{lead.current_stage}</span>
+                        ? <span style={{ display: 'inline-block', padding: '3px 9px', borderRadius: 99, fontSize: 11, fontWeight: 700, color: 'white', background: stageBg, whiteSpace: 'nowrap' }}>{lead.current_stage}</span>
                         : '—'}
                     </td>
                     <td style={{ padding: '9px 14px', fontSize: 12 }}>{lang === 'en' ? taskTypeEn(task.task_type) : task.task_type}</td>

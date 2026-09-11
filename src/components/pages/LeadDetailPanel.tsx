@@ -510,7 +510,7 @@ export default function LeadDetailPanel({
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
                             <span style={{ fontSize: 13, fontWeight: 700, color: typeInfo.color }}>{a.activity_type}</span>
                             {a.activity_result && (
-                              <span style={{ fontSize: 11, fontWeight: 700, color: 'white', background: resultColor, padding: '2px 8px', borderRadius: 99 }}>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: 'white', background: resultColor, padding: '2px 8px', borderRadius: 99, whiteSpace: 'nowrap' }}>
                                 {a.activity_result}
                               </span>
                             )}
