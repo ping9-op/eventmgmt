@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { exhColor, formatEventDate, costColor, CUR_SYM } from '../../lib/utils'
+import { exhColor, formatEventDate, CUR_SYM } from '../../lib/utils'
 import { useToast } from '../../contexts/ToastContext'
 import type { Payment } from '../../types/database'
 import ProposalEditModal from '../ProposalEditModal'
 import EmptyState from '../EmptyState'
+import PaymentCard from '../PaymentCard'
 import { useLang } from '../../contexts/LangContext'
 import { useIsMobile } from '../../hooks/useBreakpoint'
 
@@ -16,23 +17,6 @@ interface ChecklistItem {
   sn: number; item: string; pic: string; deadline: string
   status: string; remarks: string; subitems: SubItem[]
   detail?: string
-}
-
-const PAYMENT_METHODS = ['계좌이체', '카드']
-
-function parseFinalDue(val: string | null): { date: string; method: string } {
-  if (!val) return { date: '', method: '' }
-  if (val.startsWith('METHOD:')) return { date: '', method: val.slice(7) }
-  const idx = val.indexOf('|METHOD:')
-  if (idx >= 0) return { date: val.slice(0, idx), method: val.slice(idx + 8) }
-  return { date: val, method: '' }
-}
-
-function encodeFinalDue(date: string, method: string): string | null {
-  if (!date && !method) return null
-  if (!date) return `METHOD:${method}`
-  if (!method) return date
-  return `${date}|METHOD:${method}`
 }
 
 const STATUS_OPTS = ['Plan', 'Progress', 'Done', 'Urgent', 'Cancel']
@@ -131,6 +115,7 @@ export default function EventDetail() {
   const [overview, setOverview] = useState<any>(null)
   const [prevOverview, setPrevOverview] = useState<any>(null)
   const [payments, setPayments] = useState<Payment[]>([])
+  const [savingPayId, setSavingPayId] = useState<string | null>(null)
   const [checklist, setChecklist] = useState<ChecklistItem[]>([])
   const [design, setDesign] = useState<any[]>([])
   const [giftsOnboard, setGiftsOnboard] = useState<any[]>([])
@@ -195,18 +180,14 @@ export default function EventDetail() {
                 }).select().single()
                 if (newPay) addedPays.push(newPay as unknown as Payment)
               } else if (existing.total !== b.curr && !existing.deposit_paid && !existing.final_paid) {
-                // 금액 변경 + 미납 상태 → total 업데이트
-                const depRatio = existing.total > 0 ? existing.deposit_amount / existing.total : 0.5
-                const newDep = Math.round(b.curr * depRatio)
+                // 예산 금액 변경 → total만 갱신 (선금/잔금 분배는 결제 화면에서 직접 관리하므로 건드리지 않음)
                 await supabase.from('payments').update({
                   total: b.curr,
-                  deposit_amount: newDep,
-                  final_amount: b.curr - newDep,
                   currency: b.currency || 'KRW',
                 }).eq('id', existing.id)
                 // 로컬 상태도 반영
                 paymentsToSet = paymentsToSet.map((p: any) =>
-                  p.id === existing.id ? { ...p, total: b.curr, deposit_amount: newDep, final_amount: b.curr - newDep } : p
+                  p.id === existing.id ? { ...p, total: b.curr } : p
                 ) as unknown as Payment[]
               }
             }
@@ -295,26 +276,33 @@ export default function EventDetail() {
     }
   }
 
-  async function togglePaid(payId: string, type: 'deposit' | 'final') {
-    const pay = payments.find(p => p.id === payId)
-    if (!pay) return
-    if (type === 'deposit') {
-      const newVal = !pay.deposit_paid
-      const { error } = await supabase.from('payments').update({ deposit_paid: newVal }).eq('id', payId)
-      if (error) { showToast('⚠️ 저장 실패: ' + error.message); return }
-      setPayments(prev => prev.map(p => p.id === payId ? { ...p, deposit_paid: newVal } : p))
-    } else {
-      const newVal = !pay.final_paid
-      const { error } = await supabase.from('payments').update({ final_paid: newVal }).eq('id', payId)
-      if (error) { showToast('⚠️ 저장 실패: ' + error.message); return }
-      setPayments(prev => prev.map(p => p.id === payId ? { ...p, final_paid: newVal } : p))
-    }
-  }
-
-  async function savePayRow(payId: string, updates: Partial<Payment>) {
-    const { error } = await supabase.from('payments').update(updates as never).eq('id', payId)
+  async function togglePaid(payId: string, type: 'deposit' | 'final', current: boolean) {
+    const newVal = !current
+    const updates = type === 'deposit' ? { deposit_paid: newVal } : { final_paid: newVal }
+    const { error } = await supabase.from('payments').update(updates).eq('id', payId)
     if (error) { showToast('⚠️ 저장 실패: ' + error.message); return }
     setPayments(prev => prev.map(p => p.id === payId ? { ...p, ...updates } : p))
+  }
+
+  async function saveCurrency(payId: string, currency: string) {
+    setSavingPayId(payId)
+    const { error } = await supabase.from('payments').update({ currency }).eq('id', payId)
+    setSavingPayId(null)
+    if (error) { showToast('⚠️ 저장 실패: ' + error.message); return }
+    setPayments(prev => prev.map(p => p.id === payId ? { ...p, currency } : p))
+  }
+
+  async function saveAmounts(pay: Payment, depositAmt: number, depositDue: string, finalAmt: number, finalDue: string) {
+    setSavingPayId(pay.id)
+    const { error } = await supabase.from('payments').update({
+      deposit_amount: depositAmt, deposit_due: depositDue || null,
+      final_amount: finalAmt, final_due: finalDue || null,
+    }).eq('id', pay.id)
+    setSavingPayId(null)
+    if (error) { showToast('⚠️ 저장 실패: ' + error.message); return }
+    setPayments(prev => prev.map(p => p.id === pay.id
+      ? { ...p, deposit_amount: depositAmt, deposit_due: depositDue || null, final_amount: finalAmt, final_due: finalDue || null }
+      : p))
     showToast('저장되었습니다.')
   }
 
@@ -330,6 +318,7 @@ export default function EventDetail() {
   }
 
   async function deletePayRow(payId: string) {
+    if (!confirm('이 항목을 삭제하시겠습니까?')) return
     const { error } = await supabase.from('payments').delete().eq('id', payId)
     if (error) { showToast('⚠️ 삭제 실패: ' + error.message); return }
     setPayments(prev => prev.filter(p => p.id !== payId))
@@ -483,9 +472,11 @@ export default function EventDetail() {
           <BudgetTab
             overview={overview}
             payments={payments}
-            dbKey={dbKey}
+            color={color}
+            savingPayId={savingPayId}
             onTogglePaid={togglePaid}
-            onSavePayRow={savePayRow}
+            onSaveCurrency={saveCurrency}
+            onSaveAmounts={saveAmounts}
             onAddPayRow={addPayRow}
             onDeletePayRow={deletePayRow}
             onEditProposal={() => setShowEpModal(true)}
@@ -808,19 +799,20 @@ function OverviewBudgetTable({ budget, prevBudget, prevYear }: { budget: any[]; 
 }
 
 // ── 예산 탭 ──────────────────────────────────────────
-function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAddPayRow, onDeletePayRow, onEditProposal }: {
+function BudgetTab({ overview, payments, color, savingPayId, onTogglePaid, onSaveCurrency, onSaveAmounts, onAddPayRow, onDeletePayRow, onEditProposal }: {
   overview: any
   payments: Payment[]
-  dbKey: string
-  onTogglePaid: (id: string, type: 'deposit' | 'final') => void
-  onSavePayRow: (id: string, updates: Partial<Payment>) => void
+  color: string
+  savingPayId: string | null
+  onTogglePaid: (id: string, type: 'deposit' | 'final', cur: boolean) => void
+  onSaveCurrency: (id: string, cur: string) => void
+  onSaveAmounts: (pay: Payment, da: number, dd: string, fa: number, fd: string) => void
   onAddPayRow: () => void
   onDeletePayRow: (id: string) => void
   onEditProposal?: () => void
 }) {
   const { t } = useLang()
   const isMobile = useIsMobile()
-  const [deletePayConfirm, setDeletePayConfirm] = useState<string | null>(null)
 
   const budget = overview?.budget || []
   const byCur: Record<string, number> = {}
@@ -920,12 +912,11 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
         ) : (
           <>
             {payments.map((p) => (
-              <PayCard key={`${p.id}-${p.deposit_amount}-${p.final_amount}-${p.deposit_due}-${p.final_due}`} p={p}
-                onTogglePaid={onTogglePaid}
-                onSave={onSavePayRow}
+              <PaymentCard key={p.id} pay={p} color={color} isSaving={savingPayId === p.id}
+                onToggle={onTogglePaid}
+                onSaveCurrency={onSaveCurrency}
+                onSaveAmounts={onSaveAmounts}
                 onDelete={onDeletePayRow}
-                deleteConfirm={deletePayConfirm}
-                onSetDeleteConfirm={setDeletePayConfirm}
               />
             ))}
             <div style={{ padding: '12px 18px', borderTop: '1px solid var(--border)' }}>
@@ -934,166 +925,6 @@ function BudgetTab({ overview, payments, dbKey, onTogglePaid, onSavePayRow, onAd
           </>
         )}
       </div>
-    </div>
-  )
-}
-
-// ── 결제 행 (compact inline) ──────────────────────────────────────────────────
-function PayCard({ p, onTogglePaid, onSave, onDelete, deleteConfirm, onSetDeleteConfirm }: {
-  p: Payment
-  onTogglePaid: (id: string, type: 'deposit' | 'final') => void
-  onSave: (id: string, updates: Partial<Payment>) => void
-  onDelete: (id: string) => void
-  deleteConfirm: string | null
-  onSetDeleteConfirm: (id: string | null) => void
-}) {
-  const c = p.currency || 'KRW'
-  const { date: finDateInit, method: methodInit } = parseFinalDue(p.final_due)
-  const isLumpInit = p.final_amount === 0 && p.final_paid === true
-
-  const [itemName, setItemName] = useState(p.item)
-  const [mode, setMode] = useState<'lump' | 'split'>(isLumpInit ? 'lump' : 'split')
-  const [method, setMethod] = useState(methodInit || '계좌이체')
-  const [depAmt, setDepAmt] = useState(String(isLumpInit ? p.total : (p.deposit_amount || 0)))
-  const [depDue, setDepDue] = useState(p.deposit_due || '')
-  const [finAmt, setFinAmt] = useState(String(isLumpInit ? 0 : (p.final_amount || 0)))
-  const [finDue, setFinDue] = useState(finDateInit)
-  const initDepPct = p.total > 0 && !isLumpInit ? Math.round(p.deposit_amount / p.total * 100) : 50
-  const [depPct, setDepPct] = useState(initDepPct)
-
-  const paidAmt = mode === 'lump'
-    ? (p.deposit_paid ? p.total : 0)
-    : (p.deposit_paid ? p.deposit_amount : 0) + (p.final_paid ? p.final_amount : 0)
-  const pct = p.total ? Math.round(paidAmt / p.total * 100) : 0
-  const pctColor = pct === 100 ? '#059669' : pct > 0 ? '#F59E0B' : '#DC2626'
-
-  function handleSave() {
-    if (mode === 'lump') {
-      const amt = parseInt(depAmt) || p.total
-      onSave(p.id, { deposit_amount: amt, deposit_due: depDue || null, final_amount: 0, final_paid: true, final_due: encodeFinalDue('', method), total: amt })
-    } else {
-      const dep = parseInt(depAmt) || 0
-      const fin = parseInt(finAmt) || 0
-      onSave(p.id, { deposit_amount: dep, deposit_due: depDue || null, final_amount: fin, final_due: encodeFinalDue(finDue, method), total: dep + fin })
-    }
-  }
-
-  function PaidToggle({ paid, onToggle }: { paid: boolean; onToggle: () => void }) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} onClick={onToggle}>
-        <div style={{ width: 36, height: 20, borderRadius: 99, background: paid ? '#059669' : '#ccc', position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
-          <div style={{ position: 'absolute', top: 2.5, left: paid ? 17 : 2.5, width: 15, height: 15, background: 'white', borderRadius: '50%', transition: 'left .2s' }} />
-        </div>
-        <span style={{ fontSize: 12, fontWeight: 700, color: paid ? '#059669' : 'var(--muted)', whiteSpace: 'nowrap', minWidth: 56 }}>
-          {paid ? '납부완료 ✓' : '미납'}
-        </span>
-      </div>
-    )
-  }
-
-  const rowBase: React.CSSProperties = {
-    display: 'flex', alignItems: 'center', gap: 10,
-    padding: '7px 10px', borderRadius: 8, border: '1px solid',
-  }
-
-  return (
-    <div style={{ borderBottom: '0.5px solid var(--border)', padding: '10px 18px' }}>
-      {/* 헤더 행 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-        <input
-          value={itemName}
-          onChange={e => setItemName(e.target.value)}
-          onBlur={() => { if (itemName !== p.item) onSave(p.id, { item: itemName }) }}
-          style={{ fontSize: 13, fontWeight: 700, flex: 1, minWidth: 80, border: 'none', outline: 'none', background: 'transparent', color: 'var(--text)', fontFamily: 'inherit', padding: 0, cursor: 'text' }}
-        />
-        <CurrencyBadge cur={c} />
-        <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-          합계 <strong style={{ color: 'var(--accent)' }}>{fmtAmt(p.total, c)}</strong>
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <div style={{ width: 56, background: '#EEE', borderRadius: 3, height: 6, overflow: 'hidden' }}>
-            <div style={{ height: '100%', background: pctColor, width: `${pct}%`, borderRadius: 3, transition: 'width .3s' }} />
-          </div>
-          <span style={{ fontSize: 11, color: pctColor, fontWeight: 700, minWidth: 28 }}>{pct}%</span>
-        </div>
-        {(['lump', 'split'] as const).map(m => (
-          <button key={m} onClick={() => { setMode(m); if (m === 'lump') setDepAmt(String(p.total)) }}
-            style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap',
-              background: mode === m ? 'var(--accent)' : 'white', color: mode === m ? 'white' : 'var(--muted)',
-              border: `1.5px solid ${mode === m ? 'var(--accent)' : 'var(--border2)'}` }}>
-            {m === 'lump' ? '일시불' : '선금/잔금'}
-          </button>
-        ))}
-        <select value={method} onChange={e => setMethod(e.target.value)}
-          style={{ padding: '4px 8px', border: '1.5px solid var(--border2)', borderRadius: 6, fontSize: 12, background: 'white', cursor: 'pointer' }}>
-          {PAYMENT_METHODS.map(m => <option key={m}>{m}</option>)}
-        </select>
-        <button onClick={handleSave}
-          style={{ padding: '4px 12px', borderRadius: 6, background: 'var(--accent)', color: 'white', border: 'none', fontSize: 12, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
-          저장
-        </button>
-        {deleteConfirm === p.id ? (
-          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-            <span style={{ fontSize: 11, color: '#DC2626', fontWeight: 600 }}>삭제?</span>
-            <button onClick={() => { onDelete(p.id); onSetDeleteConfirm(null) }}
-              style={{ padding: '3px 8px', borderRadius: 5, background: '#DC2626', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>Yes</button>
-            <button onClick={() => onSetDeleteConfirm(null)}
-              style={{ padding: '3px 8px', borderRadius: 5, background: 'white', color: 'var(--muted)', border: '1px solid var(--border2)', fontSize: 11, cursor: 'pointer' }}>No</button>
-          </div>
-        ) : (
-          <button onClick={() => onSetDeleteConfirm(p.id)}
-            style={{ padding: '4px 8px', borderRadius: 6, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', fontSize: 11, cursor: 'pointer' }}>✕</button>
-        )}
-      </div>
-
-      {/* 납부 행 */}
-      {mode === 'lump' ? (
-        <div style={{ ...rowBase, flexWrap: 'wrap', background: p.deposit_paid ? '#ECFDF5' : '#FFFBEB', borderColor: p.deposit_paid ? '#6EE7B7' : '#FDE68A' }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', width: 36 }}>납부</span>
-          <input type="number" value={depAmt} onChange={e => setDepAmt(e.target.value)} onBlur={handleSave}
-            style={{ width: 130, padding: '5px 8px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13, textAlign: 'right', boxSizing: 'border-box' }} />
-          <input type="date" value={depDue} onChange={e => setDepDue(e.target.value)} onBlur={handleSave}
-            style={{ padding: '5px 8px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13 }} />
-          <PaidToggle paid={p.deposit_paid} onToggle={() => onTogglePaid(p.id, 'deposit')} />
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-          {/* 비율 조정 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '4px 10px', background: '#F1F5FD', borderRadius: 6, fontSize: 12, color: 'var(--muted)' }}>
-            <span>비율 — 선금</span>
-            <input type="number" value={depPct} min={0} max={100}
-              onChange={e => {
-                const v = Math.min(100, Math.max(0, parseInt(e.target.value) || 0))
-                setDepPct(v)
-                if (p.total > 0) { const d = Math.round(p.total * v / 100); setDepAmt(String(d)); setFinAmt(String(p.total - d)) }
-              }}
-              onBlur={handleSave}
-              style={{ width: 50, padding: '3px 6px', border: '1.5px solid var(--border2)', borderRadius: 6, fontSize: 12, textAlign: 'center' }} />
-            <span>% / 잔금 <strong>{100 - depPct}%</strong></span>
-            {p.total > 0 && (
-              <span style={{ marginLeft: 6, color: 'var(--accent)', fontSize: 11 }}>
-                선금 {fmtAmt(Math.round(p.total * depPct / 100), c)} · 잔금 {fmtAmt(p.total - Math.round(p.total * depPct / 100), c)}
-              </span>
-            )}
-          </div>
-          {([
-            { type: 'deposit' as const, label: '선금', paid: p.deposit_paid, amt: depAmt, due: depDue, setAmt: setDepAmt, setDue: setDepDue },
-            { type: 'final' as const, label: '잔금', paid: p.final_paid, amt: finAmt, due: finDue, setAmt: setFinAmt, setDue: setFinDue },
-          ]).map(box => (
-            <div key={box.type} style={{ ...rowBase, flexWrap: 'wrap',
-              background: box.paid ? '#ECFDF5' : box.type === 'deposit' ? '#EEF4FF' : '#F0FFF4',
-              borderColor: box.paid ? '#6EE7B7' : box.type === 'deposit' ? '#C7D7F8' : '#A7F3D0',
-            }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', width: 36 }}>{box.label}</span>
-              <input type="number" value={box.amt} onChange={e => box.setAmt(e.target.value)} onBlur={handleSave}
-                style={{ width: 130, padding: '5px 8px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13, textAlign: 'right', boxSizing: 'border-box' }} />
-              <input type="date" value={box.due} onChange={e => box.setDue(e.target.value)} onBlur={handleSave}
-                style={{ padding: '5px 8px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 13 }} />
-              <PaidToggle paid={box.paid} onToggle={() => onTogglePaid(p.id, box.type)} />
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   )
 }

@@ -23,7 +23,7 @@ interface ExhEntry {
 }
 
 interface UpcomingItem {
-  days: number; kind: string; name: string; date: string; color: string; detail: string; icon: string
+  days: number; kind: string; name: string; date: string; color: string; detail: string; icon: string; payKey?: string
 }
 
 export default function ExpoOverview() {
@@ -158,7 +158,7 @@ export default function ExpoOverview() {
           const dueDate = new Date(due)
           const diff = Math.round((dueDate.getTime() - today.getTime()) / 86400000)
           if (diff >= -7 && diff <= 60) {
-            items.push({ days: diff, kind: type, name, date: due, color: diff < 0 ? '#D63031' : '#C47D1A', detail: `${p.item}  ₩${(amount || 0).toLocaleString()}`, icon: '💰' })
+            items.push({ days: diff, kind: type, name, date: due, color: diff < 0 ? '#D63031' : '#C47D1A', detail: `${p.item}  ₩${(amount || 0).toLocaleString()}`, icon: '💰', payKey: dbKey })
           }
         }
       }
@@ -212,7 +212,7 @@ export default function ExpoOverview() {
             const dt = d < 0 ? `D+${Math.abs(d)}` : d === 0 ? 'D-Day' : `D-${d}`
             const isExh = u.kind === 'expo'
             return (
-              <div key={i} className="ucard" style={{ borderColor: u.color, background: bg }} onClick={() => navigate(isExh ? '/expo/schedule' : '/expo/payments')}>
+              <div key={i} className="ucard" style={{ borderColor: u.color, background: bg }} onClick={() => navigate(isExh ? '/expo/schedule' : '/expo/payments', !isExh && u.payKey ? { state: { key: u.payKey } } : undefined)}>
                 <div className="uc-top">
                   <span className="uc-kind">{u.icon} {u.kind === 'expo' ? t('kind_expo') : u.kind === 'deposit' ? t('deposit_pay') : u.kind === 'final' ? t('final_pay_short') : u.kind}</span>
                   <span className="uc-d" style={{ color: dc }}>{dt}</span>

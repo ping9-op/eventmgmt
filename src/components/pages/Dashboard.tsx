@@ -22,7 +22,7 @@ interface ExhEntry {
 
 interface UpcomingItem {
   days: number; kind: string; name: string; date: string
-  color: string; detail: string; icon: string; path: string
+  color: string; detail: string; icon: string; path: string; payKey?: string
 }
 
 export default function Dashboard() {
@@ -123,7 +123,7 @@ export default function Dashboard() {
           const dueDate = new Date(due)
           const diff = Math.round((dueDate.getTime() - today.getTime()) / 86400000)
           if (diff >= -7 && diff <= 60) {
-            items.push({ days: diff, kind: type, name, date: due, color: diff < 0 ? '#D63031' : '#C47D1A', detail: `${p.item}  ₩${(amount || 0).toLocaleString()}`, icon: '💰', path: '/expo/payments' })
+            items.push({ days: diff, kind: type, name, date: due, color: diff < 0 ? '#D63031' : '#C47D1A', detail: `${p.item}  ₩${(amount || 0).toLocaleString()}`, icon: '💰', path: '/expo/payments', payKey: dbKey })
           }
         }
       }
@@ -304,7 +304,7 @@ export default function Dashboard() {
             const txtCol = urgent ? '#DC2626' : passed ? '#9CA3AF' : '#4F46E5'
             const dayLabel = passed ? `D+${Math.abs(d)}` : d === 0 ? 'D-Day' : `D-${d}`
             return (
-              <div key={idx} onClick={() => navigate(ev.path)} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 0', borderBottom: '0.5px solid var(--border)', cursor: 'pointer' }}
+              <div key={idx} onClick={() => navigate(ev.path, ev.payKey ? { state: { key: ev.payKey } } : undefined)} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 0', borderBottom: '0.5px solid var(--border)', cursor: 'pointer' }}
                 onMouseOver={ev2 => (ev2.currentTarget as HTMLDivElement).style.opacity = '.7'}
                 onMouseOut={ev2 => (ev2.currentTarget as HTMLDivElement).style.opacity = '1'}>
                 <div style={{ background: bgCol, borderRadius: 8, padding: '5px 8px', textAlign: 'center', minWidth: 46, flexShrink: 0 }}>

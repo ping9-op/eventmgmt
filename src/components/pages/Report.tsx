@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { krw, exhColor } from '../../lib/utils'
-import type { Exhibition, Proposal, Result, ActualCost, MarketingActivity } from '../../types/database'
+import type { Exhibition, Proposal, Result, ActualCost, MarketingActivity, Payment } from '../../types/database'
 import { useToast } from '../../contexts/ToastContext'
 import pptxgen from 'pptxgenjs'
 import { useLang } from '../../contexts/LangContext'
@@ -13,8 +13,16 @@ const PHOTO_BUCKET = 'report-photos'
 
 interface ReportKey { label: string; exhibition_key: string }
 
+// 결제 일정(payments)에서 항목별로 이미 납부 완료된 금액 합계를 구한다
+function paidTotalForItem(pays: Payment[] | undefined, item: string): number {
+  if (!pays) return 0
+  return pays
+    .filter(p => p.item === item)
+    .reduce((s, p) => s + (p.deposit_paid ? p.deposit_amount : 0) + (p.final_paid ? p.final_amount : 0), 0)
+}
+
 // Proposal 데이터로 보고서 초기값 자동 생성
-function buildDefaultFromProposal(key: string, prop: Proposal, exhName: string): Partial<Result> {
+function buildDefaultFromProposal(key: string, prop: Proposal, exhName: string, pays?: Payment[]): Partial<Result> {
   const budget = (prop.budget as any[]) || []
   return {
     exhibition_key: key,
@@ -25,11 +33,11 @@ function buildDefaultFromProposal(key: string, prop: Proposal, exhName: string):
     event_date: prop.date_of_event || '',
     event_venue: prop.venue || '',
     event_target: '',
-    // 예산 항목을 승인예산으로 자동 로드 (실제 지출은 0으로 초기화)
+    // 예산 항목을 승인예산으로 자동 로드, 실제 지출은 결제 일정에서 이미 납부된 금액으로 초기화
     actual_costs: budget.map((b: any) => ({
       item: b.item,
       budgeted: b.curr || 0,
-      actual: 0,
+      actual: paidTotalForItem(pays, b.item),
       currency: b.currency || 'KRW',
       note: '',
     })),
@@ -58,6 +66,8 @@ export default function Report() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   // Proposal 데이터 캐시 (exhibition_key → proposal)
   const [propCache, setPropCache] = useState<Record<string, { prop: Proposal; exhName: string }>>({})
+  // 결제 일정 캐시 (exhibition_key → payments) — 실제 지출 자동 반영에 사용
+  const [paymentsByKey, setPaymentsByKey] = useState<Record<string, Payment[]>>({})
   const photoInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -65,15 +75,23 @@ export default function Report() {
 
     async function load() {
       try {
-        const [{ data: exhData }, { data: propData }, { data: resultData }] = await Promise.all([
+        const [{ data: exhData }, { data: propData }, { data: resultData }, { data: payData }] = await Promise.all([
           supabase.from('exhibitions').select('*'),
           supabase.from('proposals').select('*').order('year'),
           supabase.from('results').select('*'),
+          supabase.from('payments').select('*'),
         ])
         if (cancelled) return
 
         const exhMap: Record<string, Exhibition> = {}
         for (const e of (exhData || [])) exhMap[e.id] = e
+
+        const payMap: Record<string, Payment[]> = {}
+        for (const p of (payData || []) as unknown as Payment[]) {
+          if (!payMap[p.exhibition_key]) payMap[p.exhibition_key] = []
+          payMap[p.exhibition_key].push(p)
+        }
+        if (!cancelled) setPaymentsByKey(payMap)
 
         // Proposal 캐시 구성 (exhibition_key → 최신 proposal)
         const cache: Record<string, { prop: Proposal; exhName: string }> = {}
@@ -101,7 +119,7 @@ export default function Report() {
           if (resultMap[sel]) {
             setReport(resultMap[sel])
           } else if (cache[sel]) {
-            setReport(buildDefaultFromProposal(sel, cache[sel].prop, cache[sel].exhName) as unknown as Result)
+            setReport(buildDefaultFromProposal(sel, cache[sel].prop, cache[sel].exhName, payMap[sel]) as unknown as Result)
           }
         }
       } catch (e) {
@@ -122,7 +140,7 @@ export default function Report() {
       setReport(data as unknown as Result)
     } else if (propCache[k]) {
       // 저장된 보고서 없음 → Proposal 데이터로 자동 초기화
-      setReport(buildDefaultFromProposal(k, propCache[k].prop, propCache[k].exhName) as unknown as Result)
+      setReport(buildDefaultFromProposal(k, propCache[k].prop, propCache[k].exhName, paymentsByKey[k]) as unknown as Result)
     } else {
       setReport(null)
     }
@@ -619,11 +637,24 @@ export default function Report() {
               <tbody>
                 {(r.actual_costs || []).map((c, i) => {
                   const diff = (c.actual ?? 0) - (c.budgeted ?? 0)
+                  const paidAmt = paidTotalForItem(paymentsByKey[selected || ''], c.item)
+                  const paidMismatch = paidAmt > 0 && paidAmt !== (c.actual ?? 0)
                   return (
                     <tr key={i}>
                       <td><input value={c.item} onChange={e => updateCost(i, 'item', e.target.value)} /></td>
                       <td><input type="number" value={c.budgeted ?? ''} style={{ textAlign: 'right' }} onChange={e => updateCost(i, 'budgeted', e.target.value === '' ? 0 : Number(e.target.value))} /></td>
-                      <td><input type="number" value={c.actual ?? ''} style={{ textAlign: 'right' }} onChange={e => updateCost(i, 'actual', e.target.value === '' ? 0 : Number(e.target.value))} /></td>
+                      <td>
+                        <input type="number" value={c.actual ?? ''} style={{ textAlign: 'right' }} onChange={e => updateCost(i, 'actual', e.target.value === '' ? 0 : Number(e.target.value))} />
+                        {paidMismatch && (
+                          <div style={{ fontSize: 10, color: 'var(--accent)', textAlign: 'right', marginTop: 2, whiteSpace: 'nowrap' }}>
+                            💰 결제 완료 {krw(paidAmt)}
+                            <button type="button" onClick={() => updateCost(i, 'actual', paidAmt)}
+                              style={{ marginLeft: 4, padding: '0 5px', fontSize: 10, border: '1px solid var(--border2)', borderRadius: 4, background: 'white', cursor: 'pointer' }}>
+                              반영
+                            </button>
+                          </div>
+                        )}
+                      </td>
                       <td style={{ textAlign: 'right' }}>
                         <span className={diff > 0 ? 'over' : diff < 0 ? 'under' : ''}>
                           {c.actual != null ? (diff > 0 ? `▲ ${krw(diff)}` : diff < 0 ? `▼ ${krw(Math.abs(diff))}` : '—') : '-'}

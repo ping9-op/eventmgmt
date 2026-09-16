@@ -61,12 +61,9 @@ export default function ProposalEditModal({ propId, exhName, exhKey, year, initi
       const pay = pays.find(p => p.item === b.item)
       if (pay) {
         if (pay.total !== b.curr && !pay.deposit_paid && !pay.final_paid) {
-          // 미납 상태에서만 금액 변경 반영 (납부 완료 항목은 건드리지 않음)
-          const depRatio = pay.total > 0 ? pay.deposit_amount / pay.total : 0.5
-          const newDep = Math.round(b.curr * depRatio)
+          // 미납 상태에서만 total 갱신 (선금/잔금 분배는 결제 화면에서 직접 관리하므로 건드리지 않음)
           await supabase.from('payments').update({
             total: b.curr, currency: b.currency || 'KRW',
-            deposit_amount: newDep, final_amount: b.curr - newDep,
           }).eq('id', pay.id)
         }
       } else {

@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { costColor, exhColor, CUR_SYM, fmtCur } from '../../lib/utils'
+import { exhColor, CUR_SYM, fmtCur } from '../../lib/utils'
 import type { Exhibition, Payment } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
 import LoadingSpinner from '../LoadingSpinner'
 import EmptyState from '../EmptyState'
+import PaymentCard from '../PaymentCard'
 
 
 function sumByCur(pays: Payment[], fn: (p: Payment) => number): string {
@@ -73,7 +74,9 @@ export default function Payments() {
       setPayments(payMap)
       const keys = Object.keys(payMap)
       if (initKey && keys.includes(initKey)) setSelected(initKey)
-      else if (keys.length) setSelected(prev => prev || keys[0])
+      // initKey가 없거나 유효하지 않을 때 임의의 첫 박람회를 자동 선택하지 않는다.
+      // (실제로는 데이터가 있는 박람회를 보러 왔는데, 엉뚱하게 선택된 다른 — 데이터 없는 —
+      //  박람회의 빈 화면을 보고 "아무것도 입력되지 않았다"고 오인하는 문제를 방지)
     } catch (e) {
       showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error')
     } finally {
@@ -380,8 +383,8 @@ export default function Payments() {
               const color = exhColorFromKey(selected)
               const isSaving = saving === pay.id
               return (
-                <PayCard
-                  key={`${pay.id}-${pay.deposit_amount}-${pay.final_amount}-${pay.currency}-${pay.deposit_paid}-${pay.final_paid}`}
+                <PaymentCard
+                  key={pay.id}
                   pay={pay} color={color} isSaving={isSaving}
                   onToggle={togglePaid}
                   onSaveCurrency={saveCurrency}
@@ -519,80 +522,4 @@ export default function Payments() {
   )
 }
 
-function PayCard({ pay, color, isSaving, onToggle, onSaveCurrency, onSaveAmounts, onDelete }: {
-  pay: Payment; color: string; isSaving: boolean
-  onToggle: (id: string, type: 'deposit' | 'final', cur: boolean) => void
-  onSaveCurrency: (id: string, cur: string) => void
-  onSaveAmounts: (pay: Payment, da: number, dd: string, fa: number, fd: string) => void
-  onDelete: (id: string) => void
-}) {
-  const { t } = useLang()
-  const [depositAmt, setDepositAmt] = useState(String(pay.deposit_amount))
-  const [depositDue, setDepositDue] = useState(pay.deposit_due || '')
-  const [finalAmt, setFinalAmt] = useState(String(pay.final_amount))
-  const [finalDue, setFinalDue] = useState(pay.final_due || '')
-
-  return (
-    <div className="pay-item-card">
-      <div className="pic-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
-          <div style={{ width: 5, height: 22, background: costColor(pay.item), borderRadius: 3, flexShrink: 0 }} />
-          <span style={{ fontWeight: 700, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '40%' }}>{pay.item}</span>
-          <span style={{ fontSize: 13, color: 'var(--muted)', whiteSpace: 'nowrap', flexShrink: 0 }}>
-            {t('total')}: <strong style={{ color: 'var(--accent)' }}>
-              {(CUR_SYM[pay.currency] || pay.currency)}{pay.total.toLocaleString()}
-            </strong>
-          </span>
-          <select
-            value={pay.currency || 'KRW'}
-            onChange={e => onSaveCurrency(pay.id, e.target.value)}
-            style={{ padding: '4px 6px', border: '1px solid var(--border2)', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0, background: 'white', width: 72 }}>
-            {['KRW', 'JPY', 'USD', 'EUR', 'SGD'].map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </div>
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          <button
-            className="btn btn-muted btn-sm"
-            disabled={isSaving}
-            onClick={() => onSaveAmounts(pay, parseFloat(depositAmt) || 0, depositDue, parseFloat(finalAmt) || 0, finalDue)}>
-            {isSaving ? t('saving') : t('save_pay')}
-          </button>
-          <button
-            className="btn btn-sm"
-            style={{ background: '#FFF0F0', color: '#D63031', border: '1px solid #F5C6C6' }}
-            onClick={() => onDelete(pay.id)}>
-            🗑️
-          </button>
-        </div>
-      </div>
-      <div className="pic-body">
-        <div className="pic-col" style={{ background: '#EEF4FF' }}>
-          <div className="pc-title">{t('deposit_label')}</div>
-          <label>{t('amount_col')}</label>
-          <input type="number" value={depositAmt} onChange={e => setDepositAmt(e.target.value)} />
-          <label>{t('pay_date')}</label>
-          <input type="date" value={depositDue} onChange={e => setDepositDue(e.target.value)} />
-          <div className="status-toggle" onClick={() => onToggle(pay.id, 'deposit', pay.deposit_paid)} style={{ cursor: 'pointer' }}>
-            <div className={`toggle${pay.deposit_paid ? ' on' : ''}`} />
-            <span style={{ fontSize: 13, fontWeight: 600, color: pay.deposit_paid ? 'var(--green)' : 'var(--muted)' }}>
-              {pay.deposit_paid ? t('paid_ok') + ' ✓' : t('not_paid')}
-            </span>
-          </div>
-        </div>
-        <div className="pic-col" style={{ background: '#F0FFF4' }}>
-          <div className="pc-title">{t('final_pay')}</div>
-          <label>{t('amount_col')}</label>
-          <input type="number" value={finalAmt} onChange={e => setFinalAmt(e.target.value)} />
-          <label>{t('pay_date')}</label>
-          <input type="date" value={finalDue} onChange={e => setFinalDue(e.target.value)} />
-          <div className="status-toggle" onClick={() => onToggle(pay.id, 'final', pay.final_paid)} style={{ cursor: 'pointer' }}>
-            <div className={`toggle${pay.final_paid ? ' on' : ''}`} />
-            <span style={{ fontSize: 13, fontWeight: 600, color: pay.final_paid ? 'var(--green)' : 'var(--muted)' }}>
-              {pay.final_paid ? t('paid_ok') + ' ✓' : t('not_paid')}
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
+// PaymentCard는 '../PaymentCard'로 이동 — 예산 탭 내 결제 일정과 UI/동작을 공유한다.
