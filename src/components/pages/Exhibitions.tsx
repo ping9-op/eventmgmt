@@ -49,6 +49,7 @@ export default function Exhibitions() {
   // 과거 Proposal 등록 폼
   const [apExhSel, setApExhSel] = useState('')   // 기존 박람회 ID or ''
   const [apName, setApName] = useState('')
+  const [apKey, setApKey] = useState('')   // 신규 박람회 키(약어) — 비워두면 이름에서 자동 생성
   const [apYear, setApYear] = useState(String(new Date().getFullYear()))
   const [apAuthor, setApAuthor] = useState('Andrew')
   const [apPdate, setApPdate] = useState(new Date().toISOString().split('T')[0])
@@ -111,6 +112,7 @@ export default function Exhibitions() {
 
   function onApExhSel(id: string) {
     setApExhSel(id)
+    setApKey('')
     if (!id) { setApName(''); return }
     const found = data.find(d => d.exh.id === id)
     if (found) {
@@ -142,7 +144,8 @@ export default function Exhibitions() {
       let exhKey = ''
 
       if (!exhId) {
-        const key = apName.replace(/[^a-zA-Z0-9]/g, '').substring(0, 12) || 'EXH' + Date.now()
+        const key = apKey.trim().replace(/[^a-zA-Z0-9]/g, '')
+          || apName.replace(/[^a-zA-Z0-9]/g, '').substring(0, 12) || 'EXH' + Date.now()
         const { data: newExh, error: exhErr } = await supabase.from('exhibitions').insert({
           key, name: apName, recurring: apRecurring === '1'
         }).select().single()
@@ -209,7 +212,7 @@ export default function Exhibitions() {
   }
 
   function resetForm() {
-    setApExhSel(''); setApName(''); setApYear(String(new Date().getFullYear()))
+    setApExhSel(''); setApName(''); setApKey(''); setApYear(String(new Date().getFullYear()))
     setApAuthor('Andrew'); setApPdate(new Date().toISOString().split('T')[0])
     setApRecurring('1'); setApDate(''); setApStartDate(''); setApEndDate(''); setApVenue(''); setApObj('')
     setApResults([''])
@@ -415,8 +418,12 @@ export default function Exhibitions() {
               {data.map(d => <option key={d.exh.id} value={d.exh.id}>{d.exh.name}</option>)}
             </select>
 
-            <div className="form-row cols2">
+            <div className="form-row cols3">
               <div><label>{t('exh_name_lbl')}</label><input value={apName} onChange={e => setApName(e.target.value)} placeholder={t('exh_name_placeholder')} /></div>
+              <div>
+                <label>박람회 키(약어)</label>
+                <input value={apKey} onChange={e => setApKey(e.target.value)} placeholder="예: SITF (비우면 이름에서 자동 생성)" disabled={!!apExhSel} />
+              </div>
               <div><label>{t('year_label')}</label><input type="number" value={apYear} onChange={e => setApYear(e.target.value)} /></div>
             </div>
             <div className="form-row cols3">
