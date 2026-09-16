@@ -185,11 +185,13 @@ export default function Proposal() {
     setSaving(true)
     try {
       let finalExhId = exhId
+      let finalExhKey = exhibitions.find(e => e.id === exhId)?.key || ''
       if (isNewExh && newExhName) {
         const key = newExhKey.trim().replace(/\s/g, '_') || newExhName.replace(/[^a-zA-Z]/g, '').substring(0, 10)
         const { data, error } = await supabase.from('exhibitions').insert({ key, name: newExhName, recurring: newExhRecurring }).select().single()
         if (error || !data) throw new Error(error?.message || '박람회 등록 실패')
         finalExhId = data.id
+        finalExhKey = key
       }
       const proposalData = {
         exhibition_id: finalExhId, year, proposal_date: propDate, author,
@@ -207,8 +209,7 @@ export default function Proposal() {
         // 신규 또는 복사 — 제안서 + 결제 항목 모두 새로 생성
         const { error } = await supabase.from('proposals').insert(proposalData)
         if (error) throw new Error(error.message)
-        const exh = exhibitions.find(e => e.id === finalExhId)
-        const dbKey = (exh?.key || newExhName.replace(/[^a-zA-Z]/g, '').substring(0, 10)) + '_' + year
+        const dbKey = `${finalExhKey}_${year}`
         for (const b of budget.filter(b => b.curr > 0)) {
           const { error: payErr } = await supabase.from('payments').insert({
             exhibition_key: dbKey, item: b.item, total: b.curr, currency: (b as any).currency || 'KRW',
