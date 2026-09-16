@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { exhColor, CUR_SYM, fmtCur } from '../../lib/utils'
+import { exhColor, exhDisplayName, CUR_SYM, fmtCur } from '../../lib/utils'
 import type { Exhibition, Payment } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
@@ -230,7 +230,7 @@ export default function Payments() {
     const parts = dbKey.split('_')
     const yr = parts[parts.length - 1]
     const k = parts.slice(0, -1).join('_')
-    return (exhibitions[k]?.name || k) + ' ' + yr
+    return exhDisplayName(exhibitions[k]?.name || k, k) + ' ' + yr
   }
 
   function exhColorFromKey(dbKey: string): string {

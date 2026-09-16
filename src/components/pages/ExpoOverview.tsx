@@ -148,7 +148,7 @@ export default function ExpoOverview() {
     for (const [dbKey, pays] of Object.entries(payments)) {
       const parts = dbKey.split('_'); const yr = parts[parts.length - 1]; const k = parts.slice(0, -1).join('_')
       const exhEntry = entries.find(x => x.key === k)
-      const name = (exhEntry?.name || k) + ' ' + yr
+      const name = exhDisplayName(exhEntry?.name || k, k) + ' ' + yr
       for (const p of pays) {
         for (const [type, due, amount, paid] of [
           ['deposit', p.deposit_due, p.deposit_amount, p.deposit_paid],

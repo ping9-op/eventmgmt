@@ -38,6 +38,8 @@ export default function Exhibitions() {
   const [data, setData] = useState<ExhEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [renameModal, setRenameModal] = useState<{ id: string; name: string } | null>(null)
+  const [renameSaving, setRenameSaving] = useState(false)
   const [epModal, setEpModal] = useState<EpModalState | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -231,6 +233,21 @@ export default function Exhibitions() {
     setApBudget(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
   }
 
+  async function renameExhibition(exhId: string, newName: string) {
+    const name = newName.trim()
+    if (!name) { showToast('⚠️ 박람회 이름을 입력하세요.'); return }
+    setRenameSaving(true)
+    try {
+      const { error } = await supabase.from('exhibitions').update({ name }).eq('id', exhId)
+      if (error) { showToast('⚠️ 이름 수정 실패: ' + error.message); return }
+      setRenameModal(null)
+      showToast('박람회 이름이 수정되었습니다.')
+      load()
+    } finally {
+      setRenameSaving(false)
+    }
+  }
+
   async function deleteExhibition(exhId: string) {
     try {
       const exh = data.find(d => d.exh.id === exhId)?.exh
@@ -294,10 +311,16 @@ export default function Exhibitions() {
                     <span className="badge" style={{ background: proposals.length >= 2 ? '#2E7D51' : 'var(--amber)' }}>
                       {proposals.length >= 2 ? t('badge_existing') : t('badge_new')}
                     </span>
-                    <button onClick={() => setDeleteConfirm(exh.id)}
-                      style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 5, color: 'var(--muted)', cursor: 'pointer', fontSize: 11, padding: '2px 8px', minHeight: 44 }}>
-                      {t('btn_delete')}
-                    </button>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button onClick={() => setRenameModal({ id: exh.id, name: exh.name })}
+                        style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 5, color: 'var(--muted)', cursor: 'pointer', fontSize: 11, padding: '2px 8px', minHeight: 44 }}>
+                        ✏️ 이름 수정
+                      </button>
+                      <button onClick={() => setDeleteConfirm(exh.id)}
+                        style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 5, color: 'var(--muted)', cursor: 'pointer', fontSize: 11, padding: '2px 8px', minHeight: 44 }}>
+                        {t('btn_delete')}
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <div className="ec-meta">
@@ -501,6 +524,31 @@ export default function Exhibitions() {
           onSaved={() => { setEpModal(null); load() }}
           onDeleted={() => { setEpModal(null); load() }}
         />
+      )}
+
+      {/* 이름 수정 모달 */}
+      {renameModal && (
+        <div className="modal-bg open">
+          <div className="modal" style={{ maxWidth: 400 }}>
+            <div className="modal-hdr">
+              <h3>박람회 이름 수정</h3>
+              <button className="modal-close" onClick={() => setRenameModal(null)}>✕</button>
+            </div>
+            <input
+              autoFocus
+              value={renameModal.name}
+              onChange={e => setRenameModal(m => m && { ...m, name: e.target.value })}
+              onKeyDown={e => e.key === 'Enter' && renameExhibition(renameModal.id, renameModal.name)}
+              style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border2)', borderRadius: 8, fontSize: 14, boxSizing: 'border-box', marginBottom: 20 }}
+            />
+            <div className="modal-footer">
+              <button className="btn btn-muted" onClick={() => setRenameModal(null)}>{t('cancel')}</button>
+              <button className="btn btn-primary" onClick={() => renameExhibition(renameModal.id, renameModal.name)} disabled={renameSaving || !renameModal.name.trim()}>
+                {renameSaving ? t('saving') : t('save_pay')}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 삭제 확인 모달 */}

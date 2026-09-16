@@ -107,13 +107,13 @@ export default function Dashboard() {
       const eventDate = new Date(yr, months[m[1]], day)
       const diff = Math.round((eventDate.getTime() - today.getTime()) / 86400000)
       if (diff >= -7 && diff <= 60) {
-        items.push({ days: diff, kind: 'expo', name: e.name + ' ' + e.year, date: formatEventDate(e.date, e.year), color: exhColor(e.name), detail: e.venue, icon: '📅', path: '/expo/schedule' })
+        items.push({ days: diff, kind: 'expo', name: exhDisplayName(e.name, e.key) + ' ' + e.year, date: formatEventDate(e.date, e.year), color: exhColor(e.name), detail: e.venue, icon: '📅', path: '/expo/schedule' })
       }
     }
     for (const [dbKey, pays] of Object.entries(payments)) {
       const parts = dbKey.split('_'); const yr = parts[parts.length - 1]; const k = parts.slice(0, -1).join('_')
       const exhEntry = entries.find(e => e.key === k)
-      const name = (exhEntry?.name || k) + ' ' + yr
+      const name = exhDisplayName(exhEntry?.name || k, k) + ' ' + yr
       for (const p of pays) {
         for (const [type, due, amount, paid] of [
           ['deposit', p.deposit_due, p.deposit_amount, p.deposit_paid] as [string, string | null, number, boolean],
