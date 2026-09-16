@@ -229,7 +229,7 @@ export default function Dashboard() {
                 onMouseOut={ev => (ev.currentTarget as HTMLDivElement).style.opacity = '1'}>
                 <div>
                   <span style={{ fontSize: 12, fontWeight: 600 }}>{exhDisplayName(e.name, e.key)}</span>
-                  <span style={{ fontSize: 10, color: 'var(--muted)', marginLeft: 5 }}>{e.year}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, marginLeft: 5 }}>{e.year}</span>
                 </div>
                 <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', flexShrink: 0, maxWidth: '55%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{recentExhBudgetStr(e)}</span>
               </div>
