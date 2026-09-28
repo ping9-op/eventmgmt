@@ -17,6 +17,53 @@ type ViewMode = 'group' | 'detail'
 
 interface ExcelPreview { rows: Partial<SalesLead>[]; fileName: string; eventName?: string }
 
+interface MappingState {
+  fileName: string
+  sheetNames: string[]
+  selectedSheet: string
+  headers: string[]
+  rows: Record<string, any>[]
+  mapping: Record<string, string>
+  eventName?: string
+}
+
+// 매핑 대상 필드 + 자동 추측용 헤더 별칭 (엑셀 양식마다 헤더명이 달라도 여기 별칭에 걸리면 자동 선택됨)
+const FIELD_DEFS: { key: string; label: string; required?: boolean; aliases: string[] }[] = [
+  { key: 'company_name', label: '회사명', required: true, aliases: ['company_name', 'company', '회사명', '상호', '상호명', '업체명', '가맹점명', '소속', 'merchant', 'merchant name', 'affiliation'] },
+  { key: 'contact_person', label: '담당자', aliases: ['contact_person', 'contact', '담당자', '성명', '이름', 'name'] },
+  { key: 'phone', label: '전화번호', aliases: ['phone', '전화', '연락처', '전화번호', 'hp', '휴대폰', '휴대전화', 'mobile', 'tel'] },
+  { key: 'email', label: '이메일', aliases: ['email', '이메일', 'e-mail', '이메일주소'] },
+  { key: 'event_name', label: '행사명', aliases: ['event_name', 'event', '행사명'] },
+  { key: 'owner', label: 'Owner', aliases: ['owner', '담당매니저', '매니저'] },
+  { key: 'priority', label: 'Priority', aliases: ['priority', '우선순위'] },
+  { key: 'current_stage', label: 'Stage', aliases: ['current_stage', 'stage', '스테이지', '단계'] },
+  { key: 'country_corridor', label: 'Corridor', aliases: ['country_corridor', 'corridor', '송금국가', '국가'] },
+  { key: 'business_type', label: 'Business Type', aliases: ['business_type', 'business type', '업종'] },
+  { key: 'expected_monthly_volume', label: 'Volume', aliases: ['expected_monthly_volume', 'volume', '예상거래량', '월예상금액'] },
+  { key: 'volume_currency', label: 'Currency', aliases: ['volume_currency', 'currency', '통화'] },
+  { key: 'address', label: '주소', aliases: ['address', '주소'] },
+  { key: 'remarks', label: '비고', aliases: ['remarks', '비고', '메모', 'note'] },
+  { key: 'lead_source', label: 'Source', aliases: ['lead_source', 'source', '유입경로', '채널'] },
+]
+
+function guessMapping(headers: string[]): Record<string, string> {
+  const norm = headers.map(h => ({ raw: h, norm: h.trim().toLowerCase() }))
+  const result: Record<string, string> = {}
+  for (const f of FIELD_DEFS) {
+    const aliasSet = f.aliases.map(a => a.toLowerCase())
+    const match = norm.find(n => aliasSet.includes(n.norm))
+    result[f.key] = match ? match.raw : ''
+  }
+  return result
+}
+
+function readSheet(XLSX: any, wb: any, sheetName: string): { headers: string[]; rows: Record<string, any>[] } {
+  const ws = wb.Sheets[sheetName]
+  const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(ws, { defval: '' })
+  const headers = rows.length ? Object.keys(rows[0]) : ((XLSX.utils.sheet_to_json(ws, { header: 1 })[0] || []) as any[]).map(h => String(h))
+  return { headers, rows }
+}
+
 function StageBadge({ stage }: { stage: string }) {
   const c = STAGE_COLORS[stage] || { bg: '#6B7280' }
   return <span style={{ display: 'inline-block', padding: '3px 9px', borderRadius: 99, fontSize: 11, fontWeight: 700, color: 'white', background: c.bg, whiteSpace: 'nowrap' }}>{stage}</span>
@@ -58,8 +105,11 @@ export default function SalesLeads() {
   const [showRegister, setShowRegister] = useState(false)
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const [excelPreview, setExcelPreview] = useState<ExcelPreview | null>(null)
+  const [mappingState, setMappingState] = useState<MappingState | null>(null)
   const [importing, setImporting] = useState(false)
   const [pdfFileName, setPdfFileName] = useState('')
+  const workbookRef = useRef<any>(null)
+  const xlsxModRef = useRef<any>(null)
 
   // 일괄 Stage 변경
   const [bulkStageTarget, setBulkStageTarget] = useState<string>('')
@@ -240,39 +290,78 @@ export default function SalesLeads() {
     showToast('📋 템플릿이 다운로드되었습니다.')
   }
 
-  async function handleExcelFile(file: File, overrideEventName?: string) {
+  async function openMappingModal(file: File, overrideEventName?: string) {
     const XLSX = await import('xlsx')
     const reader = new FileReader()
     reader.onload = e => {
       const data = new Uint8Array(e.target!.result as ArrayBuffer)
       const wb = XLSX.read(data, { type: 'array' })
-      const ws = wb.Sheets[wb.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '' })
-      const parsed: Partial<SalesLead>[] = rows.map(r => {
-        const rawStage = String(r.current_stage || r['Stage'] || r['스테이지'] || '')
-        const rawEvent = String(r.event_name || r['Event'] || r['행사명'] || '')
-        return {
-          company_name: String(r.company_name || r['Company'] || r['회사명'] || ''),
-          contact_person: String(r.contact_person || r['Contact'] || r['담당자'] || ''),
-          phone: String(r.phone || r['Phone'] || r['연락처'] || r['전화'] || '') || null,
-          email: String(r.email || r['Email'] || r['이메일'] || '') || null,
-          lead_source: String(r.lead_source || r['Source'] || 'Expo'),
-          event_name: overrideEventName || rawEvent,
-          owner: String(r.owner || r['Owner'] || 'Andrew'),
-          priority: String(r.priority || r['Priority'] || 'Medium'),
-          current_stage: STAGE_ORDER.includes(rawStage) ? rawStage : 'New Lead',
-          country_corridor: String(r.country_corridor || r['Corridor'] || 'Korea → Japan'),
-          business_type: String(r.business_type || r['Business Type'] || r['business_type'] || 'Korean Restaurant'),
-          expected_monthly_volume: parseInt(String(r.expected_monthly_volume || r['Volume'] || '').replace(/[^0-9]/g, '')) || null,
-          volume_currency: String(r.volume_currency || r['Currency'] || 'USD'),
-          address: String(r.address || r['Address'] || '') || null,
-          remarks: String(r.remarks || r['Remarks'] || '') || null,
-        }
-      }).filter(r => r.company_name)
-      if (!parsed.length) { showToast('⚠️ 유효한 데이터가 없습니다. 템플릿을 확인해주세요.'); return }
-      setExcelPreview({ rows: parsed, fileName: file.name, eventName: overrideEventName })
+      workbookRef.current = wb
+      xlsxModRef.current = XLSX
+      const firstSheet = wb.SheetNames[0]
+      const { headers, rows } = readSheet(XLSX, wb, firstSheet)
+      if (!headers.length) { showToast('⚠️ 시트에서 헤더를 찾을 수 없습니다.'); return }
+      setMappingState({
+        fileName: file.name,
+        sheetNames: wb.SheetNames,
+        selectedSheet: firstSheet,
+        headers,
+        rows,
+        mapping: guessMapping(headers),
+        eventName: overrideEventName,
+      })
     }
     reader.readAsArrayBuffer(file)
+  }
+
+  function switchMappingSheet(sheetName: string) {
+    setMappingState(prev => {
+      if (!prev || !workbookRef.current || !xlsxModRef.current) return prev
+      const { headers, rows } = readSheet(xlsxModRef.current, workbookRef.current, sheetName)
+      const guessed = guessMapping(headers)
+      const mapping: Record<string, string> = {}
+      for (const f of FIELD_DEFS) {
+        mapping[f.key] = headers.includes(prev.mapping[f.key]) ? prev.mapping[f.key] : guessed[f.key]
+      }
+      return { ...prev, selectedSheet: sheetName, headers, rows, mapping }
+    })
+  }
+
+  function setFieldMapping(fieldKey: string, header: string) {
+    setMappingState(prev => prev ? { ...prev, mapping: { ...prev.mapping, [fieldKey]: header } } : prev)
+  }
+
+  function confirmMapping() {
+    if (!mappingState) return
+    const { rows, mapping, eventName } = mappingState
+    const get = (r: Record<string, any>, fieldKey: string) => {
+      const h = mapping[fieldKey]
+      return h ? String(r[h] ?? '').trim() : ''
+    }
+    const parsed: Partial<SalesLead>[] = rows.map(r => {
+      const rawStage = get(r, 'current_stage')
+      const rawEvent = get(r, 'event_name')
+      return {
+        company_name: get(r, 'company_name'),
+        contact_person: get(r, 'contact_person'),
+        phone: get(r, 'phone') || null,
+        email: get(r, 'email') || null,
+        lead_source: get(r, 'lead_source') || 'Expo',
+        event_name: eventName || rawEvent,
+        owner: get(r, 'owner') || 'Andrew',
+        priority: get(r, 'priority') || 'Medium',
+        current_stage: STAGE_ORDER.includes(rawStage) ? rawStage : 'New Lead',
+        country_corridor: get(r, 'country_corridor') || 'Korea → Japan',
+        business_type: get(r, 'business_type') || 'Korean Restaurant',
+        expected_monthly_volume: parseInt(get(r, 'expected_monthly_volume').replace(/[^0-9]/g, '')) || null,
+        volume_currency: get(r, 'volume_currency') || 'USD',
+        address: get(r, 'address') || null,
+        remarks: get(r, 'remarks') || null,
+      }
+    }).filter(r => r.company_name)
+    if (!parsed.length) { showToast('⚠️ 매핑한 회사명 컬럼에 값이 없습니다. 매핑을 다시 확인해주세요.'); return }
+    setExcelPreview({ rows: parsed, fileName: mappingState.fileName, eventName })
+    setMappingState(null)
   }
 
   function openGroupUpload(eventName: string) {
@@ -398,7 +487,7 @@ export default function SalesLeads() {
       <input ref={groupExcelInputRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }}
         onChange={e => {
           const f = e.target.files?.[0]
-          if (f) handleExcelFile(f, importEventNameRef.current || undefined)
+          if (f) openMappingModal(f, importEventNameRef.current || undefined)
           e.target.value = ''
         }} />
 
@@ -414,7 +503,7 @@ export default function SalesLeads() {
           <input id="pdf-input" type="file" accept=".pdf" style={{ display: 'none' }}
             onChange={e => { const f = e.target.files?.[0]; if (f) { setPdfFileName(f.name); showToast(`📎 "${f.name}" 첨부됨`) }; e.target.value = '' }} />
           <input id="excel-input" type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }}
-            onChange={e => { const f = e.target.files?.[0]; if (f) handleExcelFile(f); e.target.value = '' }} />
+            onChange={e => { const f = e.target.files?.[0]; if (f) openMappingModal(f); e.target.value = '' }} />
 
           {/* 액션 버튼 */}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -555,7 +644,7 @@ export default function SalesLeads() {
               if (!file) return
               const ext = file.name.split('.').pop()?.toLowerCase()
               if (['xlsx', 'xls', 'csv'].includes(ext || '')) {
-                handleExcelFile(file, groupKey && groupBy === 'event' ? groupKey : undefined)
+                openMappingModal(file, groupKey && groupBy === 'event' ? groupKey : undefined)
               } else {
                 showToast('⚠️ Excel 파일(.xlsx/.xls/.csv)만 지원합니다.')
               }
@@ -798,6 +887,77 @@ export default function SalesLeads() {
             </div>
           )}
         </>
+      )}
+
+      {/* 컬럼 매핑 모달 */}
+      {mappingState && (
+        <div className="modal-bg open">
+          <div className="modal" style={{ maxWidth: 640, width: 'min(640px, 95vw)' }}>
+            <div className="modal-hdr">
+              <h3>🔗 컬럼 매핑</h3>
+              <button className="modal-close" onClick={() => setMappingState(null)}>✕</button>
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 12 }}>
+              📎 "{mappingState.fileName}" — 감지된 행: <strong>{mappingState.rows.length}</strong>개. 엑셀의 각 컬럼을 어떤 항목으로 사용할지 확인해주세요.
+            </div>
+            {mappingState.sheetNames.length > 1 && (
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>시트 선택 ({mappingState.sheetNames.length}개 발견)</label>
+                <select value={mappingState.selectedSheet} onChange={e => switchMappingSheet(e.target.value)}
+                  style={{ padding: '6px 10px', borderRadius: 7, border: '1.5px solid var(--border2)', fontSize: 13 }}>
+                  {mappingState.sheetNames.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>⚠️ 한 번에 한 시트만 업로드됩니다. 다른 시트는 매핑 후 다시 업로드해주세요.</div>
+              </div>
+            )}
+            <div style={{ maxHeight: 360, overflowY: 'auto', border: '0.5px solid var(--border2)', borderRadius: 8 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: 'var(--light)', position: 'sticky', top: 0 }}>
+                    <th style={{ padding: '7px 10px', textAlign: 'left' }}>필드</th>
+                    <th style={{ padding: '7px 10px', textAlign: 'left' }}>엑셀 컬럼</th>
+                    <th style={{ padding: '7px 10px', textAlign: 'left' }}>미리보기 값</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {FIELD_DEFS.map(f => {
+                    const selected = mappingState.mapping[f.key]
+                    const sampleRow = selected ? mappingState.rows.find(r => String(r[selected] ?? '').trim()) : undefined
+                    const sample = sampleRow ? String(sampleRow[selected]) : ''
+                    return (
+                      <tr key={f.key} style={{ borderBottom: '0.5px solid var(--border)' }}>
+                        <td style={{ padding: '6px 10px', fontWeight: 600 }}>
+                          {f.label}{f.required && <span style={{ color: 'var(--accent)' }}> *</span>}
+                        </td>
+                        <td style={{ padding: '6px 10px' }}>
+                          <select value={selected} onChange={e => setFieldMapping(f.key, e.target.value)}
+                            style={{ padding: '4px 8px', borderRadius: 6, border: `1.5px solid ${f.required && !selected ? 'var(--accent)' : 'var(--border2)'}`, fontSize: 12, minWidth: 140 }}>
+                            <option value="">사용 안함</option>
+                            {mappingState.headers.map(h => <option key={h} value={h}>{h}</option>)}
+                          </select>
+                        </td>
+                        <td style={{ padding: '6px 10px', fontSize: 11, color: 'var(--muted)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {sample || '—'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {mappingState.eventName && (
+              <div style={{ fontSize: 12, marginTop: 10, background: '#FFF0F0', color: 'var(--accent)', padding: '6px 10px', borderRadius: 7, fontWeight: 700 }}>
+                📌 행사명은 "{mappingState.eventName}"으로 자동 적용됩니다 (행사명 매핑은 무시됩니다)
+              </div>
+            )}
+            <div className="modal-footer">
+              <button className="btn btn-muted" onClick={() => setMappingState(null)}>취소</button>
+              <button className="btn btn-primary" disabled={!mappingState.mapping.company_name} onClick={confirmMapping}>
+                다음 → 미리보기
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Excel 미리보기 모달 */}
