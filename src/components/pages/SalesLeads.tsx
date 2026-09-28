@@ -115,6 +115,7 @@ export default function SalesLeads() {
   const [bulkStageTarget, setBulkStageTarget] = useState<string>('')
   const [showBulkStage, setShowBulkStage] = useState(false)
   const [bulkStaging, setBulkStaging] = useState(false)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
 
   // 그룹별 업로드용 이벤트명 ref
   const importEventNameRef = useRef<string>('')
@@ -230,6 +231,28 @@ export default function SalesLeads() {
       showToast(`✅ ${ids.length}개 리드 → ${stage}`)
     } finally {
       setBulkStaging(false)
+    }
+  }
+
+  async function bulkDeleteLeads(ids: string[]) {
+    if (!ids.length) return
+    if (!window.confirm(`선택한 ${ids.length}개 리드를 정말 삭제하시겠습니까?\n관련된 Activity/Task/Proposal 기록도 함께 삭제되며 복구할 수 없습니다.`)) return
+    setBulkDeleting(true)
+    try {
+      // sales_activities/sales_tasks/sales_proposals는 lead_id FK가 CASCADE가 아니므로 먼저 삭제해야 함
+      const [{ error: actErr }, { error: taskErr }, { error: propErr }] = await Promise.all([
+        supabase.from('sales_activities').delete().in('lead_id', ids),
+        supabase.from('sales_tasks').delete().in('lead_id', ids),
+        supabase.from('sales_proposals').delete().in('lead_id', ids),
+      ])
+      if (actErr || taskErr || propErr) { showToast('⚠️ 일괄 삭제 실패: ' + (actErr || taskErr || propErr)?.message); return }
+      const { error: leadErr } = await supabase.from('sales_leads').delete().in('id', ids)
+      if (leadErr) { showToast('⚠️ 일괄 삭제 실패: ' + leadErr.message); return }
+      setLeads(p => p.filter(l => !ids.includes(l.id)))
+      setChecked(new Set())
+      showToast(`🗑️ ${ids.length}개 리드가 삭제되었습니다.`)
+    } finally {
+      setBulkDeleting(false)
     }
   }
 
@@ -743,6 +766,14 @@ export default function SalesLeads() {
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* 선택 삭제 */}
+              {checked.size > 0 && (
+                <button disabled={bulkDeleting} onClick={() => bulkDeleteLeads([...checked])}
+                  style={{ padding: '6px 12px', borderRadius: 7, background: 'rgba(220,38,38,.1)', border: '1.5px solid #DC2626', color: '#DC2626', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: bulkDeleting ? 0.5 : 1 }}>
+                  {bulkDeleting ? '삭제 중...' : `🗑️ 선택 삭제 (${checked.size})`}
+                </button>
               )}
 
               {/* 이 그룹 전체 Stage 변경 */}
