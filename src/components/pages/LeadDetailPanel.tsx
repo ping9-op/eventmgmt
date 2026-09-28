@@ -60,6 +60,7 @@ export default function LeadDetailPanel({
   const [tasks, setTasks] = useState<SalesTask[]>([])
   const [proposal, setProposal] = useState<SalesProposal | null>(null)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   // Activity form
   const [showActForm, setShowActForm] = useState(false)
@@ -174,6 +175,30 @@ export default function LeadDetailPanel({
     }
   }
 
+  async function deleteLead() {
+    if (!lead) return
+    if (!window.confirm(`"${lead.company_name}" 리드를 정말 삭제하시겠습니까?\n관련된 Activity/Task/Proposal 기록도 함께 삭제되며 복구할 수 없습니다.`)) return
+    setDeleting(true)
+    try {
+      // sales_activities/sales_tasks/sales_proposals는 lead_id FK가 CASCADE가 아니므로 먼저 삭제해야 함
+      const [{ error: actErr }, { error: taskErr }, { error: propErr }] = await Promise.all([
+        supabase.from('sales_activities').delete().eq('lead_id', leadId),
+        supabase.from('sales_tasks').delete().eq('lead_id', leadId),
+        supabase.from('sales_proposals').delete().eq('lead_id', leadId),
+      ])
+      if (actErr || taskErr || propErr) throw (actErr || taskErr || propErr)
+      const { error: leadErr } = await supabase.from('sales_leads').delete().eq('id', leadId)
+      if (leadErr) throw leadErr
+      showToast('🗑️ 리드가 삭제되었습니다.')
+      onRefresh()
+      onClose()
+    } catch (err: any) {
+      showToast('⚠️ 삭제 실패: ' + (err?.message || '알 수 없는 오류'))
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   async function addActivity() {
     try {
       const { error } = await supabase.from('sales_activities').insert({
@@ -259,6 +284,10 @@ export default function LeadDetailPanel({
               <button onClick={save} disabled={saving}
                 style={{ background: 'var(--accent)', border: 'none', color: 'white', padding: isMobile ? '10px 10px' : '6px 14px', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 700, minHeight: 44 }}>
                 {saving ? t('saving') : isMobile ? '💾' : `💾 ${t('save')}`}
+              </button>
+              <button onClick={deleteLead} disabled={deleting} title="리드 삭제"
+                style={{ background: 'rgba(220,38,38,.2)', border: '1px solid rgba(220,38,38,.5)', color: '#FCA5A5', padding: isMobile ? '10px 10px' : '6px 14px', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 700, minHeight: 44 }}>
+                {deleting ? '삭제 중...' : isMobile ? '🗑' : '🗑 삭제'}
               </button>
               <button onClick={onClose}
                 style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: 'white', width: 44, height: 44, borderRadius: '50%', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>
