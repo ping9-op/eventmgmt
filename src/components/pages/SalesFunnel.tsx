@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { STAGE_ORDER, STAGE_COLORS, priorityColor, isActiveStage } from '../../lib/utils'
@@ -49,6 +49,32 @@ export default function SalesFunnel() {
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const [tableSearch, setTableSearch] = useState('')
   const [pendingLostId, setPendingLostId] = useState<string | null>(null)
+
+  // 보드 가로 스크롤: 상단 슬라이드 바 ↔ 보드 본문 ↔ 단계 헤더 동기화
+  const boardRef = useRef<HTMLDivElement>(null)
+  const topBarRef = useRef<HTMLDivElement>(null)
+  const headRef = useRef<HTMLDivElement>(null)
+  const [boardScrollW, setBoardScrollW] = useState(0)
+
+  useEffect(() => {
+    const el = boardRef.current
+    if (!el) return
+    const update = () => setBoardScrollW(el.scrollWidth)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    if (el.firstElementChild) ro.observe(el.firstElementChild)
+    return () => ro.disconnect()
+  }, [tab, loading])
+
+  function syncBoardScroll(from: 'board' | 'bar') {
+    const board = boardRef.current, bar = topBarRef.current
+    if (!board || !bar) return
+    const x = from === 'board' ? board.scrollLeft : bar.scrollLeft
+    if (from === 'board' && bar.scrollLeft !== x) bar.scrollLeft = x
+    if (from === 'bar' && board.scrollLeft !== x) board.scrollLeft = x
+    if (headRef.current) headRef.current.scrollLeft = x
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -235,17 +261,34 @@ export default function SalesFunnel() {
 
         {/* 보드 뷰 */}
         {tab === 'board' && (
-          <div style={{ overflowX: 'auto', paddingBottom: 16 }}>
+          <div style={{ paddingBottom: 16 }}>
+            {/* 상단 고정 영역: 가로 슬라이드 바 + 단계 헤더 (리드가 많아도 스크롤 없이 바로 좌우 이동) */}
+            <div style={{ position: 'sticky', top: 0, zIndex: 5, background: 'var(--bg)', paddingTop: 4 }}>
+              <div ref={topBarRef} onScroll={() => syncBoardScroll('bar')}
+                style={{ overflowX: 'auto', overflowY: 'hidden', height: 16, marginBottom: 4 }}>
+                <div style={{ width: boardScrollW, height: 1 }} />
+              </div>
+              <div ref={headRef} style={{ overflow: 'hidden' }}>
+                <div style={{ display: 'flex', gap: 12, minWidth: 'max-content' }}>
+                  {STAGE_ORDER.map(stage => {
+                    const c = STAGE_COLORS[stage] || { bg: '#6B7280', light: '#F3F4F6' }
+                    return (
+                      <div key={stage} style={{ width: 210, flexShrink: 0, background: c.bg, color: 'white', padding: '9px 12px', borderRadius: '10px 10px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxSizing: 'border-box' }}>
+                        <span style={{ fontSize: 11, fontWeight: 700 }}>{stage}</span>
+                        <span style={{ background: 'rgba(255,255,255,.25)', borderRadius: 99, padding: '1px 7px', fontSize: 11, fontWeight: 700 }}>{filtered.filter(l => l.current_stage === stage).length}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+            <div ref={boardRef} className="no-scrollbar" onScroll={() => syncBoardScroll('board')} style={{ overflowX: 'auto' }}>
             <div style={{ display: 'flex', gap: 12, minWidth: 'max-content' }}>
               {STAGE_ORDER.map(stage => {
                 const c = STAGE_COLORS[stage] || { bg: '#6B7280', light: '#F3F4F6' }
                 const stageLeads = filtered.filter(l => l.current_stage === stage)
                 return (
                   <div key={stage} style={{ width: 210, flexShrink: 0 }}>
-                    <div style={{ background: c.bg, color: 'white', padding: '9px 12px', borderRadius: '10px 10px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 11, fontWeight: 700 }}>{stage}</span>
-                      <span style={{ background: 'rgba(255,255,255,.25)', borderRadius: 99, padding: '1px 7px', fontSize: 11, fontWeight: 700 }}>{stageLeads.length}</span>
-                    </div>
                     <div style={{ background: '#F8F4F4', border: `1px solid ${c.bg}40`, borderTop: 'none', borderRadius: '0 0 10px 10px', minHeight: 160, padding: 8, display: 'flex', flexDirection: 'column', gap: 7 }}>
                       {stageLeads.map(l => (
                         <div key={l.id}
@@ -276,6 +319,7 @@ export default function SalesFunnel() {
                   </div>
                 )
               })}
+            </div>
             </div>
           </div>
         )}
