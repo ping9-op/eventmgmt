@@ -74,6 +74,8 @@ export default function LeadDetailPanel({
   // Lead edit state
   const [form, setForm] = useState<Partial<SalesLead>>({})
   const [propForm, setPropForm] = useState<Partial<SalesProposal>>({})
+  // Fee Rate는 입력 중인 문자열을 그대로 유지해야 "0." 같은 중간 입력(소수점)이 가능하다
+  const [feeRateText, setFeeRateText] = useState<string | null>(null)
 
   useEffect(() => {
     loadAllSettings().then(setSettings)
@@ -155,7 +157,7 @@ export default function LeadDetailPanel({
         const propData = {
           lead_id: leadId,
           proposal_sent_date: propForm.proposal_sent_date || null,
-          proposed_fee_rate: propForm.proposed_fee_rate || null,
+          proposed_fee_rate: propForm.proposed_fee_rate ?? null,
           expected_monthly_volume: propForm.expected_monthly_volume || null,
           volume_currency: propForm.volume_currency || 'USD',
           contract_status: propForm.contract_status || 'Not Sent',
@@ -262,6 +264,13 @@ export default function LeadDetailPanel({
   }
 
   if (!lead) return null
+
+  const feeRateValue = feeRateText ?? String(propForm.proposed_fee_rate ?? proposal?.proposed_fee_rate ?? '')
+  function onFeeRateChange(v: string) {
+    if (!/^\d*\.?\d*$/.test(v)) return
+    setFeeRateText(v)
+    setPropForm(f => ({ ...f, proposed_fee_rate: v === '' || v === '.' ? null : parseFloat(v) }))
+  }
 
   const tabs: { id: TabId; label: string }[] = [
     { id: 'basic', label: '📋 기본 정보' },
@@ -378,9 +387,9 @@ export default function LeadDetailPanel({
                 </Field>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 5 }}>Expected Volume (Monthly)</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px', gap: 8 }}>
                     <input type="number" value={form.expected_monthly_volume || 0} onChange={e => setForm(f => ({ ...f, expected_monthly_volume: parseInt(e.target.value) || 0 }))} />
-                    <select value={form.volume_currency || 'USD'} onChange={e => setForm(f => ({ ...f, volume_currency: e.target.value }))} style={{ flex: '0 0 auto' }}>
+                    <select value={form.volume_currency || 'USD'} onChange={e => setForm(f => ({ ...f, volume_currency: e.target.value }))}>
                       <option>USD</option><option>KRW</option>
                     </select>
                   </div>
@@ -465,7 +474,7 @@ export default function LeadDetailPanel({
                       </select>
                     </Field>
                     <Field label="Proposed Fee Rate">
-                      <input value={propForm.proposed_fee_rate ?? (proposal.proposed_fee_rate || '')} onChange={e => setPropForm(f => ({ ...f, proposed_fee_rate: parseFloat(e.target.value) || null }))} placeholder="e.g. 0.8" />
+                      <input inputMode="decimal" value={feeRateValue} onChange={e => onFeeRateChange(e.target.value)} placeholder="e.g. 0.8" />
                     </Field>
                     <Field label="Proposal Sent Date">
                       <input type="date" value={propForm.proposal_sent_date || proposal.proposal_sent_date || ''} onChange={e => setPropForm(f => ({ ...f, proposal_sent_date: e.target.value }))} />
@@ -628,7 +637,7 @@ export default function LeadDetailPanel({
                   <input type="date" value={propForm.proposal_sent_date || proposal?.proposal_sent_date || ''} onChange={e => setPropForm(f => ({ ...f, proposal_sent_date: e.target.value }))} />
                 </Field>
                 <Field label="Proposed Fee Rate (%)">
-                  <input value={String(propForm.proposed_fee_rate ?? (proposal?.proposed_fee_rate || ''))} onChange={e => setPropForm(f => ({ ...f, proposed_fee_rate: parseFloat(e.target.value) || null }))} placeholder="e.g. 0.8" />
+                  <input inputMode="decimal" value={feeRateValue} onChange={e => onFeeRateChange(e.target.value)} placeholder="e.g. 0.8" />
                 </Field>
                 <Field label="Contract Status">
                   <select value={propForm.contract_status || proposal?.contract_status || 'Not Sent'} onChange={e => setPropForm(f => ({ ...f, contract_status: e.target.value }))}>
@@ -642,9 +651,9 @@ export default function LeadDetailPanel({
                 </Field>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 5 }}>Expected Volume</div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <input type="number" value={propForm.expected_monthly_volume ?? (proposal?.expected_monthly_volume || 0)} onChange={e => setPropForm(f => ({ ...f, expected_monthly_volume: parseInt(e.target.value) || null }))} style={{ flex: 1 }} />
-                    <select value={propForm.volume_currency || proposal?.volume_currency || 'USD'} onChange={e => setPropForm(f => ({ ...f, volume_currency: e.target.value }))} style={{ flex: '0 0 auto' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px', gap: 8 }}>
+                    <input type="number" value={propForm.expected_monthly_volume ?? (proposal?.expected_monthly_volume || '')} onChange={e => setPropForm(f => ({ ...f, expected_monthly_volume: parseInt(e.target.value) || null }))} placeholder="월 예상 금액" />
+                    <select value={propForm.volume_currency || proposal?.volume_currency || 'USD'} onChange={e => setPropForm(f => ({ ...f, volume_currency: e.target.value }))}>
                       <option>USD</option><option>KRW</option>
                     </select>
                   </div>
