@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { krw, exhColor, formatEventDate, exhDisplayName, CURRENCIES, COST_ITEMS, MON, formatDateRange, parseDateRange, CUR_SYM } from '../../lib/utils'
+import { krw, exhColor, formatEventDate, exhDisplayName, CURRENCIES, COST_ITEMS, MON, formatDateRange, parseDateRange, CUR_SYM, fmtCur, fmtByCurrency, sumByCurrency } from '../../lib/utils'
 import { extractTextFromPdf, extractTextFromDocx, parseProposalText } from '../../lib/pdfParser'
 import type { Exhibition, Proposal as ProposalType, BudgetItem, ProductTarget } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
+import DecimalInput, { parseAmount } from '../DecimalInput'
 import {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
   WidthType, AlignmentType, HeadingLevel, BorderStyle, ShadingType,
@@ -22,7 +23,7 @@ interface ParsedProposal {
 }
 
 interface SavedProposal {
-  key: string; exhId: string; name: string; year: number; date: string; total: number; color: string
+  key: string; exhId: string; name: string; year: number; date: string; total: string; color: string
 }
 
 export default function Proposal() {
@@ -94,7 +95,7 @@ export default function Proposal() {
             key: exh?.key || '', exhId: p.exhibition_id,
             name: exh?.name || '', year: p.year,
             date: p.date_of_event,
-            total: budgetItems.reduce((s, b) => s + (b.curr || 0), 0),
+            total: fmtByCurrency(sumByCurrency(budgetItems, b => b.curr, b => (b as any).currency)),
             color: exhColor(exh?.name || ''),
           }
         }).sort((a, b) => b.year - a.year || a.name.localeCompare(b.name))
@@ -145,7 +146,7 @@ export default function Proposal() {
         key: exh?.key || '', exhId: p.exhibition_id,
         name: exh?.name || '', year: p.year,
         date: p.date_of_event,
-        total: budgetItems.reduce((s, b) => s + (b.curr || 0), 0),
+        total: fmtByCurrency(sumByCurrency(budgetItems, b => b.curr, b => (b as any).currency)),
         color: exhColor(exh?.name || ''),
       }
     }).sort((a, b) => b.year - a.year || a.name.localeCompare(b.name))
@@ -242,7 +243,7 @@ export default function Proposal() {
         const keys = Object.keys(r)
         const item = String(r['항목'] || r['Item'] || r['item'] || r[keys[0]] || '')
         const currRaw = String(r['금액'] || r['Amount'] || r['amount'] || r['curr'] || r[keys[1]] || '')
-        const curr = parseInt(currRaw.replace(/[^0-9]/g, '')) || 0
+        const curr = parseAmount(currRaw) || 0
         const currency = String(r['통화'] || r['Currency'] || r['currency'] || 'KRW')
         const note = String(r['비고'] || r['Note'] || r['note'] || '')
         return { item, curr, prev: 0, note, currency }
@@ -436,7 +437,8 @@ export default function Proposal() {
     const itemLines = changedItems.map(r => {
       const dir = r.curr > (r.prev || 0) ? '증가' : !r.prev ? '신규' : '감소'
       const memo = aiMemos[r.item] ? ` / 참고: ${aiMemos[r.item]}` : ''
-      return `- ${r.item}: ${r.prev ? krw(r.prev) + ' → ' : '(신규) '}${krw(r.curr)} (${dir})${memo}`
+      const cur = (r as any).currency || 'KRW'
+      return `- ${r.item}: ${r.prev ? fmtCur(r.prev, cur) + ' → ' : '(신규) '}${fmtCur(r.curr, cur)} (${dir})${memo}`
     }).join('\n')
 
     const userMsg =
@@ -518,7 +520,6 @@ export default function Proposal() {
     if (prev) for (const b of (prev.budget as BudgetItem[]) || []) prevBudgetMap[b.item] = b.curr
   }
 
-  const totalBudget = budget.reduce((s, b) => s + (b.curr || 0), 0)
   const changedItems = budget.filter(r => (r.prev && r.curr !== r.prev) || (!r.prev && r.curr > 0))
 
   async function exportDocx() {
@@ -889,7 +890,8 @@ export default function Proposal() {
             </div>
             <div>
               <label style={{ marginTop: 0 }}>{t('year_label')}</label>
-              <input type="number" value={year} onChange={e => setYear(parseInt(e.target.value) || year)} />
+              {/* 비운 상태로 다시 입력 가능 (빈 값이면 기존 연도 유지) */}
+              <DecimalInput integer value={year} onChange={v => { if (v) setYear(v) }} />
             </div>
           </div>
           <div className="form-row cols2" style={{ marginTop: 14 }}>
@@ -1020,9 +1022,10 @@ export default function Proposal() {
               {budget.map((b, i) => {
                 const prev = prevBudgetMap[b.item] || b.prev || 0
                 const diff = (b.curr || 0) - prev
+                const cur = (b as any).currency || 'KRW'
                 const diffEl = prev
-                  ? diff > 0 ? <span className="diff-up">▲ {krw(diff)}</span>
-                    : diff < 0 ? <span className="diff-down">▼ {krw(Math.abs(diff))}</span>
+                  ? diff > 0 ? <span className="diff-up">▲ {fmtCur(diff, cur)}</span>
+                    : diff < 0 ? <span className="diff-down">▼ {fmtCur(Math.abs(diff), cur)}</span>
                     : <span>{t('no_change')}</span>
                   : <span style={{ color: 'var(--amber)', fontWeight: 600 }}>{t('new_item')}</span>
                 return (
@@ -1032,10 +1035,10 @@ export default function Proposal() {
                         style={{ width: 150 }} list="cost-items-list" />
                       <datalist id="cost-items-list">{COST_ITEMS.map(c => <option key={c} value={c} />)}</datalist>
                     </td>
-                    <td style={{ textAlign: 'right', color: 'var(--muted)' }}>{prev ? krw(prev) : '-'}</td>
+                    <td style={{ textAlign: 'right', color: 'var(--muted)' }}>{prev ? fmtCur(prev, cur) : '-'}</td>
                     <td>
-                      <input type="number" value={b.curr || ''} style={{ width: 120, textAlign: 'right' }}
-                        onChange={e => setBudget(arr => arr.map((x, j) => j === i ? { ...x, curr: parseInt(e.target.value) || 0 } : x))} />
+                      <DecimalInput value={b.curr || null} style={{ width: 120, textAlign: 'right' }}
+                        onChange={v => setBudget(arr => arr.map((x, j) => j === i ? { ...x, curr: v ?? 0 } : x))} />
                     </td>
                     <td>
                       <select value={(b as any).currency || 'KRW'} style={{ width: 72 }}
@@ -1063,7 +1066,7 @@ export default function Proposal() {
               onClick={() => setBudget(b => [...b, { item: 'Booth Fee', curr: 0, prev: 0, note: '', currency: 'KRW' }])}>
               {t('add_item')}
             </button>
-            <strong style={{ fontSize: 15, color: 'var(--accent)' }}>{t('budget_total')}: {krw(totalBudget)}</strong>
+            <strong style={{ fontSize: 15, color: 'var(--accent)' }}>{t('budget_total')}: {fmtByCurrency(sumByCurrency(budget, b => b.curr, b => (b as any).currency))}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 18 }}>
             <button className="btn btn-muted" onClick={() => { setStep(2); window.scrollTo(0,0) }}>{t('prev')}</button>
@@ -1083,7 +1086,7 @@ export default function Proposal() {
               return (
                 <div key={r.item} style={{ marginBottom: 10 }}>
                   <label style={{ color: col }}>
-                    {r.item} &nbsp; {dir} &nbsp; {r.prev ? krw(r.prev) + ' → ' : ''}{krw(r.curr)}
+                    {r.item} &nbsp; {dir} &nbsp; {r.prev ? fmtCur(r.prev, (r as any).currency || 'KRW') + ' → ' : ''}{fmtCur(r.curr, (r as any).currency || 'KRW')}
                   </label>
                   <input placeholder={t('memo_title')}
                     value={aiMemos[r.item] || ''}
@@ -1153,7 +1156,7 @@ export default function Proposal() {
               <div className="pli-color" style={{ background: p.color }} />
               <div className="pli-body">
                 <div className="pli-name">{exhDisplayName(p.name, p.key)} {p.year}</div>
-                <div className="pli-meta">{p.year} &nbsp;·&nbsp; {formatEventDate(p.date, p.year)} &nbsp;·&nbsp; {t('total')} {krw(p.total)}</div>
+                <div className="pli-meta">{p.year} &nbsp;·&nbsp; {formatEventDate(p.date, p.year)} &nbsp;·&nbsp; {t('total')} {p.total}</div>
               </div>
               <div className="pli-actions">
                 <button className="btn btn-outline btn-sm" onClick={() => loadFromSaved(p, false)}>✏️ {t('edit')}</button>

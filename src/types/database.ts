@@ -253,7 +253,7 @@ export interface Payment {
 }
 
 export interface ActualCost {
-  item: string; budgeted: number; actual: number; currency: string
+  item: string; budgeted: number; actual: number | null; currency: string
 }
 
 export interface MarketingActivity {

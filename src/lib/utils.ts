@@ -5,8 +5,27 @@ export const CURRENCIES = ['KRW', 'JPY', 'USD', 'EUR', 'SGD']
 export const COST_ITEMS = ['Booth Fee', 'Design', 'Gift', 'Part Timer', 'Flight', 'Accommodation', 'Meal', 'Item Delivery']
 export const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
+/** 통화 기호 + 금액. KRW/JPY는 정수, 그 외(USD/EUR/SGD)는 소수점 2자리까지 표시 */
 export function fmtCur(amt: number, cur: string): string {
-  return (CUR_SYM[cur] || cur) + Math.round(amt).toLocaleString()
+  const digits = cur === 'KRW' || cur === 'JPY' ? 0 : 2
+  return (CUR_SYM[cur] || cur) + (amt || 0).toLocaleString(undefined, { maximumFractionDigits: digits })
+}
+
+/** 통화별 합계. 서로 다른 통화를 하나로 더하지 않기 위해 사용 */
+export function sumByCurrency<T>(rows: T[], amount: (r: T) => number | null | undefined, currency: (r: T) => string | null | undefined): Record<string, number> {
+  const totals: Record<string, number> = {}
+  for (const r of rows) {
+    const c = currency(r) || 'KRW'
+    totals[c] = (totals[c] || 0) + (amount(r) || 0)
+  }
+  return totals
+}
+
+/** 통화별 합계 → "₩1,000,000 + $250.5" (KRW 우선) */
+export function fmtByCurrency(totals: Record<string, number>): string {
+  const entries = Object.entries(totals)
+  if (!entries.length) return '-'
+  return entries.sort(([a], [b]) => (a === 'KRW' ? -1 : b === 'KRW' ? 1 : a.localeCompare(b))).map(([c, v]) => fmtCur(v, c)).join(' + ')
 }
 
 export function formatDateRange(start: string, end: string): string {

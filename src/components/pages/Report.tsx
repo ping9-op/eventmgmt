@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { krw, exhColor } from '../../lib/utils'
+import { exhColor, fmtCur, fmtByCurrency, sumByCurrency } from '../../lib/utils'
+import DecimalInput from '../DecimalInput'
 import type { Exhibition, Proposal, Result, ActualCost, MarketingActivity, Payment } from '../../types/database'
 import { useToast } from '../../contexts/ToastContext'
 import pptxgen from 'pptxgenjs'
@@ -260,8 +261,9 @@ export default function Report() {
     ])
 
     const costs = r.actual_costs || []
-    const totalB = costs.reduce((s, a) => s + (a.budgeted || 0), 0)
-    const totalA = costs.reduce((s, a) => s + (a.actual || 0), 0)
+    const pBud = sumByCurrency(costs, a => a.budgeted, a => a.currency)
+    const pAct = sumByCurrency(costs.filter(a => a.actual != null), a => a.actual, a => a.currency)
+    const pDiff = Object.entries(pAct).map(([c, a]) => [c, a - (pBud[c] || 0)] as [string, number])
     const regR = r.reg_remittance || 0, regC = r.reg_card || 0
     const regB = r.reg_biz || 0, regO = r.reg_onboard || 0, regM = r.new_merchants || 0
 
@@ -406,23 +408,26 @@ export default function Report() {
       const costRows = costs.map((a, ri) => {
         const d = (a.actual ?? 0) - (a.budgeted || 0)
         const bg = ri % 2 === 0 ? GRAY : WHITE
-        const cur = (a as any).currency || 'KRW'
-        const sym = cur === 'JPY' ? '¥' : '₩'
+        const cur = a.currency || 'KRW'
         const hasActual = typeof a.actual === 'number'
         return [
           { text: a.item || '',                                                                                                                         options: { color: DARK,    fill: { color: bg }, fontSize: 12 } },
-          { text: a.budgeted != null ? sym + (a.budgeted || 0).toLocaleString() : '-',                                                                 options: { color: '444444', align: 'right' as any, fill: { color: bg }, fontSize: 12 } },
-          { text: hasActual ? sym + (a.actual || 0).toLocaleString() : '-',                                                                            options: { color: DARK,    align: 'right' as any, fill: { color: bg }, fontSize: 12 } },
-          { text: hasActual ? (d > 0 ? `▲ ${sym}${d.toLocaleString()}` : d < 0 ? `▼ ${sym}${Math.abs(d).toLocaleString()}` : '—') : '-',              options: { color: d > 0 ? 'C00000' : d < 0 ? '2E7D51' : '888888', align: 'right' as any, bold: hasActual && d !== 0, fill: { color: bg }, fontSize: 12 } },
+          { text: a.budgeted != null ? fmtCur(a.budgeted || 0, cur) : '-',                                                                             options: { color: '444444', align: 'right' as any, fill: { color: bg }, fontSize: 12 } },
+          { text: hasActual ? fmtCur(a.actual || 0, cur) : '-',                                                                                        options: { color: DARK,    align: 'right' as any, fill: { color: bg }, fontSize: 12 } },
+          { text: hasActual ? (d > 0 ? `▲ ${fmtCur(d, cur)}` : d < 0 ? `▼ ${fmtCur(Math.abs(d), cur)}` : '—') : '-',                                options: { color: d > 0 ? 'C00000' : d < 0 ? '2E7D51' : '888888', align: 'right' as any, bold: hasActual && d !== 0, fill: { color: bg }, fontSize: 12 } },
           { text: (a as any).note || '',                                                                                                                options: { color: '666666', fill: { color: bg }, fontSize: 11, italic: !!(a as any).note } },
         ]
       })
-      const tD = totalA - totalB
+      // 통화별 합계 (예: "₩1,000,000 + $250")
+      const tD = pDiff.length === 1 ? pDiff[0][1] : 0
+      const diffText = pDiff.length
+        ? pDiff.map(([c, d]) => d > 0 ? `▲ ${fmtCur(d, c)} over` : d < 0 ? `▼ ${fmtCur(Math.abs(d), c)} saved` : '—').join('\n')
+        : '-'
       const totalRow = [
         { text: 'Total',                                                                                                                       options: { bold: true, color: DARK, fill: { color: LGRAY }, fontSize: 13 } },
-        { text: '₩' + totalB.toLocaleString(),                                                                                                options: { bold: true, align: 'right' as any, fill: { color: LGRAY }, fontSize: 13, color: DARK } },
-        { text: '₩' + totalA.toLocaleString(),                                                                                                options: { bold: true, align: 'right' as any, fill: { color: LGRAY }, fontSize: 13, color: DARK } },
-        { text: tD > 0 ? `▲ ₩${tD.toLocaleString()} over` : tD < 0 ? `▼ ₩${Math.abs(tD).toLocaleString()} saved` : '—',                    options: { bold: true, color: tD > 0 ? 'C00000' : tD < 0 ? '2E7D51' : DARK, align: 'right' as any, fill: { color: LGRAY }, fontSize: 13 } },
+        { text: fmtByCurrency(pBud),                                                                                                           options: { bold: true, align: 'right' as any, fill: { color: LGRAY }, fontSize: 13, color: DARK } },
+        { text: pDiff.length ? fmtByCurrency(pAct) : '-',                                                                                      options: { bold: true, align: 'right' as any, fill: { color: LGRAY }, fontSize: 13, color: DARK } },
+        { text: diffText,                                                                                                                      options: { bold: true, color: tD > 0 ? 'C00000' : tD < 0 ? '2E7D51' : DARK, align: 'right' as any, fill: { color: LGRAY }, fontSize: 13 } },
         { text: '',                                                                                                                            options: { fill: { color: LGRAY } } },
       ]
       const numRows = 1 + costs.length + 1
@@ -567,7 +572,7 @@ export default function Report() {
   }
 
   function addCost() {
-    updateField('actual_costs', [...(r.actual_costs || []), { item: '', budgeted: 0, actual: 0, currency: 'KRW' }])
+    updateField('actual_costs', [...(r.actual_costs || []), { item: '', budgeted: 0, actual: null, currency: 'KRW' }])
   }
 
   function updateBullet(field: 'shortcomings' | 'improvements' | 'recommendations' | 'requests', i: number, val: string) {
@@ -580,8 +585,13 @@ export default function Report() {
     updateField(field, [...((r[field] as string[]) || []), ''])
   }
 
-  const totalBudgeted = (r.actual_costs || []).reduce((s, c) => s + (c.budgeted || 0), 0)
-  const totalActual = (r.actual_costs || []).reduce((s, c) => s + (c.actual || 0), 0)
+  // 통화가 섞여 있을 수 있으므로 통화별로 합산 (실제 비용은 입력된 행만)
+  const costList = r.actual_costs || []
+  const budByCur = sumByCurrency(costList, c => c.budgeted, c => c.currency)
+  const actByCur = sumByCurrency(costList.filter(c => c.actual != null), c => c.actual, c => c.currency)
+  const diffByCur = Object.fromEntries(Object.entries(actByCur).map(([c, a]) => [c, a - (budByCur[c] || 0)]))
+  const hasActual = Object.keys(actByCur).length > 0
+  const singleDiff = Object.keys(diffByCur).length === 1 ? Object.values(diffByCur)[0] : 0
 
   return (
     <div className="view">
@@ -609,7 +619,7 @@ export default function Report() {
               <div className="g3">
                 <div><label style={{ marginTop: 0 }}>{t('cover_title_lbl')}</label><input value={r.cover_title || ''} onChange={e => updateField('cover_title', e.target.value)} /></div>
                 <div style={{ minWidth: 0, overflow: 'hidden' }}><label style={{ marginTop: 0 }}>{t('cover_date_lbl')}</label><input type="date" value={r.cover_date || ''} onChange={e => updateField('cover_date', e.target.value)} style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }} /></div>
-                <div><label style={{ marginTop: 0 }}>{t('cover_author_lbl')}</label><input value={r.cover_author || 'Andrew'} onChange={e => updateField('cover_author', e.target.value)} /></div>
+                <div><label style={{ marginTop: 0 }}>{t('cover_author_lbl')}</label><input value={r.cover_author ?? ''} placeholder="Andrew" onChange={e => updateField('cover_author', e.target.value)} /></div>
               </div>
             </div>
 
@@ -636,18 +646,20 @@ export default function Report() {
               <thead><tr><th>{t('item_col')}</th><th style={{ textAlign: 'right' }}>{t('budgeted')}</th><th style={{ textAlign: 'right' }}>{t('actual')}</th><th style={{ textAlign: 'right' }}>{t('diff')}</th><th>{t('note_col')}</th><th></th></tr></thead>
               <tbody>
                 {(r.actual_costs || []).map((c, i) => {
+                  const cur = c.currency || 'KRW'
                   const diff = (c.actual ?? 0) - (c.budgeted ?? 0)
                   const paidAmt = paidTotalForItem(paymentsByKey[selected || ''], c.item)
                   const paidMismatch = paidAmt > 0 && paidAmt !== (c.actual ?? 0)
                   return (
                     <tr key={i}>
                       <td><input value={c.item} onChange={e => updateCost(i, 'item', e.target.value)} /></td>
-                      <td><input type="number" value={c.budgeted ?? ''} style={{ textAlign: 'right' }} onChange={e => updateCost(i, 'budgeted', e.target.value === '' ? 0 : Number(e.target.value))} /></td>
+                      <td><DecimalInput value={c.budgeted || null} style={{ textAlign: 'right' }} onChange={v => updateCost(i, 'budgeted', v ?? 0)} /></td>
                       <td>
-                        <input type="number" value={c.actual ?? ''} style={{ textAlign: 'right' }} onChange={e => updateCost(i, 'actual', e.target.value === '' ? 0 : Number(e.target.value))} />
+                        {/* 비우면 null(미입력) — 0으로 저장하면 예산 전액 절감처럼 보이는 문제 방지 */}
+                        <DecimalInput value={c.actual} style={{ textAlign: 'right' }} onChange={v => updateCost(i, 'actual', v)} />
                         {paidMismatch && (
                           <div style={{ fontSize: 10, color: 'var(--accent)', textAlign: 'right', marginTop: 2, whiteSpace: 'nowrap' }}>
-                            💰 결제 완료 {krw(paidAmt)}
+                            💰 결제 완료 {fmtCur(paidAmt, cur)}
                             <button type="button" onClick={() => updateCost(i, 'actual', paidAmt)}
                               style={{ marginLeft: 4, padding: '0 5px', fontSize: 10, border: '1px solid var(--border2)', borderRadius: 4, background: 'white', cursor: 'pointer' }}>
                               반영
@@ -657,7 +669,7 @@ export default function Report() {
                       </td>
                       <td style={{ textAlign: 'right' }}>
                         <span className={diff > 0 ? 'over' : diff < 0 ? 'under' : ''}>
-                          {c.actual != null ? (diff > 0 ? `▲ ${krw(diff)}` : diff < 0 ? `▼ ${krw(Math.abs(diff))}` : '—') : '-'}
+                          {c.actual != null ? (diff > 0 ? `▲ ${fmtCur(diff, cur)}` : diff < 0 ? `▼ ${fmtCur(Math.abs(diff), cur)}` : '—') : '-'}
                         </span>
                       </td>
                       <td><input value={(c as any).note || ''} placeholder={t('cost_note_placeholder')} onChange={e => updateCost(i, 'note' as any, e.target.value)} /></td>
@@ -669,12 +681,14 @@ export default function Report() {
               <tfoot>
                 <tr>
                   <td><strong>{t('budget_total')}</strong></td>
-                  <td style={{ textAlign: 'right' }}><strong>{krw(totalBudgeted)}</strong></td>
-                  <td style={{ textAlign: 'right' }}><strong style={{ color: (totalActual - totalBudgeted) > 0 ? 'var(--danger)' : (totalActual - totalBudgeted) < 0 ? 'var(--green)' : 'inherit' }}>{totalActual != null ? krw(totalActual) : '-'}</strong></td>
+                  <td style={{ textAlign: 'right' }}><strong>{fmtByCurrency(budByCur)}</strong></td>
+                  <td style={{ textAlign: 'right' }}><strong style={{ color: singleDiff > 0 ? 'var(--danger)' : singleDiff < 0 ? 'var(--green)' : 'inherit' }}>{hasActual ? fmtByCurrency(actByCur) : '-'}</strong></td>
                   <td style={{ textAlign: 'right' }}>
-                    <span className={totalActual - totalBudgeted > 0 ? 'over' : totalActual - totalBudgeted < 0 ? 'under' : ''}>
-                      {totalActual != null ? (totalActual - totalBudgeted > 0 ? `▲ ${krw(totalActual - totalBudgeted)} ${t('over_lbl')}` : totalActual - totalBudgeted < 0 ? `▼ ${krw(Math.abs(totalActual - totalBudgeted))} ${t('under_lbl')}` : t('same_lbl')) : '-'}
-                    </span>
+                    {hasActual ? Object.entries(diffByCur).map(([cur, d]) => (
+                      <div key={cur} className={d > 0 ? 'over' : d < 0 ? 'under' : ''}>
+                        {d > 0 ? `▲ ${fmtCur(d, cur)} ${t('over_lbl')}` : d < 0 ? `▼ ${fmtCur(Math.abs(d), cur)} ${t('under_lbl')}` : t('same_lbl')}
+                      </div>
+                    )) : '-'}
                   </td>
                   <td colSpan={2} />
                 </tr>
@@ -740,11 +754,10 @@ export default function Report() {
               ] as { lbl: string; field: keyof Result; color: string }[]).map(m => (
                 <div key={m.field} className="perf-card">
                   <div className="pl">{m.lbl}</div>
-                  <input
-                    type="number"
+                  <DecimalInput integer placeholder="0"
                     style={{ fontSize: 26, fontWeight: 800, color: m.color, textAlign: 'center', background: 'transparent', border: 'none', outline: 'none', width: '100%' }}
-                    value={(r[m.field] as number) || 0}
-                    onChange={e => updateField(m.field, parseInt(e.target.value) || 0)}
+                    value={(r[m.field] as number) || null}
+                    onChange={v => updateField(m.field, v ?? 0)}
                   />
                 </div>
               ))}
@@ -755,7 +768,9 @@ export default function Report() {
                 <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--accent)' }}>
                   {(() => {
                     const totalReg = (r.reg_remittance || 0) + (r.reg_card || 0) + (r.reg_biz || 0)
-                    return totalReg > 0 ? '₩' + Math.round(totalActual / totalReg).toLocaleString() : '-'
+                    return totalReg > 0 && hasActual
+                      ? fmtByCurrency(Object.fromEntries(Object.entries(actByCur).map(([c, a]) => [c, a / totalReg])))
+                      : '-'
                   })()}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{t('per_person_calc')}</div>

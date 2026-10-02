@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useToast } from '../contexts/ToastContext'
 import { useLang } from '../contexts/LangContext'
 import { CURRENCIES, COST_ITEMS, MON, formatDateRange, parseDateRange } from '../lib/utils'
+import DecimalInput from './DecimalInput'
 
 
 interface BudgetRow { item: string; curr: number; prev: number; currency: string; note: string }
@@ -106,7 +107,7 @@ export default function ProposalEditModal({ propId, exhName, exhKey, year, initi
         <div className="form-row cols2">
           <div>
             <label>{t('event_period')}</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               <input type="date" value={startDate}
                 onChange={e => {
                   const s = e.target.value
@@ -114,11 +115,11 @@ export default function ProposalEditModal({ propId, exhName, exhKey, year, initi
                   if (endDate && s > endDate) { setEndDate(s); setDate(formatDateRange(s, s)) }
                   else setDate(formatDateRange(s, endDate))
                 }}
-                style={{ flex: 1 }} />
+                style={{ flex: '1 1 140px', minWidth: 140 }} />
               <span style={{ color: 'var(--muted)', fontWeight: 600, flexShrink: 0 }}>~</span>
               <input type="date" value={endDate} min={startDate || undefined}
                 onChange={e => { setEndDate(e.target.value); setDate(formatDateRange(startDate, e.target.value)) }}
-                style={{ flex: 1 }} />
+                style={{ flex: '1 1 140px', minWidth: 140 }} />
             </div>
             {date && <div style={{ marginTop: 4, fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>📅 {date}</div>}
           </div>
@@ -153,7 +154,7 @@ export default function ProposalEditModal({ propId, exhName, exhKey, year, initi
                   <datalist id="ep-cost-items">{COST_ITEMS.map(c => <option key={c} value={c} />)}</datalist>
                 </td>
                 <td>
-                  <input type="number" value={b.curr || ''} onChange={e => updateRow(i, 'curr', parseInt(e.target.value) || 0)} style={{ textAlign: 'right' }} />
+                  <DecimalInput value={b.curr || null} onChange={v => updateRow(i, 'curr', v ?? 0)} style={{ textAlign: 'right' }} />
                 </td>
                 <td>
                   <select value={b.currency || 'KRW'} onChange={e => updateRow(i, 'currency', e.target.value)} style={{ width: 72 }}>

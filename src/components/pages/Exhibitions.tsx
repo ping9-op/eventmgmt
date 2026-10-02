@@ -8,6 +8,7 @@ import LoadingSpinner from '../LoadingSpinner'
 import ProposalEditModal from '../ProposalEditModal'
 import { useLang } from '../../contexts/LangContext'
 import EmptyState from '../EmptyState'
+import DecimalInput from '../DecimalInput'
 
 
 function budgetStr(budget: BudgetItem[]): string {
@@ -492,7 +493,7 @@ export default function Exhibitions() {
                       <datalist id="cost-items">{COST_ITEMS.map(c => <option key={c} value={c} />)}</datalist>
                     </td>
                     <td>
-                      <input type="number" value={row.curr || ''} onChange={e => updateBudgetRow(i, 'curr', parseInt(e.target.value) || 0)} style={{ textAlign: 'right' }} />
+                      <DecimalInput value={row.curr || null} onChange={v => updateBudgetRow(i, 'curr', v ?? 0)} style={{ textAlign: 'right' }} />
                     </td>
                     <td>
                       <select value={row.currency} onChange={e => updateBudgetRow(i, 'currency', e.target.value)} style={{ width: 72 }}>

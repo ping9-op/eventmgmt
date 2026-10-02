@@ -155,10 +155,11 @@ export default function Payments() {
   async function submitAdd() {
     const itemName = addForm.item.trim()
     if (!itemName) { setAddError('항목명을 입력하세요'); return }
-    const total = parseInt(addForm.total) || 0
+    // USD/EUR/SGD 등 소수점 금액 허용 (수정 화면 PaymentCard와 동일하게 parseFloat)
+    const total = parseFloat(addForm.total) || 0
     if (!total) { setAddError('총 예산 금액을 입력하세요'); return }
-    const depAmt = parseInt(addForm.depositAmt) || 0
-    const finAmt = addForm.finalAmt !== '' ? (parseInt(addForm.finalAmt) || 0) : total - depAmt
+    const depAmt = parseFloat(addForm.depositAmt) || 0
+    const finAmt = addForm.finalAmt !== '' ? (parseFloat(addForm.finalAmt) || 0) : Math.round((total - depAmt) * 100) / 100
 
     setAddLoading(true)
     try {
@@ -408,7 +409,7 @@ export default function Payments() {
         <div
           style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,.5)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center' }}
           onClick={e => { if (e.target === e.currentTarget) setShowAddModal(false) }}>
-          <div style={{ background: 'white', borderRadius: 16, padding: 28, width: 480, maxWidth: '95vw', boxShadow: '0 20px 60px rgba(0,0,0,.25)' }}>
+          <div style={{ background: 'white', borderRadius: 16, padding: 28, width: 480, maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto', boxSizing: 'border-box', boxShadow: '0 20px 60px rgba(0,0,0,.25)' }}>
             <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 20, color: 'var(--text)' }}>{t('add_pay_title')}</div>
 
             <div style={{ display: 'grid', gap: 14 }}>

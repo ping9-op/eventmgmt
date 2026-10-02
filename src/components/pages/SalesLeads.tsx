@@ -8,6 +8,7 @@ import { loadAllSettings, type SalesSettingsData } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
 import LeadDetailPanel from './LeadDetailPanel'
 import LostReasonModal, { LeadContactMeta, type LostReasonInput } from '../LostReasonModal'
+import DecimalInput, { parseAmount } from '../DecimalInput'
 import { useLang } from '../../contexts/LangContext'
 import { logStageChange } from '../../lib/stageHistory'
 import { useIsMobile } from '../../hooks/useBreakpoint'
@@ -390,7 +391,7 @@ export default function SalesLeads() {
         current_stage: normalizeStage(rawStage),
         country_corridor: get(r, 'country_corridor') || 'Korea → Japan',
         business_type: get(r, 'business_type') || 'Korean Restaurant',
-        expected_monthly_volume: parseInt(get(r, 'expected_monthly_volume').replace(/[^0-9]/g, '')) || null,
+        expected_monthly_volume: parseAmount(get(r, 'expected_monthly_volume')),
         volume_currency: get(r, 'volume_currency') || 'USD',
         address: get(r, 'address') || null,
         remarks: get(r, 'remarks') || null,
@@ -1124,9 +1125,9 @@ export default function SalesLeads() {
               </div>
               <div>
                 <label style={{ marginTop: 0 }}>{t('expected_vol_lbl')}</label>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <input type="number" value={form.expected_monthly_volume || ''} onChange={e => setForm(f => ({ ...f, expected_monthly_volume: parseInt(e.target.value) || null }))} placeholder="월 예상 금액" style={{ flex: 1 }} />
-                  <select value={form.volume_currency || 'USD'} onChange={e => setForm(f => ({ ...f, volume_currency: e.target.value }))} style={{ minWidth: 70 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px', gap: 8 }}>
+                  <DecimalInput value={form.expected_monthly_volume} onChange={v => setForm(f => ({ ...f, expected_monthly_volume: v }))} placeholder="월 예상 금액" />
+                  <select value={form.volume_currency || 'USD'} onChange={e => setForm(f => ({ ...f, volume_currency: e.target.value }))}>
                     <option>USD</option><option>KRW</option>
                   </select>
                 </div>

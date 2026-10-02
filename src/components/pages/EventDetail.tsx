@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { exhColor, formatEventDate, CUR_SYM } from '../../lib/utils'
+import { exhColor, formatEventDate, fmtCur } from '../../lib/utils'
+import DecimalInput from '../DecimalInput'
 import { useToast } from '../../contexts/ToastContext'
 import type { Payment } from '../../types/database'
 import ProposalEditModal from '../ProposalEditModal'
@@ -99,7 +100,7 @@ function migrateChecklist(items: any[]): ChecklistItem[] {
 }
 
 function fmtAmt(amt: number, cur: string) {
-  return (CUR_SYM[cur] || cur) + Math.round(amt || 0).toLocaleString()
+  return fmtCur(amt || 0, cur)
 }
 
 export default function EventDetail() {
@@ -598,7 +599,7 @@ export default function EventDetail() {
                   <tr key={i} style={{ opacity: row.done ? 0.6 : 1 }}>
                     <td style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 12 }}>{i + 1}</td>
                     <td><input value={row.item} style={{ fontWeight: 600, textDecoration: row.done ? 'line-through' : 'none' }} onChange={e => setEquipment(p => p.map((r, j) => j === i ? { ...r, item: e.target.value } : r))} /></td>
-                    <td><input type="number" value={row.qty || 0} onChange={e => setEquipment(p => p.map((r, j) => j === i ? { ...r, qty: parseInt(e.target.value) || 0 } : r))} /></td>
+                    <td><DecimalInput integer placeholder="0" value={row.qty || null} onChange={v => setEquipment(p => p.map((r, j) => j === i ? { ...r, qty: v ?? 0 } : r))} /></td>
                     <td><input value={row.note} onChange={e => setEquipment(p => p.map((r, j) => j === i ? { ...r, note: e.target.value } : r))} /></td>
                     <td style={{ textAlign: 'center' }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', justifyContent: 'center', margin: 0 }}>
@@ -953,16 +954,17 @@ function ChecklistCard({ row, idx, onUpdate, onDelete }: {
   return (
     <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, marginBottom: 12, overflow: 'hidden' }}>
       {/* 카드 헤더 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', borderBottom: '0.5px solid var(--border)', background: '#FDFBFB' }}>
+      {/* 좁은 화면에서는 오른쪽 입력 묶음이 다음 줄로 내려가도록 wrap */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', borderBottom: '0.5px solid var(--border)', background: '#FDFBFB', flexWrap: 'wrap' }}>
         <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--accent)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
           {idx + 1}
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: '1 1 180px', minWidth: 140 }}>
           <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.04em' }}>{t('col_item')}</div>
           <input value={row.item} style={{ fontSize: 14, fontWeight: 700, border: 'none', outline: 'none', background: 'transparent', color: 'var(--text)', fontFamily: 'inherit', flex: 1, width: '100%' }}
             onChange={e => onUpdate({ ...row, item: e.target.value })} />
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '0 1 auto', minWidth: 0, flexWrap: 'wrap' }}>
           <div>
             <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase' }}>{t('col_pic')}</div>
             <input value={row.pic || ''} onChange={e => onUpdate({ ...row, pic: e.target.value })}
@@ -1033,8 +1035,8 @@ function GiftSection({ title, data, setData }: { title: string; data: any[]; set
               <td style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 12 }}>{r.sn || i + 1}</td>
               <td><input value={r.prize || ''} onChange={e => setData(p => p.map((x, j) => j === i ? { ...x, prize: e.target.value } : x))} style={{ width: 80 }} /></td>
               <td><input value={r.item} style={{ fontWeight: 600 }} onChange={e => setData(p => p.map((x, j) => j === i ? { ...x, item: e.target.value } : x))} /></td>
-              <td><input type="number" value={r.qty || 0} onChange={e => setData(p => p.map((x, j) => j === i ? { ...x, qty: parseInt(e.target.value) || 0 } : x))} style={{ width: 70, textAlign: 'right' }} /></td>
-              <td><input type="number" value={r.price || 0} onChange={e => setData(p => p.map((x, j) => j === i ? { ...x, price: parseInt(e.target.value) || 0 } : x))} style={{ width: 100, textAlign: 'right' }} /></td>
+              <td><DecimalInput integer placeholder="0" value={r.qty || null} onChange={v => setData(p => p.map((x, j) => j === i ? { ...x, qty: v ?? 0 } : x))} style={{ width: 70, textAlign: 'right' }} /></td>
+              <td><DecimalInput integer placeholder="0" value={r.price || null} onChange={v => setData(p => p.map((x, j) => j === i ? { ...x, price: v ?? 0 } : x))} style={{ width: 100, textAlign: 'right' }} /></td>
               <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--accent)' }}>
                 {r.qty && r.price ? '₩' + (r.qty * r.price).toLocaleString() : '-'}
               </td>
