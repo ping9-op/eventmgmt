@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { STAGE_ORDER, STAGE_COLORS, priorityColor } from '../../lib/utils'
+import { STAGE_ORDER, STAGE_COLORS, priorityColor, isActiveStage } from '../../lib/utils'
 import { logStageChange } from '../../lib/stageHistory'
 import type { SalesLead, SalesProposal } from '../../types/database'
 import { loadSalesSettings } from '../../lib/settings'
 import LeadDetailPanel from './LeadDetailPanel'
+import LostReasonModal, { LeadContactMeta, type LostReasonInput } from '../LostReasonModal'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
 import { useIsMobile } from '../../hooks/useBreakpoint'
@@ -31,10 +32,10 @@ export default function SalesFunnel() {
   const KPI_CARDS = [
     { lbl: t('total'), stage: null as string | null, col: 'var(--text)' },
     { lbl: 'New Lead', stage: 'New Lead', col: '#6B7280' },
-    { lbl: 'Contacted', stage: 'Contacted', col: '#D97706' },
+    { lbl: 'Outreach Sent', stage: 'Outreach Sent', col: '#D97706' },
     { lbl: 'Proposal', stage: 'Proposal Sent', col: '#4F46E5' },
     { lbl: 'Onboarding', stage: 'Onboarding', col: '#059669' },
-    { lbl: 'Won ✅', stage: 'Onboarded / Won', col: '#065F46' },
+    { lbl: 'Won ✅', stage: 'Won', col: '#065F46' },
     { lbl: 'Lost', stage: 'Lost', col: '#DC2626' },
     { lbl: t('conversion_rate'), stage: '__conv__', col: '#7C3AED' },
   ]
@@ -47,6 +48,7 @@ export default function SalesFunnel() {
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const [tableSearch, setTableSearch] = useState('')
+  const [pendingLostId, setPendingLostId] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -99,13 +101,15 @@ export default function SalesFunnel() {
     }
   }
 
-  async function moveStage(leadId: string, stage: string) {
+  async function moveStage(leadId: string, stage: string, lost?: LostReasonInput) {
+    if (stage === 'Lost' && !lost) { setPendingLostId(leadId); return }
     const prev = leads.find(l => l.id === leadId)?.current_stage || null
-    const { error } = await supabase.from('sales_leads').update({ current_stage: stage }).eq('id', leadId)
-    if (!error) {
-      setLeads(p => p.map(l => l.id === leadId ? { ...l, current_stage: stage } : l))
+    // last_contact_date / lost_at_stage 는 DB 트리거가 채우므로 갱신된 행을 받아온다
+    const { data, error } = await supabase.from('sales_leads').update({ current_stage: stage, ...lost }).eq('id', leadId).select().single()
+    if (!error && data) {
+      setLeads(p => p.map(l => l.id === leadId ? data as SalesLead : l))
       logStageChange(leadId, prev, stage)
-    }
+    } else if (error) showToast('단계 변경에 실패했습니다.', 'error')
   }
 
   async function updatePropField(propId: string, field: string, value: string) {
@@ -136,7 +140,7 @@ export default function SalesFunnel() {
 
   const total = leads.length
   const byS = (s: string) => leads.filter(l => l.current_stage === s).length
-  const won = byS('Onboarded / Won')
+  const won = byS('Won')
   const conv = total ? Math.round(won / total * 100) : 0
 
   function kpiVal(k: typeof KPI_CARDS[0]): string | number {
@@ -148,7 +152,7 @@ export default function SalesFunnel() {
   const baseFiltered = filterOwner ? leads.filter(l => l.owner === filterOwner) : leads
   const filtered = filterStage
     ? filterStage === '__active__'
-      ? baseFiltered.filter(l => l.current_stage !== 'Lost' && l.current_stage !== 'Onboarded / Won')
+      ? baseFiltered.filter(l => isActiveStage(l.current_stage))
       : baseFiltered.filter(l => l.current_stage === filterStage)
     : baseFiltered
 
@@ -256,6 +260,9 @@ export default function SalesFunnel() {
                             {l.volume_currency === 'KRW' ? `₩${(l.expected_monthly_volume || 0).toLocaleString()}` : `$${(l.expected_monthly_volume || 0).toLocaleString()}`}
                           </div>
                           {l.next_action && <div style={{ fontSize: 10, color: '#4F46E5', marginBottom: 6 }}>→ {l.next_action}</div>}
+                          {(l.outreach_channel || l.last_contact_date) && (
+                            <div style={{ marginBottom: 6 }}><LeadContactMeta channel={l.outreach_channel} lastContact={l.last_contact_date} /></div>
+                          )}
                           <div onClick={e => e.stopPropagation()}>
                             <select value={stage} onChange={e => { e.stopPropagation(); moveStage(l.id, e.target.value) }} onClick={e => e.stopPropagation()}
                               style={{ width: '100%', fontSize: 11, padding: '3px 5px', border: '1px solid var(--border2)', borderRadius: 5, background: c.light, cursor: 'pointer', minHeight: 44 }}>
@@ -303,8 +310,8 @@ export default function SalesFunnel() {
                       <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
                         {l.event_name.replace(/ 20\d\d$/, '')} · {l.volume_currency === 'KRW' ? `₩${(l.expected_monthly_volume || 0).toLocaleString()}` : `$${(l.expected_monthly_volume || 0).toLocaleString()}`}
                       </div>
-                      <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--muted)', flexWrap: 'wrap', marginBottom: 10 }}>
-                        {l.last_contact_date && <span>연락: {l.last_contact_date}</span>}
+                      <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--muted)', flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+                        <LeadContactMeta channel={l.outreach_channel} lastContact={l.last_contact_date} />
                         {l.next_follow_up_date && <span style={{ color: '#4F46E5', fontWeight: 600 }}>팔업: {l.next_follow_up_date}</span>}
                       </div>
                       <div onClick={e => e.stopPropagation()}>
@@ -396,6 +403,12 @@ export default function SalesFunnel() {
       {selectedLeadId && (
         <LeadDetailPanel leadId={selectedLeadId} onClose={() => setSelectedLeadId(null)} onRefresh={load} />
       )}
+
+      {pendingLostId && (
+        <LostReasonModal
+          onCancel={() => setPendingLostId(null)}
+          onConfirm={async v => { await moveStage(pendingLostId, 'Lost', v); setPendingLostId(null) }} />
+      )}
     </div>
   )
 }
@@ -406,7 +419,7 @@ function ProposalContractView({ leads, proposals, onUpdate, onOpenLead }: {
   onOpenLead: (id: string) => void
 }) {
   const { t } = useLang()
-  const propLeads = leads.filter(l => ['Proposal Sent', 'Negotiation', 'Onboarding', 'Onboarded / Won', 'Lost'].includes(l.current_stage))
+  const propLeads = leads.filter(l => ['Proposal Sent', 'Onboarding', 'Won', 'Lost'].includes(l.current_stage))
   const propMap: Record<string, SalesProposal> = {}
   for (const p of proposals) propMap[p.lead_id] = p
 
@@ -415,7 +428,6 @@ function ProposalContractView({ leads, proposals, onUpdate, onOpenLead }: {
 
   const kpiCards = [
     { lbl: 'Proposal Sent', val: leads.filter(l => l.current_stage === 'Proposal Sent').length, col: '#4F46E5' },
-    { lbl: 'Negotiation', val: leads.filter(l => l.current_stage === 'Negotiation').length, col: '#EA580C' },
     { lbl: 'Under Review', val: byCS('Under Review'), col: '#D97706' },
     { lbl: 'Signed', val: byCS('Signed'), col: '#059669' },
     { lbl: 'Onboarding', val: leads.filter(l => l.current_stage === 'Onboarding').length, col: '#7C3AED' },

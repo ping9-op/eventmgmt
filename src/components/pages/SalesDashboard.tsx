@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { STAGE_ORDER, STAGE_COLORS } from '../../lib/utils'
+import { STAGE_ORDER, STAGE_COLORS, isActiveStage } from '../../lib/utils'
 import type { SalesLead, SalesTask } from '../../types/database'
 import LeadDetailPanel from './LeadDetailPanel'
 import { useLang } from '../../contexts/LangContext'
@@ -63,8 +63,8 @@ export default function SalesDashboard() {
 
   const total = leads.length
   const byStage = (s: string) => leads.filter(l => l.current_stage === s).length
-  const won = byStage('Onboarded / Won')
-  const active = leads.filter(l => l.current_stage !== 'Lost' && l.current_stage !== 'Onboarded / Won').length
+  const won = byStage('Won')
+  const active = leads.filter(l => isActiveStage(l.current_stage)).length
   const convRate = total ? Math.round(won / total * 100) : 0
   const overdueCount = tasks.filter(t => t.due_date < today && t.status !== 'Done').length
   const todayTaskCount = tasks.filter(t => t.due_date === today && t.status !== 'Done').length
@@ -80,14 +80,14 @@ export default function SalesDashboard() {
   const ownerStats = owners.map(o => ({
     owner: o,
     total: leads.filter(l => l.owner === o).length,
-    won: leads.filter(l => l.owner === o && l.current_stage === 'Onboarded / Won').length,
-    active: leads.filter(l => l.owner === o && l.current_stage !== 'Lost' && l.current_stage !== 'Onboarded / Won').length,
+    won: leads.filter(l => l.owner === o && l.current_stage === 'Won').length,
+    active: leads.filter(l => l.owner === o && isActiveStage(l.current_stage)).length,
   }))
 
   const kpiCards = [
     { lbl: t('s_total'), val: total, col: 'var(--accent)', fn: () => navigate('/sales/funnel', { state: { filter: null, view: 'table' } }) },
     { lbl: t('s_active'), val: active, col: '#4F46E5', fn: () => navigate('/sales/funnel', { state: { filter: '__active__', view: 'table' } }) },
-    { lbl: t('s_won'), val: won, col: '#065F46', fn: () => navigate('/sales/funnel', { state: { filter: 'Onboarded / Won', view: 'board' } }) },
+    { lbl: t('s_won'), val: won, col: '#065F46', fn: () => navigate('/sales/funnel', { state: { filter: 'Won', view: 'board' } }) },
     { lbl: t('s_lost'), val: byStage('Lost'), col: '#DC2626', fn: () => navigate('/sales/funnel', { state: { filter: 'Lost', view: 'board' } }) },
     { lbl: t('s_conv'), val: convRate + '%', col: '#059669', fn: null },
   ]
@@ -230,7 +230,7 @@ export default function SalesDashboard() {
                     {o.active}
                   </td>
                   <td style={{ padding: '9px 8px', textAlign: 'center', color: '#065F46', fontWeight: 700, cursor: 'pointer' }}
-                    onClick={() => navigate('/sales/leads', { state: { filter: { owner: o.owner, stage: 'Onboarded / Won' } } })}>
+                    onClick={() => navigate('/sales/leads', { state: { filter: { owner: o.owner, stage: 'Won' } } })}>
                     {o.won}
                   </td>
                 </tr>
@@ -269,9 +269,9 @@ export default function SalesDashboard() {
                 <tbody>
                   {events.map(ev => {
                     const el = leads.filter(l => l.event_name === ev)
-                    const eWon = el.filter(l => l.current_stage === 'Onboarded / Won').length
+                    const eWon = el.filter(l => l.current_stage === 'Won').length
                     const eLost = el.filter(l => l.current_stage === 'Lost').length
-                    const eActive = el.filter(l => l.current_stage !== 'Lost' && l.current_stage !== 'Onboarded / Won').length
+                    const eActive = el.filter(l => isActiveStage(l.current_stage)).length
                     const eTotal = el.length
                     const wonPct = eTotal ? Math.round(eWon / eTotal * 100) : 0
                     const activePct = eTotal ? Math.round(eActive / eTotal * 100) : 0

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { STAGE_ORDER, STAGE_COLORS } from '../../lib/utils'
+import { STAGE_ORDER, STAGE_COLORS, isActiveStage, reachedProposal } from '../../lib/utils'
 import type { SalesLead } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
@@ -83,7 +83,7 @@ export default function SalesReports() {
 
   function exportCSV() {
     const tot = leads.length
-    const wonCount = leads.filter(l => l.current_stage === 'Onboarded / Won').length
+    const wonCount = leads.filter(l => l.current_stage === 'Won').length
     const evts = [...new Set(leads.map(l => l.event_name))]
     const ownrs = [...new Set(leads.map(l => l.owner))]
     const corridors = [...new Set(leads.map(l => l.country_corridor).filter(Boolean))]
@@ -93,8 +93,8 @@ export default function SalesReports() {
       [],
       ['[KPI 요약]'],
       ['전체 리드', tot],
-      ['Contacted', leads.filter(l => l.first_contact_done).length],
-      ['Proposal Sent', leads.filter(l => STAGE_ORDER.indexOf(l.current_stage) >= 3).length],
+      ['Outreach Sent', leads.filter(l => l.first_contact_done).length],
+      ['Proposal Sent', leads.filter(l => reachedProposal(l)).length],
       ['Won', wonCount],
       ['전환율', tot ? `${Math.round(wonCount / tot * 100)}%` : '0%'],
       [],
@@ -104,13 +104,13 @@ export default function SalesReports() {
         return [s, cnt, tot ? `${Math.round(cnt / tot * 100)}%` : '0%']
       }),
       [],
-      ['[행사별 성과]', 'Total', 'Contacted', 'Proposal', 'Won', 'Lost'],
+      ['[행사별 성과]', 'Total', 'Outreach Sent', 'Proposal', 'Won', 'Lost'],
       ...evts.map(ev => {
         const el = leads.filter(l => l.event_name === ev)
         return [ev, el.length,
           el.filter(l => l.first_contact_done).length,
-          el.filter(l => STAGE_ORDER.indexOf(l.current_stage) >= 3).length,
-          el.filter(l => l.current_stage === 'Onboarded / Won').length,
+          el.filter(l => reachedProposal(l)).length,
+          el.filter(l => l.current_stage === 'Won').length,
           el.filter(l => l.current_stage === 'Lost').length]
       }),
       [],
@@ -118,17 +118,17 @@ export default function SalesReports() {
       ...corridors.map(c => {
         const cl = leads.filter(l => l.country_corridor === c)
         return [c, cl.length,
-          cl.filter(l => l.current_stage === 'Onboarded / Won').length,
+          cl.filter(l => l.current_stage === 'Won').length,
           cl.filter(l => l.current_stage === 'Lost').length]
       }),
       [],
-      ['[담당자별 성과]', 'Total', 'Contacted', 'Proposal', 'Won'],
+      ['[담당자별 성과]', 'Total', 'Outreach Sent', 'Proposal', 'Won'],
       ...ownrs.map(o => {
         const ol = leads.filter(l => l.owner === o)
         return [o, ol.length,
           ol.filter(l => l.first_contact_done).length,
-          ol.filter(l => STAGE_ORDER.indexOf(l.current_stage) >= 3).length,
-          ol.filter(l => l.current_stage === 'Onboarded / Won').length]
+          ol.filter(l => reachedProposal(l)).length,
+          ol.filter(l => l.current_stage === 'Won').length]
       }),
     ]
     const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -143,7 +143,7 @@ export default function SalesReports() {
 
   const leads = filterByPeriod(allLeads, period)
   const total = leads.length
-  const won = leads.filter(l => l.current_stage === 'Onboarded / Won').length
+  const won = leads.filter(l => l.current_stage === 'Won').length
   const conv = total ? Math.round(won / total * 100) : 0
 
   const funnelRows = STAGE_ORDER.map(s => {
@@ -167,17 +167,17 @@ export default function SalesReports() {
 
   const corridorStats = corridors.map(c => {
     const cl = leads.filter(l => l.country_corridor === c)
-    const cWon = cl.filter(l => l.current_stage === 'Onboarded / Won').length
+    const cWon = cl.filter(l => l.current_stage === 'Won').length
     const cLost = cl.filter(l => l.current_stage === 'Lost').length
-    const cActive = cl.filter(l => l.current_stage !== 'Lost' && l.current_stage !== 'Onboarded / Won').length
+    const cActive = cl.filter(l => isActiveStage(l.current_stage)).length
     return { corridor: c, total: cl.length, won: cWon, lost: cLost, active: cActive }
   }).sort((a, b) => b.total - a.total)
 
   const kpiCards = [
     { lbl: t('total_leads_lbl'), val: total, col: 'var(--text)', f: {} as Record<string, string> | null },
-    { lbl: 'Contacted', val: leads.filter(l => l.first_contact_done).length, col: '#D97706', f: { stage: 'Contacted' } },
-    { lbl: 'Proposal Sent', val: leads.filter(l => STAGE_ORDER.indexOf(l.current_stage) >= 3).length, col: '#4F46E5', f: { stage: 'Proposal Sent' } },
-    { lbl: t('won_leads_lbl'), val: won, col: '#065F46', f: { stage: 'Onboarded / Won' } },
+    { lbl: 'Outreach Sent', val: leads.filter(l => l.first_contact_done).length, col: '#D97706', f: { stage: 'Outreach Sent' } },
+    { lbl: 'Proposal Sent', val: leads.filter(l => reachedProposal(l)).length, col: '#4F46E5', f: { stage: 'Proposal Sent' } },
+    { lbl: t('won_leads_lbl'), val: won, col: '#065F46', f: { stage: 'Won' } },
     { lbl: t('conversion_rate'), val: conv + '%', col: '#7C3AED', f: null },
   ]
 
@@ -268,7 +268,7 @@ export default function SalesReports() {
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
                 <th style={{ padding: 7, textAlign: 'left', color: 'var(--muted)', fontWeight: 600 }}>Event</th>
                 <th style={{ padding: 7, textAlign: 'center', color: 'var(--muted)', fontWeight: 600 }}>Total</th>
-                <th style={{ padding: 7, textAlign: 'center', color: '#D97706', fontWeight: 600 }}>Contacted</th>
+                <th style={{ padding: 7, textAlign: 'center', color: '#D97706', fontWeight: 600 }}>Outreach Sent</th>
                 <th style={{ padding: 7, textAlign: 'center', color: '#4F46E5', fontWeight: 600 }}>Proposal</th>
                 <th style={{ padding: 7, textAlign: 'center', color: '#065F46', fontWeight: 600 }}>Won</th>
                 <th style={{ padding: 7, textAlign: 'center', color: '#DC2626', fontWeight: 600 }}>Lost</th>
@@ -285,8 +285,8 @@ export default function SalesReports() {
                     <td style={{ padding: 7, fontSize: 11, fontWeight: 600 }}>{ev.replace(/ 20\d\d$/, '')}</td>
                     <td style={{ padding: 7, textAlign: 'center', fontWeight: 700 }}>{el.length}</td>
                     <td style={{ padding: 7, textAlign: 'center', color: '#D97706', fontWeight: 600 }}>{el.filter(l => l.first_contact_done).length}</td>
-                    <td style={{ padding: 7, textAlign: 'center', color: '#4F46E5', fontWeight: 600 }}>{el.filter(l => STAGE_ORDER.indexOf(l.current_stage) >= 3).length}</td>
-                    <td style={{ padding: 7, textAlign: 'center', color: '#065F46', fontWeight: 700 }}>{el.filter(l => l.current_stage === 'Onboarded / Won').length}</td>
+                    <td style={{ padding: 7, textAlign: 'center', color: '#4F46E5', fontWeight: 600 }}>{el.filter(l => reachedProposal(l)).length}</td>
+                    <td style={{ padding: 7, textAlign: 'center', color: '#065F46', fontWeight: 700 }}>{el.filter(l => l.current_stage === 'Won').length}</td>
                     <td style={{ padding: 7, textAlign: 'center', color: '#DC2626', fontWeight: 600 }}>{el.filter(l => l.current_stage === 'Lost').length}</td>
                   </tr>
                 )
@@ -428,7 +428,7 @@ export default function SalesReports() {
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
                 <th style={{ padding: '8px', textAlign: 'left', color: 'var(--muted)', fontWeight: 600 }}>Owner</th>
                 <th style={{ padding: '8px', textAlign: 'center', color: 'var(--muted)', fontWeight: 600 }}>Total</th>
-                <th style={{ padding: '8px', textAlign: 'center', color: '#D97706', fontWeight: 600 }}>Contacted</th>
+                <th style={{ padding: '8px', textAlign: 'center', color: '#D97706', fontWeight: 600 }}>Outreach Sent</th>
                 <th style={{ padding: '8px', textAlign: 'center', color: '#4F46E5', fontWeight: 600 }}>Proposal</th>
                 <th style={{ padding: '8px', textAlign: 'center', color: '#065F46', fontWeight: 600 }}>Won</th>
               </tr>
@@ -446,8 +446,8 @@ export default function SalesReports() {
                     </td>
                     <td style={{ padding: '9px 8px', textAlign: 'center' }}>{ol.length}</td>
                     <td style={{ padding: '9px 8px', textAlign: 'center', color: '#D97706', fontWeight: 600 }}>{ol.filter(l => l.first_contact_done).length}</td>
-                    <td style={{ padding: '9px 8px', textAlign: 'center', color: '#4F46E5', fontWeight: 600 }}>{ol.filter(l => STAGE_ORDER.indexOf(l.current_stage) >= 3).length}</td>
-                    <td style={{ padding: '9px 8px', textAlign: 'center', color: '#065F46', fontWeight: 700 }}>{ol.filter(l => l.current_stage === 'Onboarded / Won').length}</td>
+                    <td style={{ padding: '9px 8px', textAlign: 'center', color: '#4F46E5', fontWeight: 600 }}>{ol.filter(l => reachedProposal(l)).length}</td>
+                    <td style={{ padding: '9px 8px', textAlign: 'center', color: '#065F46', fontWeight: 700 }}>{ol.filter(l => l.current_stage === 'Won').length}</td>
                   </tr>
                 )
               })}

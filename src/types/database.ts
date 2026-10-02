@@ -110,6 +110,7 @@ export type Database = {
           owner: string; current_stage: string; first_contact_done: boolean
           last_contact_date: string | null; next_action: string | null; next_follow_up_date: string | null
           lost_reason: string | null; remarks: string | null; created_at: string
+          outreach_channel: string | null; lost_reason_note: string | null; lost_at_stage: string | null
         }
         Insert: {
           serial_no: string; registered_date: string; event_name: string
@@ -119,6 +120,7 @@ export type Database = {
           owner: string; current_stage?: string; first_contact_done?: boolean
           last_contact_date?: string | null; next_action?: string | null; next_follow_up_date?: string | null
           lost_reason?: string | null; remarks?: string | null
+          outreach_channel?: string | null; lost_reason_note?: string | null; lost_at_stage?: string | null
         }
         Update: {
           serial_no?: string; registered_date?: string; event_name?: string
@@ -128,6 +130,7 @@ export type Database = {
           owner?: string; current_stage?: string; first_contact_done?: boolean
           last_contact_date?: string | null; next_action?: string | null; next_follow_up_date?: string | null
           lost_reason?: string | null; remarks?: string | null
+          outreach_channel?: string | null; lost_reason_note?: string | null; lost_at_stage?: string | null
         }
         Relationships: []
       }
@@ -316,6 +319,7 @@ export interface SalesLead {
   owner: string; current_stage: string; first_contact_done: boolean
   last_contact_date: string | null; next_action: string | null; next_follow_up_date: string | null
   lost_reason: string | null; remarks: string | null
+  outreach_channel?: string | null; lost_reason_note?: string | null; lost_at_stage?: string | null
 }
 
 export interface SalesActivity {

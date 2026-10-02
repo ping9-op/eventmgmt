@@ -147,19 +147,55 @@ export function formatTodayStr(): string {
 }
 
 export const STAGE_ORDER = [
-  'New Lead','Contacted','Meeting Scheduled','Proposal Sent',
-  'Negotiation','Onboarding','Onboarded / Won','Lost'
+  'New Lead','Outreach Sent','Engaged','Meeting Scheduled',
+  'Proposal Sent','Onboarding','Won','Lost'
 ]
 
 export const STAGE_COLORS: Record<string, {bg: string, light: string}> = {
   'New Lead':          { bg:'#7B8AA0', light:'#EEF1F5' },
-  'Contacted':         { bg:'#C47D1A', light:'#FFF4E0' },
+  'Outreach Sent':     { bg:'#C47D1A', light:'#FFF4E0' },
+  'Engaged':           { bg:'#2563EB', light:'#E8F0FE' },
   'Meeting Scheduled': { bg:'#7B2D8B', light:'#F5EAFA' },
   'Proposal Sent':     { bg:'#B5363A', light:'#FCEAEA' },
-  'Negotiation':       { bg:'#E67E22', light:'#FEF0E0' },
   'Onboarding':        { bg:'#16A085', light:'#E0F5F1' },
-  'Onboarded / Won':   { bg:'#2E7D51', light:'#E5F5EC' },
+  'Won':               { bg:'#2E7D51', light:'#E5F5EC' },
   'Lost':              { bg:'#636363', light:'#F0F0F0' },
+}
+
+export const OUTREACH_CHANNELS = ['Cold Email', 'Cold Call', 'LinkedIn', 'Trade Show', 'Referral', 'Inbound', 'Other']
+
+/** 엑셀 업로드 등 외부 입력의 단계명 정규화 (이전 단계명 호환). 알 수 없는 값은 'New Lead' */
+const LEGACY_STAGE_MAP: Record<string, string> = {
+  'contacted': 'Outreach Sent',
+  'negotiation': 'Proposal Sent',
+  'onboarded / won': 'Won', 'onboarded/won': 'Won', 'onboarded': 'Won',
+}
+export function normalizeStage(raw: string | null | undefined): string {
+  const v = (raw || '').trim()
+  const exact = STAGE_ORDER.find(s => s.toLowerCase() === v.toLowerCase())
+  return exact || LEGACY_STAGE_MAP[v.toLowerCase()] || 'New Lead'
+}
+
+/** 활성 리드 = Won/Lost가 아닌 리드 */
+export const isActiveStage = (stage: string) => stage !== 'Won' && stage !== 'Lost'
+
+/** Proposal Sent 이상 도달 여부. Lost는 직전 단계(lost_at_stage) 기준 */
+export function reachedProposal(l: { current_stage: string; lost_at_stage?: string | null }): boolean {
+  const p = STAGE_ORDER.indexOf('Proposal Sent')
+  const stage = l.current_stage === 'Lost' ? (l.lost_at_stage || '') : l.current_stage
+  return stage !== 'Lost' && STAGE_ORDER.indexOf(stage) >= p
+}
+
+/** 'YYYY-MM-DD' → '오늘' / 'N일 전' 등 상대 표기 */
+export function relativeDays(date: string | null | undefined, lang: 'ko' | 'en' | 'ja' = 'ko'): string {
+  if (!date) return ''
+  const d = new Date(date + 'T00:00:00')
+  if (isNaN(d.getTime())) return ''
+  const now = new Date(); now.setHours(0, 0, 0, 0)
+  const n = Math.round((now.getTime() - d.getTime()) / 86400000)
+  if (lang === 'en') return n <= 0 ? 'today' : n === 1 ? 'yesterday' : `${n}d ago`
+  if (lang === 'ja') return n <= 0 ? '今日' : `${n}日前`
+  return n <= 0 ? '오늘' : `${n}일 전`
 }
 
 export function stageBadge(stage: string): string {

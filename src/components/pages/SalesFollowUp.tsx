@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { STAGE_COLORS, priorityColor } from '../../lib/utils'
+import { STAGE_COLORS, priorityColor, isActiveStage } from '../../lib/utils'
 import type { SalesTask, SalesLead } from '../../types/database'
 import { loadSalesSettings } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
@@ -328,7 +328,7 @@ export default function SalesFollowUp() {
             <label style={{ marginTop: 0 }}>{t('s_leads_title')}</label>
             <select value={form.lead_id} onChange={e => setForm(f => ({ ...f, lead_id: e.target.value }))}>
               <option value="">{t('select_placeholder')}</option>
-              {leads.filter(l => l.current_stage !== 'Lost' && l.current_stage !== 'Onboarded / Won').map(l => (
+              {leads.filter(l => isActiveStage(l.current_stage)).map(l => (
                 <option key={l.id} value={l.id}>{l.company_name} ({l.contact_person})</option>
               ))}
             </select>

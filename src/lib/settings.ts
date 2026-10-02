@@ -1,10 +1,7 @@
 import { supabase } from './supabase'
 
 // ── 시스템 고정값 (수정 불가) ───────────────────────────────────────────────
-export const STAGE_ORDER = [
-  'New Lead', 'Contacted', 'Meeting Scheduled', 'Proposal Sent',
-  'Negotiation', 'Onboarding', 'Onboarded/Won', 'Lost',
-]
+export { STAGE_ORDER, OUTREACH_CHANNELS } from './utils'
 export const PRIORITY_OPTS = ['High', 'Medium', 'Low']
 export const CONTRACT_STATUSES = ['Not Sent', 'Sent', 'Under Review', 'Revision Requested', 'Signed', 'Rejected']
 export const ONBOARD_STATUSES = ['Not Started', 'Waiting Docs', 'Under Review', 'Approved', 'Rejected', 'Completed']
@@ -17,7 +14,7 @@ export const DEFAULTS: Record<string, string[]> = {
   corridors:       ['Korea → Japan', 'Korea → Australia', 'Korea → USA', 'Korea → Vietnam', 'Korea → Singapore', 'Korea → Philippines', 'Japan → Korea', 'Other'],
   business_types:  ['Korean Restaurant', 'Travel Agency', 'Korean Grocery', 'Education/Academy', 'Import/Export', 'Other Korean Business'],
   contact_methods: ['Email', 'Call', 'SMS', 'Kakao', 'Visit'],
-  lost_reasons:    ['No Demand', 'Price Issue', 'Competitor Already Used', 'No Response', 'Compliance Issue', 'Service Not Available', 'Internal Priority Low', 'Other'],
+  lost_reasons:    ['Pricing', 'No Response', 'Not a Fit', 'Chose Competitor', 'KYB Issue', 'Timing', 'Other'],
 }
 
 export interface SalesSettingsData {

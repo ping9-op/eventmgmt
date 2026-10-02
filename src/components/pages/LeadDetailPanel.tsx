@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { STAGE_ORDER, STAGE_COLORS } from '../../lib/utils'
+import { STAGE_ORDER, STAGE_COLORS, OUTREACH_CHANNELS } from '../../lib/utils'
+import LostReasonModal, { type LostReasonInput } from '../LostReasonModal'
 import { useIsMobile } from '../../hooks/useBreakpoint'
 import { logStageChange } from '../../lib/stageHistory'
 import { loadAllSettings, CONTRACT_STATUSES as SYSTEM_CONTRACT_STATUSES, ONBOARD_STATUSES as SYSTEM_ONBOARD_STATUSES, type SalesSettingsData } from '../../lib/settings'
@@ -61,6 +62,7 @@ export default function LeadDetailPanel({
   const [proposal, setProposal] = useState<SalesProposal | null>(null)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [showLostModal, setShowLostModal] = useState(false)
 
   // Activity form
   const [showActForm, setShowActForm] = useState(false)
@@ -108,6 +110,9 @@ export default function LeadDetailPanel({
 
   async function save() {
     if (!lead || !form) return
+    if ((form.current_stage || lead.current_stage) === 'Lost' && !form.lost_reason) {
+      showToast('⚠️ Lost 사유를 선택해주세요.'); setTab('funnel'); return
+    }
     setSaving(true)
     try {
       const newStage = form.current_stage || lead.current_stage
@@ -130,10 +135,12 @@ export default function LeadDetailPanel({
         remarks: form.remarks,
         current_stage: newStage,
         first_contact_done: form.first_contact_done,
-        last_contact_date: form.last_contact_date,
+        last_contact_date: form.last_contact_date || null,
         next_follow_up_date: form.next_follow_up_date,
         next_action: form.next_action,
         lost_reason: form.lost_reason,
+        lost_reason_note: form.lost_reason_note || null,
+        outreach_channel: form.outreach_channel || null,
       }
       const { error: leadErr } = await supabase.from('sales_leads').update(updates as never).eq('id', leadId)
       if (leadErr) throw leadErr
@@ -237,11 +244,12 @@ export default function LeadDetailPanel({
     onRefresh()
   }
 
-  async function updateStageInline(stage: string) {
+  async function updateStageInline(stage: string, lost?: LostReasonInput) {
+    if (stage === 'Lost' && !lost) { setShowLostModal(true); return }
     const prev = lead?.current_stage || null
     setForm(f => ({ ...f, current_stage: stage }))
     try {
-      const { error } = await supabase.from('sales_leads').update({ current_stage: stage }).eq('id', leadId)
+      const { error } = await supabase.from('sales_leads').update({ current_stage: stage, ...lost }).eq('id', leadId)
       if (error) throw error
       logStageChange(leadId, prev, stage, lead?.owner || undefined)
       const { data } = await supabase.from('sales_leads').select('*').eq('id', leadId).single()
@@ -332,6 +340,12 @@ export default function LeadDetailPanel({
                     {(settings?.sources || []).map(s => <option key={s}>{s}</option>)}
                   </select>
                 </Field>
+                <Field label="Outreach Channel">
+                  <select value={form.outreach_channel || ''} onChange={e => setForm(f => ({ ...f, outreach_channel: e.target.value || null }))}>
+                    <option value="">—</option>
+                    {OUTREACH_CHANNELS.map(c => <option key={c}>{c}</option>)}
+                  </select>
+                </Field>
                 <Field label="Event Name">
                   <select value={form.event_name || ''} onChange={e => setForm(f => ({ ...f, event_name: e.target.value }))}>
                     <option value="">{t('select_placeholder')}</option>
@@ -411,7 +425,7 @@ export default function LeadDetailPanel({
                     </select>
                   </Field>
                   <Field label="Last Contact Date">
-                    <input type="date" value={form.last_contact_date || ''} onChange={e => setForm(f => ({ ...f, last_contact_date: e.target.value }))} />
+                    <input type="date" value={form.last_contact_date || ''} onChange={e => setForm(f => ({ ...f, last_contact_date: e.target.value || null }))} />
                   </Field>
                   <Field label="Next Follow-up Date">
                     <input type="date" value={form.next_follow_up_date || ''} onChange={e => setForm(f => ({ ...f, next_follow_up_date: e.target.value }))} />
@@ -421,16 +435,24 @@ export default function LeadDetailPanel({
                       <input value={form.next_action || ''} onChange={e => setForm(f => ({ ...f, next_action: e.target.value }))} placeholder="다음 액션" />
                     </Field>
                   </div>
-                  {(form.current_stage || lead.current_stage) === 'Lost' && (
+                  {(form.current_stage || lead.current_stage) === 'Lost' && <>
+                    <Field label="Lost Reason *">
+                      <select value={form.lost_reason || ''} onChange={e => setForm(f => ({ ...f, lost_reason: e.target.value }))}>
+                        <option value="">-- 선택 --</option>
+                        {(settings?.lost_reasons || []).map(r => <option key={r}>{r}</option>)}
+                        {/* 설정에서 삭제된 기존 사유도 표시 */}
+                        {form.lost_reason && settings && !settings.lost_reasons.includes(form.lost_reason) && <option>{form.lost_reason}</option>}
+                      </select>
+                    </Field>
+                    <Field label="Lost At Stage">
+                      <input value={form.lost_at_stage || '—'} disabled style={{ background: 'var(--light)', color: 'var(--muted)' }} />
+                    </Field>
                     <div style={{ gridColumn: '1 / -1' }}>
-                      <Field label="Lost Reason">
-                        <select value={form.lost_reason || ''} onChange={e => setForm(f => ({ ...f, lost_reason: e.target.value }))}>
-                          <option value="">-- 선택 --</option>
-                          {(settings?.lost_reasons || ['No Demand', 'Price Issue', 'Competitor Already Used', 'No Response', 'Other']).map(r => <option key={r}>{r}</option>)}
-                        </select>
+                      <Field label="Lost Note">
+                        <textarea value={form.lost_reason_note || ''} rows={2} onChange={e => setForm(f => ({ ...f, lost_reason_note: e.target.value }))} style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }} />
                       </Field>
                     </div>
-                  )}
+                  </>}
                   {proposal && <>
                     <Field label="Contract Status">
                       <select value={propForm.contract_status || proposal.contract_status} onChange={e => setPropForm(f => ({ ...f, contract_status: e.target.value }))}>
@@ -641,6 +663,12 @@ export default function LeadDetailPanel({
           </div>
         </div>
       </div>
+
+      {showLostModal && (
+        <LostReasonModal
+          onCancel={() => setShowLostModal(false)}
+          onConfirm={async v => { await updateStageInline('Lost', v); setShowLostModal(false) }} />
+      )}
     </>
   )
 }

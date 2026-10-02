@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { exhColor, formatEventDate, isPastEvent, STAGE_ORDER, STAGE_COLORS, exhDisplayName, CUR_SYM } from '../../lib/utils'
+import { exhColor, formatEventDate, isPastEvent, STAGE_ORDER, STAGE_COLORS, exhDisplayName, CUR_SYM, isActiveStage } from '../../lib/utils'
 import type { Exhibition, Payment, SalesLead, SalesTask, BudgetItem } from '../../types/database'
 import LeadDetailPanel from './LeadDetailPanel'
 import { useLang } from '../../contexts/LangContext'
@@ -150,8 +150,8 @@ export default function Dashboard() {
 
   // Sales stats
   const total = leads.length
-  const won = leads.filter(l => l.current_stage === 'Onboarded / Won').length
-  const active = leads.filter(l => l.current_stage !== 'Lost' && l.current_stage !== 'Onboarded / Won').length
+  const won = leads.filter(l => l.current_stage === 'Won').length
+  const active = leads.filter(l => isActiveStage(l.current_stage)).length
   const convRate = total ? Math.round(won / total * 100) : 0
   const overdue = tasks.filter(t => t.due_date < todayStr).length
   const todayTasks = tasks.filter(t => t.due_date === todayStr).length

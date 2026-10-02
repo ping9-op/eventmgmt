@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
-import { STAGE_ORDER, STAGE_COLORS, priorityColor } from '../../lib/utils'
+import { STAGE_ORDER, STAGE_COLORS, OUTREACH_CHANNELS, priorityColor, normalizeStage } from '../../lib/utils'
 import type { SalesLead } from '../../types/database'
 import { loadAllSettings, type SalesSettingsData } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
 import LeadDetailPanel from './LeadDetailPanel'
+import LostReasonModal, { LeadContactMeta, type LostReasonInput } from '../LostReasonModal'
 import { useLang } from '../../contexts/LangContext'
 import { logStageChange } from '../../lib/stageHistory'
 import { useIsMobile } from '../../hooks/useBreakpoint'
@@ -116,6 +117,8 @@ export default function SalesLeads() {
   const [showBulkStage, setShowBulkStage] = useState(false)
   const [bulkStaging, setBulkStaging] = useState(false)
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  // Lost 전환 대기 (사유 입력 모달)
+  const [pendingLostIds, setPendingLostIds] = useState<string[] | null>(null)
 
   // 그룹별 업로드용 이벤트명 ref
   const importEventNameRef = useRef<string>('')
@@ -211,21 +214,30 @@ export default function SalesLeads() {
     }
   }
 
-  async function updateStage(leadId: string, stage: string) {
+  // last_contact_date / lost_at_stage 는 DB 트리거가 채우므로 갱신된 행으로 state를 교체한다
+  function mergeUpdated(rows: SalesLead[] | null) {
+    if (!rows?.length) return
+    const byId = new Map(rows.map(r => [r.id, r]))
+    setLeads(p => p.map(l => byId.get(l.id) || l))
+  }
+
+  async function updateStage(leadId: string, stage: string, lost?: LostReasonInput) {
+    if (stage === 'Lost' && !lost) { setPendingLostIds([leadId]); return }
     const prev = leads.find(l => l.id === leadId)?.current_stage || null
-    const { error } = await supabase.from('sales_leads').update({ current_stage: stage }).eq('id', leadId)
+    const { data, error } = await supabase.from('sales_leads').update({ current_stage: stage, ...lost }).eq('id', leadId).select()
     if (error) { showToast('⚠️ Stage 변경 실패: ' + error.message); return }
-    setLeads(p => p.map(l => l.id === leadId ? { ...l, current_stage: stage } : l))
+    mergeUpdated(data as SalesLead[])
     logStageChange(leadId, prev, stage)
   }
 
-  async function bulkUpdateStage(ids: string[], stage: string) {
+  async function bulkUpdateStage(ids: string[], stage: string, lost?: LostReasonInput) {
     if (!ids.length || !stage) return
+    if (stage === 'Lost' && !lost) { setShowBulkStage(false); setPendingLostIds(ids); return }
     setBulkStaging(true)
     try {
-      const { error } = await supabase.from('sales_leads').update({ current_stage: stage }).in('id', ids)
+      const { data, error } = await supabase.from('sales_leads').update({ current_stage: stage, ...lost }).in('id', ids).select()
       if (error) { showToast('⚠️ 일괄 변경 실패: ' + error.message); return }
-      setLeads(p => p.map(l => ids.includes(l.id) ? { ...l, current_stage: stage } : l))
+      mergeUpdated(data as SalesLead[])
       setChecked(new Set())
       setShowBulkStage(false)
       showToast(`✅ ${ids.length}개 리드 → ${stage}`)
@@ -282,6 +294,8 @@ export default function SalesLeads() {
       address: form.address || null,
       expected_monthly_volume: form.expected_monthly_volume || null,
       remarks: form.remarks || null,
+      outreach_channel: form.outreach_channel || null,
+      last_contact_date: form.last_contact_date || null,
     })
     if (error) { showToast('⚠️ 등록 실패: ' + error.message); return }
     setShowRegister(false)
@@ -373,7 +387,7 @@ export default function SalesLeads() {
         event_name: eventName || rawEvent,
         owner: get(r, 'owner') || 'Andrew',
         priority: get(r, 'priority') || 'Medium',
-        current_stage: STAGE_ORDER.includes(rawStage) ? rawStage : 'New Lead',
+        current_stage: normalizeStage(rawStage),
         country_corridor: get(r, 'country_corridor') || 'Korea → Japan',
         business_type: get(r, 'business_type') || 'Korean Restaurant',
         expected_monthly_volume: parseInt(get(r, 'expected_monthly_volume').replace(/[^0-9]/g, '')) || null,
@@ -410,7 +424,7 @@ export default function SalesLeads() {
         // 관리자가 아니면 Excel의 Owner 컬럼값과 무관하게 본인 계정으로 등록 (RLS와 일치)
         owner: isAdmin ? (r.owner || 'Andrew') : (salesOwner || r.owner || 'Andrew'),
         priority: r.priority || 'Medium',
-        current_stage: (r.current_stage && STAGE_ORDER.includes(r.current_stage)) ? r.current_stage : 'New Lead',
+        current_stage: normalizeStage(r.current_stage),
         country_corridor: r.country_corridor || 'Korea → Japan',
         business_type: r.business_type || 'Korean Restaurant',
         expected_monthly_volume: r.expected_monthly_volume || null,
@@ -823,8 +837,8 @@ export default function SalesLeads() {
                       </span>
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>{l.event_name.replace(/ 20\d\d$/, '')} · {l.lead_source}</div>
-                    <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--muted)', flexWrap: 'wrap' }}>
-                      {l.last_contact_date && <span>연락: {l.last_contact_date}</span>}
+                    <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--muted)', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <LeadContactMeta channel={l.outreach_channel} lastContact={l.last_contact_date} />
                       {l.next_follow_up_date && <span style={{ color: '#4F46E5', fontWeight: 600 }}>팔업: {l.next_follow_up_date}</span>}
                       {l.next_action && <span style={{ color: 'var(--accent)' }}>→ {l.next_action}</span>}
                     </div>
@@ -1118,6 +1132,14 @@ export default function SalesLeads() {
                 </div>
               </div>
               <div><label style={{ marginTop: 0 }}>{t('address_lbl')}</label><input value={form.address || ''} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="주소" /></div>
+              <div>
+                <label style={{ marginTop: 0 }}>{t('outreach_channel_lbl')}</label>
+                <select value={form.outreach_channel || ''} onChange={e => setForm(f => ({ ...f, outreach_channel: e.target.value || null }))}>
+                  <option value="">—</option>
+                  {OUTREACH_CHANNELS.map(c => <option key={c}>{c}</option>)}
+                </select>
+              </div>
+              <div><label style={{ marginTop: 0 }}>{t('last_contact_lbl')}</label><input type="date" value={form.last_contact_date || ''} onChange={e => setForm(f => ({ ...f, last_contact_date: e.target.value || null }))} /></div>
             </div>
             <label>{t('remarks_lbl')}</label>
             <textarea value={form.remarks || ''} rows={2} onChange={e => setForm(f => ({ ...f, remarks: e.target.value }))} style={{ resize: 'vertical', fontFamily: 'inherit' }} />
@@ -1131,6 +1153,17 @@ export default function SalesLeads() {
 
       {selectedLeadId && (
         <LeadDetailPanel leadId={selectedLeadId} onClose={() => setSelectedLeadId(null)} onRefresh={load} />
+      )}
+
+      {pendingLostIds && (
+        <LostReasonModal
+          count={pendingLostIds.length}
+          onCancel={() => setPendingLostIds(null)}
+          onConfirm={async v => {
+            if (pendingLostIds.length === 1) await updateStage(pendingLostIds[0], 'Lost', v)
+            else await bulkUpdateStage(pendingLostIds, 'Lost', v)
+            setPendingLostIds(null)
+          }} />
       )}
     </div>
   )
