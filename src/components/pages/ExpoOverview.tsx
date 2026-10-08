@@ -6,7 +6,7 @@ import LoadingSpinner from '../LoadingSpinner'
 import { Chart, ArcElement, Tooltip, DoughnutController } from 'chart.js'
 Chart.register(ArcElement, Tooltip, DoughnutController)
 import { supabase } from '../../lib/supabase'
-import { krw, exhColor, formatEventDate, isPastEvent, daysUntil, exhDisplayName, sortUpcomingFirst } from '../../lib/utils'
+import { krw, exhColor, formatEventDate, isPastEvent, daysUntil, exhDisplayName, sortUpcomingFirst, fmtCur } from '../../lib/utils'
 import type { Exhibition, BudgetItem } from '../../types/database'
 
 interface ExhEntry {
@@ -131,9 +131,32 @@ export default function ExpoOverview() {
   const biggest = [...allE].sort((a, b) => b.total - a.total)[0]
   const uniqueExhs = new Set(allE.map(e => e.key)).size
 
-  // Rank table
-  const ranked = [...allE].sort((a, b) => b.total - a.total)
-  const totalAll = ranked.reduce((s, e) => s + e.total, 0)
+  // 실 지출 순위 — 비용 결제 관리에서 '납부 완료' 체크된 선금/잔금 합계 기준, 완료된 행사만
+  const ranked = allE
+    .filter(e => isPastEvent(e.date, e.year))
+    .map(e => {
+      const spent: Record<string, number> = {}
+      for (const p of payments[`${e.key}_${e.year}`] || []) {
+        const amt = (p.deposit_paid ? p.deposit_amount || 0 : 0) + (p.final_paid ? p.final_amount || 0 : 0)
+        if (amt) spent[p.currency || 'KRW'] = (spent[p.currency || 'KRW'] || 0) + amt
+      }
+      const approved: Record<string, number> = {}
+      for (const b of e.budget) { const c = (b as any).currency || 'KRW'; approved[c] = (approved[c] || 0) + (b.curr || 0) }
+      // 집행률은 통화가 섞이지 않은(원화만 있는) 경우에만 계산
+      const singleKrw = Object.keys({ ...spent, ...approved }).every(c => c === 'KRW')
+      const rate = singleKrw && approved.KRW ? Math.round((spent.KRW || 0) / approved.KRW * 100) : null
+      return { e, spent, approved, rate }
+    })
+    .sort((a, b) => (b.spent.KRW || 0) - (a.spent.KRW || 0))
+  const sumByCur = (rows: Record<string, number>[]) => {
+    const s: Record<string, number> = {}
+    for (const r of rows) for (const [c, v] of Object.entries(r)) s[c] = (s[c] || 0) + v
+    return s
+  }
+  const curStr = (m: Record<string, number>) =>
+    Object.entries(m).sort(([a]) => a === 'KRW' ? -1 : 1).map(([c, v]) => fmtCur(v, c)).join(' + ') || '-'
+  const totalSpent = sumByCur(ranked.map(r => r.spent))
+  const totalApproved = sumByCur(ranked.map(r => r.approved))
 
   return (
     <div className="view wide">
@@ -198,28 +221,41 @@ export default function ExpoOverview() {
       <YearDonutSection entries={allE} />
 
       {/* 순위 테이블 */}
-      <div className="sec-hdr"><div className="bar" /><div className="txt">{t('rank')}</div></div>
+      <div className="sec-hdr"><div className="bar" /><div className="txt">{t('rank')}</div><div className="sub">{t('rank_sub')}</div></div>
       <div className="table-scroll-wrapper">
       <table className="rank-table">
         <thead>
-          <tr><th>{t('col_rank')}</th><th>{t('col_name')}</th><th>{t('col_year')}</th><th>{t('col_date')}</th><th>{t('col_venue')}</th><th>{t('col_budget')}</th><th>{t('col_booth')}</th></tr>
+          <tr>
+            <th>{t('col_rank')}</th><th>{t('col_name')}</th><th>{t('col_date')}</th><th>{t('col_venue')}</th>
+            <th style={{ textAlign: 'right' }}>{t('col_actual')}</th>
+            <th style={{ textAlign: 'right' }}>{t('col_approved')}</th>
+            <th style={{ textAlign: 'right' }}>{t('col_exec_rate')}</th>
+          </tr>
         </thead>
         <tbody>
-          {ranked.map((e, i) => (
+          {ranked.map(({ e, spent, approved, rate }, i) => (
             <tr key={`${e.key}_${e.year}`} style={{ cursor: 'pointer', ...(i === 0 ? { color: 'var(--accent)', fontWeight: 700 } : {}) }}
               onClick={() => navigate(`/expo/event/${e.key}/${e.year}`)}>
               <td>{i + 1}</td>
               <td>{exhDisplayName(e.name, e.key)} {e.year}</td>
-              <td>{e.year}</td>
-              <td>{formatEventDate(e.date, e.year)}</td>
+              <td style={{ whiteSpace: 'nowrap' }}>{formatEventDate(e.date, e.year)}</td>
               <td style={{ color: 'var(--muted)' }}>{e.venue}</td>
-              <td><strong>{krw(e.total)}</strong></td>
-              <td>{krw(e.budget.find(b => b.item === 'Booth Fee')?.curr || 0)}</td>
+              <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><strong>{curStr(spent)}</strong></td>
+              <td style={{ textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--muted)' }}>{curStr(approved)}</td>
+              {/* 집행률 50% 미만은 결제 관리 정리가 덜 된 회차일 가능성이 높아 경고색 */}
+              <td style={{ textAlign: 'right', whiteSpace: 'nowrap', color: rate !== null && rate < 50 ? 'var(--danger)' : undefined }}>
+                {rate === null ? '-' : `${rate}%`}
+              </td>
             </tr>
           ))}
         </tbody>
         <tfoot>
-          <tr><td></td><td><strong>{t('total')}</strong></td><td></td><td></td><td></td><td><strong>{krw(totalAll)}</strong></td><td></td></tr>
+          <tr>
+            <td></td><td><strong>{t('total')}</strong></td><td></td><td></td>
+            <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><strong>{curStr(totalSpent)}</strong></td>
+            <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{curStr(totalApproved)}</td>
+            <td></td>
+          </tr>
         </tfoot>
       </table>
       </div>
