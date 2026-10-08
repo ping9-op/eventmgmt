@@ -227,8 +227,8 @@ export default function ExpoOverview() {
         <thead>
           <tr>
             <th>{t('col_rank')}</th><th>{t('col_name')}</th><th>{t('col_date')}</th><th>{t('col_venue')}</th>
-            <th style={{ textAlign: 'right' }}>{t('col_actual')}</th>
             <th style={{ textAlign: 'right' }}>{t('col_approved')}</th>
+            <th style={{ textAlign: 'right' }}>{t('col_actual')}</th>
             <th style={{ textAlign: 'right' }}>{t('col_exec_rate')}</th>
           </tr>
         </thead>
@@ -240,8 +240,8 @@ export default function ExpoOverview() {
               <td>{exhDisplayName(e.name, e.key)} {e.year}</td>
               <td style={{ whiteSpace: 'nowrap' }}>{formatEventDate(e.date, e.year)}</td>
               <td style={{ color: 'var(--muted)' }}>{e.venue}</td>
-              <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><strong>{curStr(spent)}</strong></td>
               <td style={{ textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--muted)' }}>{curStr(approved)}</td>
+              <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><strong>{curStr(spent)}</strong></td>
               {/* 집행률 50% 미만은 결제 관리 정리가 덜 된 회차일 가능성이 높아 경고색 */}
               <td style={{ textAlign: 'right', whiteSpace: 'nowrap', color: rate !== null && rate < 50 ? 'var(--danger)' : undefined }}>
                 {rate === null ? '-' : `${rate}%`}
@@ -252,8 +252,8 @@ export default function ExpoOverview() {
         <tfoot>
           <tr>
             <td></td><td><strong>{t('total')}</strong></td><td></td><td></td>
-            <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><strong>{curStr(totalSpent)}</strong></td>
             <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{curStr(totalApproved)}</td>
+            <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><strong>{curStr(totalSpent)}</strong></td>
             <td></td>
           </tr>
         </tfoot>
