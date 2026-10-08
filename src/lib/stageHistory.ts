@@ -15,6 +15,19 @@ export async function logStageChange(
   })
 }
 
+// 일괄 변경용 — 여러 리드의 이력을 한 번의 insert로 기록
+export async function logStageChanges(
+  changes: { leadId: string; fromStage: string | null }[],
+  toStage: string,
+  changedBy?: string,
+): Promise<void> {
+  const rows = changes
+    .filter(c => c.fromStage !== toStage)
+    .map(c => ({ lead_id: c.leadId, from_stage: c.fromStage || null, to_stage: toStage, changed_by: changedBy || null }))
+  if (!rows.length) return
+  await supabase.from('sales_stage_history').insert(rows)
+}
+
 export interface StageHistoryRow {
   id: string
   lead_id: string

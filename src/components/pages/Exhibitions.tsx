@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { exhColor, costColor, formatEventDate, isPastEvent, exhDisplayName, CUR_SYM, CURRENCIES, COST_ITEMS, MON, fmtCur, formatDateRange, parseDateRange } from '../../lib/utils'
+import { exhColor, initExhColors, costColor, formatEventDate, isPastEvent, exhDisplayName, CUR_SYM, CURRENCIES, COST_ITEMS, MON, fmtCur, formatDateRange, parseDateRange } from '../../lib/utils'
 import { useToast } from '../../contexts/ToastContext'
 import type { Exhibition, Proposal, BudgetItem } from '../../types/database'
 import LoadingSpinner from '../LoadingSpinner'
@@ -62,6 +62,14 @@ export default function Exhibitions() {
   const [apObj, setApObj] = useState('')
   const [apResults, setApResults] = useState<string[]>([''])
   const [apBudget, setApBudget] = useState<BudgetRow[]>(defaultBudgetRows())
+
+  // 신규 박람회 등록 폼
+  const [showNewExh, setShowNewExh] = useState(false)
+  const [neName, setNeName] = useState('')
+  const [neKey, setNeKey] = useState('')
+  const [neRecurring, setNeRecurring] = useState<'1' | '0'>('0')
+  const [neColor, setNeColor] = useState('#8A8A9A')
+  const [neSaving, setNeSaving] = useState(false)
 
   async function load(cancelled?: { current: boolean }) {
     try {
@@ -221,6 +229,37 @@ export default function Exhibitions() {
     setParseState('idle'); setUploadedFileName('')
   }
 
+  function closeNewExh() {
+    setShowNewExh(false)
+    setNeName(''); setNeKey(''); setNeRecurring('0'); setNeColor('#8A8A9A')
+  }
+
+  async function saveNewExhibition() {
+    const name = neName.trim()
+    if (!name) { showToast('⚠️ 박람회 이름을 입력하세요.'); return }
+    const key = neKey.trim().replace(/[^a-zA-Z0-9]/g, '')
+      || name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 12) || 'EXH' + Date.now()
+    if (data.some(d => d.exh.name.trim().toLowerCase() === name.toLowerCase())) {
+      showToast(`⚠️ "${name}" 박람회가 이미 있습니다.`); return
+    }
+    if (data.some(d => d.exh.key.toLowerCase() === key.toLowerCase())) {
+      showToast(`⚠️ 박람회 키 "${key}"가 이미 사용 중입니다. 다른 키를 입력하세요.`); return
+    }
+    setNeSaving(true)
+    try {
+      const { error } = await supabase.from('exhibitions').insert({
+        key, name, recurring: neRecurring === '1', color: neColor,
+      })
+      if (error) { showToast('⚠️ 박람회 등록 실패: ' + error.message); return }
+      initExhColors([{ name, color: neColor }])
+      closeNewExh()
+      showToast(`✅ ${name} 박람회가 등록되었습니다.`)
+      load()
+    } finally {
+      setNeSaving(false)
+    }
+  }
+
   function handleFileUpload(file: File) {
     if (!file) return
     const ext = file.name.split('.').pop()?.toLowerCase()
@@ -282,6 +321,7 @@ export default function Exhibitions() {
           <div className="sub">{t('exh_sub')}</div>
         </div>
         <div className="page-hdr-actions">
+          <button className="btn btn-primary btn-sm" onClick={() => setShowNewExh(true)}>{t('add_exh_btn')}</button>
           <button className="btn btn-primary btn-sm" onClick={() => setShowAddModal(true)}>{t('add_past')}</button>
           <button className="btn btn-outline btn-sm" onClick={() => { setLoading(true); load() }}>{t('refresh')}</button>
         </div>
@@ -370,8 +410,9 @@ export default function Exhibitions() {
                 <div style={{ display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 12 }}>
                   <button className="btn btn-primary btn-sm" style={{ flex: 1 }}
                     onClick={() => navigate('/expo/create', { state: { exhId: exh.id } })}>✏️ {t('btn_proposal')}</button>
-                  <button className="btn btn-muted btn-sm" style={{ flex: 1 }}
-                    onClick={() => navigate('/expo/report', { state: { key: `${exh.key}_${latest?.year}` } })}>📋 {t('btn_report')}</button>
+                  <button className="btn btn-muted btn-sm" style={{ flex: 1 }} disabled={!latest}
+                    title={latest ? undefined : 'Proposal을 먼저 작성하세요'}
+                    onClick={() => latest && navigate('/expo/report', { state: { key: `${exh.key}_${latest.year}` } })}>📋 {t('btn_report')}</button>
                 </div>
               </div>
             </div>
@@ -518,6 +559,48 @@ export default function Exhibitions() {
               <button className="btn btn-muted" onClick={() => { setShowAddModal(false); resetForm() }}>{t('cancel')}</button>
               <button className="btn btn-primary" onClick={saveApProposal} disabled={saving || !apName}>
                 {saving ? t('saving') : t('register_done')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 신규 박람회 등록 모달 */}
+      {showNewExh && (
+        <div className="modal-bg open">
+          <div className="modal" style={{ maxWidth: 480, width: '100%' }}>
+            <div className="modal-hdr">
+              <h3>{t('reg_new_exh')}</h3>
+              <button className="modal-close" onClick={closeNewExh}>✕</button>
+            </div>
+            <label style={{ marginTop: 0 }}>{t('exh_name_lbl')}</label>
+            <input autoFocus value={neName} onChange={e => setNeName(e.target.value)} placeholder={t('exh_name_placeholder')} />
+            <div className="form-row cols2">
+              <div>
+                <label>박람회 키(약어)</label>
+                <input value={neKey} onChange={e => setNeKey(e.target.value)} placeholder="예: SITF (비우면 이름에서 자동 생성)" />
+              </div>
+              <div>
+                <label>{t('is_recurring')}</label>
+                <select value={neRecurring} onChange={e => setNeRecurring(e.target.value as '1' | '0')}>
+                  <option value="0">{t('new_exh')}</option>
+                  <option value="1">{t('existing_exh')}</option>
+                </select>
+              </div>
+            </div>
+            <label>색상</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <input type="color" value={neColor} onChange={e => setNeColor(e.target.value)}
+                style={{ width: 48, height: 36, padding: 2, border: '1px solid var(--border2)', borderRadius: 6, cursor: 'pointer' }} />
+              <span style={{ fontSize: 13, fontWeight: 700, color: neColor }}>{neName || t('exh_name_lbl')}</span>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 12 }}>
+              등록 후 카드의 "{t('btn_proposal')}" 버튼으로 Proposal을 작성할 수 있습니다.
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-muted" onClick={closeNewExh}>{t('cancel')}</button>
+              <button className="btn btn-primary" onClick={saveNewExhibition} disabled={neSaving || !neName.trim()}>
+                {neSaving ? t('saving') : t('register_done')}
               </button>
             </div>
           </div>

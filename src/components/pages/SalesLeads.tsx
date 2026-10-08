@@ -10,7 +10,7 @@ import LeadDetailPanel from './LeadDetailPanel'
 import LostReasonModal, { LeadContactMeta, type LostReasonInput } from '../LostReasonModal'
 import DecimalInput, { parseAmount } from '../DecimalInput'
 import { useLang } from '../../contexts/LangContext'
-import { logStageChange } from '../../lib/stageHistory'
+import { logStageChange, logStageChanges } from '../../lib/stageHistory'
 import { useIsMobile } from '../../hooks/useBreakpoint'
 import LoadingSpinner from '../LoadingSpinner'
 
@@ -235,10 +235,12 @@ export default function SalesLeads() {
     if (!ids.length || !stage) return
     if (stage === 'Lost' && !lost) { setShowBulkStage(false); setPendingLostIds(ids); return }
     setBulkStaging(true)
+    const prevStages = ids.map(id => ({ leadId: id, fromStage: leads.find(l => l.id === id)?.current_stage || null }))
     try {
       const { data, error } = await supabase.from('sales_leads').update({ current_stage: stage, ...lost }).in('id', ids).select()
       if (error) { showToast('⚠️ 일괄 변경 실패: ' + error.message); return }
       mergeUpdated(data as SalesLead[])
+      logStageChanges(prevStages, stage)
       setChecked(new Set())
       setShowBulkStage(false)
       showToast(`✅ ${ids.length}개 리드 → ${stage}`)
