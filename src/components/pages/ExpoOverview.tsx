@@ -6,7 +6,7 @@ import LoadingSpinner from '../LoadingSpinner'
 import { Chart, ArcElement, Tooltip, DoughnutController } from 'chart.js'
 Chart.register(ArcElement, Tooltip, DoughnutController)
 import { supabase } from '../../lib/supabase'
-import { krw, exhColor, costColor, formatEventDate, isPastEvent, daysUntil, exhDisplayName, sortUpcomingFirst, CUR_SYM, fmtCur } from '../../lib/utils'
+import { krw, exhColor, formatEventDate, isPastEvent, daysUntil, exhDisplayName, sortUpcomingFirst, CUR_SYM, fmtCur } from '../../lib/utils'
 import type { Exhibition, BudgetItem, ActualCost } from '../../types/database'
 
 
@@ -178,10 +178,6 @@ export default function ExpoOverview() {
   const biggest = [...allE].sort((a, b) => b.total - a.total)[0]
   const uniqueExhs = new Set(allE.map(e => e.key)).size
 
-  // Cost chart
-  const maxTotal = Math.max(...latestSorted.map(e => e.total), 1)
-  const allCostItems = [...new Set(latestSorted.flatMap(e => e.budget.map(b => b.item)))]
-
   // Rank table
   const ranked = [...allE].sort((a, b) => b.total - a.total)
   const totalAll = ranked.reduce((s, e) => s + e.total, 0)
@@ -335,33 +331,6 @@ export default function ExpoOverview() {
             </div>
           )
         })}
-      </div>
-
-      {/* 비용 구조 차트 */}
-      <div className="sec-hdr"><div className="bar" /><div className="txt">{t('cost_chart')}</div></div>
-      <div className="chart-card">
-        {latestSorted.map(e => (
-          <div key={`${e.key}_${e.year}`} className="hbar-row" style={{ cursor: 'pointer' }}
-            onClick={() => navigate(`/expo/event/${e.key}/${e.year}`)}>
-            <span className="hbar-label" style={{ textAlign: 'right' }}>
-              {(exhDisplayName(e.name, e.key) + ' ' + e.year).length > 18 ? (exhDisplayName(e.name, e.key) + ' ' + e.year).slice(0, 17) + '…' : exhDisplayName(e.name, e.key) + ' ' + e.year}
-            </span>
-            <div className="hbar-track">
-              {e.budget.map((b, i) => (
-                <div key={i} style={{ flex: b.curr / maxTotal * 100, background: costColor(b.item), minWidth: 0 }} />
-              ))}
-            </div>
-            <span className="hbar-total">{budgetByCurStr(e.budget)}</span>
-          </div>
-        ))}
-        <div className="legend-row">
-          {allCostItems.map(item => (
-            <div key={item} className="leg-item">
-              <div className="leg-dot" style={{ background: costColor(item) }} />
-              {item}
-            </div>
-          ))}
-        </div>
       </div>
 
       {/* 순위 테이블 */}
