@@ -6,7 +6,7 @@ import LoadingSpinner from '../LoadingSpinner'
 import { Chart, ArcElement, Tooltip, DoughnutController } from 'chart.js'
 Chart.register(ArcElement, Tooltip, DoughnutController)
 import { supabase } from '../../lib/supabase'
-import { krw, exhColor, costColor, formatEventDate, isPastEvent, daysUntil, exhDisplayName, CUR_SYM, fmtCur } from '../../lib/utils'
+import { krw, exhColor, costColor, formatEventDate, isPastEvent, daysUntil, exhDisplayName, sortUpcomingFirst, CUR_SYM, fmtCur } from '../../lib/utils'
 import type { Exhibition, BudgetItem, ActualCost } from '../../types/database'
 
 
@@ -465,9 +465,12 @@ function YearDonutSection({ entries, latestSorted }: { entries: ExhEntry[]; late
           onClick={canLeft ? () => setOffset(o => o - 1) : undefined}>
           ‹
         </div>
-        <div className="donuts-row">
+        {/* 카드 개수에 맞춰 폭 조정: 1개는 가운데, 2~4개는 한 줄을 균등 분할 (모바일은 CSS 미디어쿼리가 우선) */}
+        <div className="donuts-row" style={cols === 1
+          ? { gridTemplateColumns: 'minmax(0, 420px)', justifyContent: 'center' }
+          : { gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
           {visibleYears.map(yr => {
-            const yEntries = yearGroups[yr]
+            const yEntries = sortUpcomingFirst(yearGroups[yr])
             return (
               <div key={yr} className="donut-card">
                 <div className="dy">{yr}</div>

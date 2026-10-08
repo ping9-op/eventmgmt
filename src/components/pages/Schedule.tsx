@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { krw, exhColor, formatEventDate, isPastEvent, exhDisplayName, parseDateRange } from '../../lib/utils'
+import { krw, exhColor, formatEventDate, isPastEvent, exhDisplayName, sortUpcomingFirst } from '../../lib/utils'
 import type { Exhibition, Proposal, BudgetItem } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
@@ -151,16 +151,7 @@ export default function Schedule() {
     if (!yearGroups[e.year]) yearGroups[e.year] = []
     yearGroups[e.year].push(e)
   }
-  // 연도 안에서: 예정 박람회를 날짜 빠른 순으로 위에, 완료된 박람회는 아래로 (완료끼리도 날짜순)
-  // 날짜를 해석할 수 없는 항목은 각 그룹의 맨 뒤
-  const sortKey = (e: ExhEntry) => parseDateRange(e.date).start || '9999-99-99'
-  for (const list of Object.values(yearGroups)) {
-    list.sort((a, b) => {
-      const pa = isPastEvent(a.date, a.year), pb = isPastEvent(b.date, b.year)
-      if (pa !== pb) return pa ? 1 : -1
-      return sortKey(a).localeCompare(sortKey(b))
-    })
-  }
+  for (const y of Object.keys(yearGroups)) yearGroups[Number(y)] = sortUpcomingFirst(yearGroups[Number(y)])
 
   // key별 proposal 연도 수 (2개 이상 = 기존, 1개 = 신규)
   const countByKey: Record<string, number> = {}

@@ -153,6 +153,17 @@ export function isPastEvent(dateStr: string, year: number): boolean {
   return new Date(yr, m - 1, endD) < TODAY
 }
 
+// 예정 박람회를 날짜 빠른 순으로 위에, 완료된 박람회는 아래로 (완료끼리도 날짜순)
+// 날짜를 해석할 수 없는 항목은 각 그룹의 맨 뒤
+export function sortUpcomingFirst<T extends { date: string; year: number }>(list: T[]): T[] {
+  const sortKey = (e: T) => parseDateRange(e.date).start || '9999-99-99'
+  return [...list].sort((a, b) => {
+    const pa = isPastEvent(a.date, a.year), pb = isPastEvent(b.date, b.year)
+    if (pa !== pb) return pa ? 1 : -1
+    return sortKey(a).localeCompare(sortKey(b))
+  })
+}
+
 export function daysUntil(dateStr: string): number | null {
   const d = new Date(dateStr)
   if (isNaN(d.getTime())) return null
