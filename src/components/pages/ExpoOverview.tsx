@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
@@ -6,15 +6,8 @@ import LoadingSpinner from '../LoadingSpinner'
 import { Chart, ArcElement, Tooltip, DoughnutController } from 'chart.js'
 Chart.register(ArcElement, Tooltip, DoughnutController)
 import { supabase } from '../../lib/supabase'
-import { krw, exhColor, formatEventDate, isPastEvent, daysUntil, exhDisplayName, sortUpcomingFirst, CUR_SYM, fmtCur } from '../../lib/utils'
-import type { Exhibition, BudgetItem, ActualCost } from '../../types/database'
-
-
-function budgetByCurStr(budget: BudgetItem[]): string {
-  const bc: Record<string, number> = {}
-  for (const b of budget) { const c = (b as any).currency || 'KRW'; bc[c] = (bc[c] || 0) + b.curr }
-  return Object.entries(bc).sort(([a], [b]) => a === 'KRW' ? -1 : 1).map(([c, v]) => fmtCur(v, c)).join(' + ')
-}
+import { krw, exhColor, formatEventDate, isPastEvent, daysUntil, exhDisplayName, sortUpcomingFirst } from '../../lib/utils'
+import type { Exhibition, BudgetItem } from '../../types/database'
 
 interface ExhEntry {
   key: string; exhId: string; name: string; year: number; date: string; venue: string
@@ -31,36 +24,16 @@ export default function ExpoOverview() {
   const { t } = useLang()
   const { showToast } = useToast()
   const [entries, setEntries] = useState<ExhEntry[]>([])
-  const [results, setResults] = useState<Record<string, { actual_costs: ActualCost[] }>>({})
   const [payments, setPayments] = useState<Record<string, any[]>>({})
   const [loading, setLoading] = useState(true)
-
-  const mountedRef = useRef(true)
-  useEffect(() => {
-    mountedRef.current = true
-    return () => { mountedRef.current = false }
-  }, [])
-
-  const reloadResults = useCallback(async () => {
-    try {
-      const { data } = await supabase.from('results').select('exhibition_key,actual_costs')
-      if (!mountedRef.current) return
-      const map: Record<string, { actual_costs: ActualCost[] }> = {}
-      for (const r of (data || []) as any[]) map[r.exhibition_key] = r
-      setResults(map)
-    } catch (e) {
-      showToast('결과 데이터 로드 중 오류가 발생했습니다.', 'error')
-    }
-  }, [])
 
   useEffect(() => {
     let cancelled = false
     async function load() {
       try {
-        const [{ data: exhData }, { data: propData }, { data: resultData }, { data: payData }] = await Promise.all([
+        const [{ data: exhData }, { data: propData }, { data: payData }] = await Promise.all([
           supabase.from('exhibitions').select('*'),
           supabase.from('proposals').select('*').order('year'),
-          supabase.from('results').select('exhibition_key,actual_costs'),
           supabase.from('payments').select('*'),
         ])
         if (cancelled) return
@@ -80,10 +53,6 @@ export default function ExpoOverview() {
         })
         setEntries(list)
 
-        const resMap: Record<string, { actual_costs: ActualCost[] }> = {}
-        for (const r of (resultData || []) as any[]) resMap[r.exhibition_key] = r
-        setResults(resMap)
-
         const payMap: Record<string, any[]> = {}
         for (const p of (payData || []) as any[]) {
           if (!payMap[p.exhibition_key]) payMap[p.exhibition_key] = []
@@ -99,21 +68,6 @@ export default function ExpoOverview() {
     load()
     return () => { cancelled = true }
   }, [])
-
-  // results 실시간 동기화 — Supabase Realtime + visibilitychange 폴백
-  useEffect(() => {
-    const ch = supabase.channel('expo_results_sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'results' }, reloadResults)
-      .subscribe()
-
-    const handleVisibility = () => { if (!document.hidden) reloadResults() }
-    document.addEventListener('visibilitychange', handleVisibility)
-
-    return () => {
-      supabase.removeChannel(ch)
-      document.removeEventListener('visibilitychange', handleVisibility)
-    }
-  }, [reloadResults])
 
   const today = new Date()
 
@@ -170,7 +124,6 @@ export default function ExpoOverview() {
 
   const upcoming = getUpcoming()
   const allE = entries
-  const latestSorted = getLatestSorted()
   const maxYear = allE.length ? Math.max(...allE.map(e => e.year)) : new Date().getFullYear()
   const yr2026 = allE.filter(e => e.year === maxYear)
   const total2026 = yr2026.reduce((s, e) => s + e.total, 0)
@@ -181,13 +134,6 @@ export default function ExpoOverview() {
   // Rank table
   const ranked = [...allE].sort((a, b) => b.total - a.total)
   const totalAll = ranked.reduce((s, e) => s + e.total, 0)
-
-  // Year groups for history per exhibition
-  const histByKey: Record<string, ExhEntry[]> = {}
-  for (const e of allE) {
-    if (!histByKey[e.key]) histByKey[e.key] = []
-    histByKey[e.key].push(e)
-  }
 
   return (
     <div className="view wide">
@@ -249,89 +195,7 @@ export default function ExpoOverview() {
       </div>
 
       {/* 연도별 도넛 차트 */}
-      <YearDonutSection entries={allE} latestSorted={latestSorted} />
-
-      {/* 박람회 참가 현황 카드 */}
-      <div className="sec-hdr"><div className="bar" /><div className="txt">{t('exh_status')}</div><div className="sub">{t('date_order')} · {new Date().toISOString().split('T')[0].replace(/-/g, '.')}</div></div>
-      <div className="exh-grid">
-        {latestSorted.map(e => {
-          const past = isPastEvent(e.date, e.year)
-          const color = exhColor(e.name)
-          const topColor = past ? '#9AAFC8' : color
-          const result = results[`${e.key}_${e.year}`]
-          const actualTotal = result ? result.actual_costs.reduce((s, a) => s + (a.actual || 0), 0) : 0
-          const hasActual = actualTotal > 0
-          const diff = hasActual ? actualTotal - e.total : 0
-          const actW = hasActual ? Math.min(Math.round(actualTotal / e.total * 100), 150) + '%' : '0%'
-          const actC = diff > 0 ? 'var(--danger)' : 'var(--green)'
-          const diffStr = diff > 0 ? `▲ ${krw(diff)} ${t('over_lbl')}` : diff < 0 ? `▼ ${krw(Math.abs(diff))} ${t('under_lbl')}` : ''
-          const hist = histByKey[e.key] || []
-
-          return (
-            <div key={`${e.key}_${e.year}`} className="exh-card" style={{ display: 'flex', flexDirection: 'column', cursor: 'pointer' }}
-              onClick={() => navigate(`/expo/event/${e.key}/${e.year}`)}>
-              <div className="top-bar" style={{ background: topColor }} />
-              <div className="ec-body" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-                <div className="ec-hdr">
-                  <span className="ec-name" style={{ color: past ? '#5A6878' : 'var(--text)' }}>{exhDisplayName(e.name, e.key)} {e.year}</span>
-                  <div className="ec-badges" style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
-                    <span className="badge" style={{ background: past ? 'var(--muted)' : 'var(--green)' }}>{past ? t('badge_done') : t('badge_scheduled')}</span>
-                    <span className="badge" style={{ background: hist.length >= 2 ? '#2E7D51' : 'var(--amber)' }}>{hist.length >= 2 ? t('badge_existing') : t('badge_new')}</span>
-                  </div>
-                </div>
-                <div className="ec-meta">📅 {formatEventDate(e.date, e.year)} &nbsp;📍 {e.venue}</div>
-
-                {/* 참가 이력 */}
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6, fontWeight: 500 }}>{t('hist_count')} {hist.length}{t('times')}</div>
-                <div style={{ height: 110, overflowY: 'auto', border: '0.5px solid var(--border)', borderRadius: 8, padding: '4px 10px', background: '#FDFBFB', marginBottom: 12 }}>
-                  {hist.slice().reverse().map((h, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '0.5px solid var(--border)' }}>
-                      <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap', marginRight: 8 }}>{h.year} · {formatEventDate(h.date, h.year)}</span>
-                      <span style={{ fontSize: 12, fontWeight: 700, color, whiteSpace: 'nowrap' }}>{budgetByCurStr(h.budget)}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <hr className="divider" />
-                <div className="bar-lbl"><span>{t('budgeted')}</span><span style={{ fontWeight: 700, color: topColor }}>{budgetByCurStr(e.budget)}</span></div>
-                <div className="bar-track"><div className="bar-fill" style={{ width: '100%', background: topColor }} /></div>
-                <div className="bar-lbl">
-                  <span>{t('actual')}</span>
-                  <span style={hasActual ? { fontWeight: 700, color: actC } : {}}>
-                    {hasActual ? (
-                      <>{krw(actualTotal)}{diffStr && <small style={{ color: actC }}> {diffStr}</small>}</>
-                    ) : t('no_items')}
-                  </span>
-                </div>
-                <div className="bar-track"><div className="bar-fill" style={{ width: actW, background: hasActual ? actC : '#ddd' }} /></div>
-                {past && !hasActual && (
-                  <div className="warn-box">⚠ {t('result_needed')}</div>
-                )}
-                <div className="exh-items" style={{ marginTop: 10 }}>
-                  {e.budget.slice(0, 3).map((b, i) => (
-                    <div key={i} className="exh-item-row">
-                      <span>● {b.item}</span>
-                      <span>{fmtCur(b.curr, (b as any).currency || 'KRW')}</span>
-                    </div>
-                  ))}
-                  {e.budget.length > 3 && <div className="exh-item-row"><span style={{ color: 'var(--muted)' }}>+{e.budget.length - 3}{t('others_count')}</span></div>}
-                </div>
-
-                <div style={{ display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 12, flexWrap: 'wrap' }}>
-                  <button className="btn btn-primary btn-sm" style={{ flex: 1 }}
-                    onClick={ev => { ev.stopPropagation(); navigate('/expo/create', { state: { exhId: e.exhId } }) }}>
-                    ✏️ {t('btn_proposal')}
-                  </button>
-                  <button className="btn btn-muted btn-sm" style={{ flex: 1 }}
-                    onClick={ev => { ev.stopPropagation(); navigate('/expo/report', { state: { key: `${e.key}_${e.year}` } }) }}>
-                    📋 {t('btn_report')}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
+      <YearDonutSection entries={allE} />
 
       {/* 순위 테이블 */}
       <div className="sec-hdr"><div className="bar" /><div className="txt">{t('rank')}</div></div>
@@ -404,7 +268,7 @@ function DonutChart({ data, colors, centerText }: { data: number[]; colors: stri
   return <canvas ref={canvasRef} width={150} height={150} style={{ display: 'block', margin: '0 auto' }} />
 }
 
-function YearDonutSection({ entries, latestSorted }: { entries: ExhEntry[]; latestSorted: ExhEntry[] }) {
+function YearDonutSection({ entries }: { entries: ExhEntry[] }) {
   const navigate = useNavigate()
   const { t } = useLang()
   const [offset, setOffset] = useState(0)

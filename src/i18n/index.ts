@@ -6,7 +6,7 @@ const translations: Record<Lang, Record<string, string>> = {
     dashboard: '대시보드',
     expo_group: '🏛  박람회',
     expo_overview: '📊  박람회 대시보드',
-    exhibitions: '🏢  박람회 목록',
+    exhibitions: '🏢  참가 박람회 목록',
     schedule: '📅  박람회 일정 관리',
     payments: '💰  비용 결제 일정',
     create: '✏️  새 Proposal 작성',
@@ -158,7 +158,7 @@ const translations: Record<Lang, Record<string, string>> = {
     all_hist: '전체 이력 기준',
 
     // ── Exhibitions ──────────────────────────────────────────────────────────
-    exh_list: '박람회 목록',
+    exh_list: '참가 박람회 목록',
     exh_sub: '저장된 승인 Proposal 이력',
     add_past: '+ 과거 Proposal 등록',
     add_exh_btn: '+ 신규 박람회 등록',
