@@ -6,9 +6,9 @@ export type Database = {
   public: {
     Tables: {
       exhibitions: {
-        Row: { id: string; key: string; name: string; recurring: boolean; color: string | null; created_at: string }
-        Insert: { key: string; name: string; recurring?: boolean; color?: string | null }
-        Update: { key?: string; name?: string; recurring?: boolean; color?: string | null }
+        Row: { id: string; key: string; name: string; recurring: boolean; color: string | null; created_at: string; archived_at: string | null }
+        Insert: { key: string; name: string; recurring?: boolean; color?: string | null; archived_at?: string | null }
+        Update: { key?: string; name?: string; recurring?: boolean; color?: string | null; archived_at?: string | null }
         Relationships: []
       }
       proposals: {
@@ -16,16 +16,19 @@ export type Database = {
           id: string; exhibition_id: string; year: number; proposal_date: string
           author: string; date_of_event: string; venue: string; objective: string
           products: Json; expected_results: Json; budget: Json; explanations: Json; created_at: string
+          session: string | null; archived_at: string | null
         }
         Insert: {
           exhibition_id: string; year: number; proposal_date: string
           author: string; date_of_event: string; venue: string; objective: string
           products?: Json; expected_results?: Json; budget?: Json; explanations?: Json
+          session?: string | null; archived_at?: string | null
         }
         Update: {
           exhibition_id?: string; year?: number; proposal_date?: string
           author?: string; date_of_event?: string; venue?: string; objective?: string
           products?: Json; expected_results?: Json; budget?: Json; explanations?: Json
+          session?: string | null; archived_at?: string | null
         }
         Relationships: []
       }
@@ -34,16 +37,19 @@ export type Database = {
           id: string; exhibition_key: string; item: string; total: number; currency: string
           deposit_amount: number; deposit_due: string | null; deposit_paid: boolean
           final_amount: number; final_due: string | null; final_paid: boolean; created_at: string
+          proposal_id: string | null
         }
         Insert: {
           exhibition_key: string; item: string; total?: number; currency?: string
           deposit_amount?: number; deposit_due?: string | null; deposit_paid?: boolean
           final_amount?: number; final_due?: string | null; final_paid?: boolean
+          proposal_id?: string | null
         }
         Update: {
           exhibition_key?: string; item?: string; total?: number; currency?: string
           deposit_amount?: number; deposit_due?: string | null; deposit_paid?: boolean
           final_amount?: number; final_due?: string | null; final_paid?: boolean
+          proposal_id?: string | null
         }
         Relationships: []
       }
@@ -58,6 +64,7 @@ export type Database = {
           shortcomings: Json; improvements: Json; recommendations: Json; requests: Json
           conclusion: string | null; cover_title: string | null; cover_date: string | null
           cover_author: string | null; sections_enabled: Json; created_at: string
+          proposal_id: string | null
         }
         Insert: {
           exhibition_key: string; objective?: string | null; event_date?: string | null
@@ -69,6 +76,7 @@ export type Database = {
           shortcomings?: Json; improvements?: Json; recommendations?: Json; requests?: Json
           conclusion?: string | null; cover_title?: string | null; cover_date?: string | null
           cover_author?: string | null; sections_enabled?: Json
+          proposal_id?: string | null
         }
         Update: {
           exhibition_key?: string; objective?: string | null; event_date?: string | null
@@ -80,6 +88,7 @@ export type Database = {
           shortcomings?: Json; improvements?: Json; recommendations?: Json; requests?: Json
           conclusion?: string | null; cover_title?: string | null; cover_date?: string | null
           cover_author?: string | null; sections_enabled?: Json
+          proposal_id?: string | null
         }
         Relationships: []
       }
@@ -88,16 +97,19 @@ export type Database = {
           id: string; exhibition_key: string; tab: string
           checklist: Json; design: Json; gifts_onboard: Json; gifts_event: Json
           equipment: Json; itinerary: Json; created_at: string
+          proposal_id: string | null
         }
         Insert: {
           exhibition_key: string; tab: string
           checklist?: Json; design?: Json; gifts_onboard?: Json; gifts_event?: Json
           equipment?: Json; itinerary?: Json
+          proposal_id?: string | null
         }
         Update: {
           exhibition_key?: string; tab?: string
           checklist?: Json; design?: Json; gifts_onboard?: Json; gifts_event?: Json
           equipment?: Json; itinerary?: Json
+          proposal_id?: string | null
         }
         Relationships: []
       }
@@ -111,9 +123,10 @@ export type Database = {
           last_contact_date: string | null; next_action: string | null; next_follow_up_date: string | null
           lost_reason: string | null; remarks: string | null; created_at: string
           outreach_channel: string | null; lost_reason_note: string | null; lost_at_stage: string | null
+          proposal_id: string | null
         }
         Insert: {
-          serial_no: string; registered_date: string; event_name: string
+          serial_no?: string; registered_date: string; event_name: string
           company_name: string; contact_person: string; phone?: string | null; email?: string | null
           lead_source: string; address?: string | null; business_type: string; country_corridor: string
           expected_monthly_volume?: number | null; volume_currency?: string; priority?: string
@@ -121,6 +134,7 @@ export type Database = {
           last_contact_date?: string | null; next_action?: string | null; next_follow_up_date?: string | null
           lost_reason?: string | null; remarks?: string | null
           outreach_channel?: string | null; lost_reason_note?: string | null; lost_at_stage?: string | null
+          proposal_id?: string | null
         }
         Update: {
           serial_no?: string; registered_date?: string; event_name?: string
@@ -131,6 +145,7 @@ export type Database = {
           last_contact_date?: string | null; next_action?: string | null; next_follow_up_date?: string | null
           lost_reason?: string | null; remarks?: string | null
           outreach_channel?: string | null; lost_reason_note?: string | null; lost_at_stage?: string | null
+          proposal_id?: string | null
         }
         Relationships: []
       }

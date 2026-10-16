@@ -41,8 +41,8 @@ export default function Dashboard() {
     async function load() {
       try {
         const [{ data: exhData }, { data: propData }, { data: payData }, { data: leadData }, { data: taskData }] = await Promise.all([
-          supabase.from('exhibitions').select('*'),
-          supabase.from('proposals').select('*').order('year', { ascending: true }),
+          supabase.from('exhibitions').select('*').is('archived_at', null),
+          supabase.from('proposals').select('*').is('archived_at', null).order('year', { ascending: true }),
           supabase.from('payments').select('*'),
           supabase.from('sales_leads').select('*'),
           supabase.from('sales_tasks').select('id,due_date,status,owner').neq('status', 'Done'),

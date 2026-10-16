@@ -35,8 +35,8 @@ export default function Schedule() {
   async function load() {
     try {
       const [{ data: exhData, error: ee }, { data: propData, error: pe }] = await Promise.all([
-        supabase.from('exhibitions').select('*'),
-        supabase.from('proposals').select('*').order('year'),
+        supabase.from('exhibitions').select('*').is('archived_at', null),
+        supabase.from('proposals').select('*').is('archived_at', null).order('year'),
       ])
       if (ee || pe) { if (mountedRef.current) showToast('⚠️ 데이터 로드 실패'); return }
       const map: Record<string, Exhibition> = {}
@@ -141,8 +141,9 @@ export default function Schedule() {
   async function deleteEntry(key: string, year: number) {
     const exh = Object.values(exhMap).find(e => e.key === key)
     if (!exh) return
-    const { error } = await supabase.from('proposals').delete().eq('exhibition_id', exh.id).eq('year', year)
-    if (error) { if (mountedRef.current) showToast('⚠️ 삭제 실패: ' + error.message); return }
+    // 삭제하지 않고 보관 처리 (이력 보존)
+    const { error } = await supabase.from('proposals').update({ archived_at: new Date().toISOString() }).eq('exhibition_id', exh.id).eq('year', year).is('archived_at', null)
+    if (error) { if (mountedRef.current) showToast('⚠️ 보관 실패: ' + error.message); return }
     if (mountedRef.current) load()
   }
 
@@ -281,13 +282,13 @@ export default function Schedule() {
                 <div style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 8 }}>{t('delete_sched_warn')}</div>
                 {confirmDel ? (
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--danger)' }}>{t('confirm_delete')}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--danger)' }}>{t('confirm_archive')}</span>
                     <button className="btn btn-sm" style={{ background: '#D63031', color: 'white', border: 'none' }}
                       onClick={async () => {
                         if (!modal.entry) return
                         await deleteEntry(modal.entry.key, modal.entry.year)
                         setModal({ open: false, isNew: false }); setConfirmDel(false)
-                      }}>{t('delete')}</button>
+                      }}>{t('archive')}</button>
                     <button className="btn btn-muted btn-sm" onClick={() => setConfirmDel(false)}>{t('cancel')}</button>
                   </div>
                 ) : (

@@ -199,11 +199,11 @@ const translations: Record<Lang, Record<string, string>> = {
     note_col: '비고',
     add_item: '+ 항목 추가',
     register_done: '💾 등록 완료',
-    delete_exh_title: '박람회 삭제',
-    delete_exh_desc: '이 박람회와 모든 관련 Proposal을 삭제합니다. 이 작업은 되돌릴 수 없습니다.',
+    delete_exh_title: '박람회 보관',
+    delete_exh_desc: '이 박람회와 관련 Proposal을 목록에서 숨깁니다. 결제·보고서·리드 등 모든 이력은 그대로 보존됩니다.',
     edit_proposal_title: 'Proposal 편집',
-    delete_proposal_warn: '⚠ 이 Proposal 이력을 삭제합니다.',
-    delete_proposal_btn: '🗑 이 Proposal 삭제',
+    delete_proposal_warn: '⚠ 이 Proposal을 목록에서 숨깁니다. 결제·보고서 이력은 보존됩니다.',
+    delete_proposal_btn: '📦 이 Proposal 보관',
 
     // ── Schedule ─────────────────────────────────────────────────────────────
     sched_title: '박람회 일정 관리',
@@ -217,7 +217,9 @@ const translations: Record<Lang, Record<string, string>> = {
     n_scheduled: '개 예정',
     sched_edit_title: '일정 편집',
     sched_add_title: '일정 추가',
-    delete_sched_warn: '⚠ 이 일정 항목을 완전히 삭제합니다.',
+    delete_sched_warn: '⚠ 이 일정을 목록에서 숨깁니다. 결제·보고서 이력은 보존됩니다.',
+    archive: '보관',
+    confirm_archive: '보관하시겠습니까?',
     delete_sched_btn: '🗑 이 일정 삭제',
 
     // ── Payments ─────────────────────────────────────────────────────────────
@@ -753,11 +755,11 @@ const translations: Record<Lang, Record<string, string>> = {
     note_col: 'Note',
     add_item: '+ Add Item',
     register_done: '💾 Register',
-    delete_exh_title: 'Delete Exhibition',
-    delete_exh_desc: 'This will delete the exhibition and all related proposals. This cannot be undone.',
+    delete_exh_title: 'Archive Exhibition',
+    delete_exh_desc: 'This hides the exhibition and its proposals from lists. Payments, reports and leads are kept.',
     edit_proposal_title: 'Edit Proposal',
-    delete_proposal_warn: '⚠ This will delete this proposal record.',
-    delete_proposal_btn: '🗑 Delete This Proposal',
+    delete_proposal_warn: '⚠ This hides this proposal from lists. Payment and report history is kept.',
+    delete_proposal_btn: '📦 Archive This Proposal',
 
     // ── Schedule ─────────────────────────────────────────────────────────────
     sched_title: 'Schedule Management',
@@ -771,7 +773,9 @@ const translations: Record<Lang, Record<string, string>> = {
     n_scheduled: ' Scheduled',
     sched_edit_title: 'Edit Schedule',
     sched_add_title: 'Add Schedule',
-    delete_sched_warn: '⚠ This will permanently delete this schedule entry.',
+    delete_sched_warn: '⚠ This hides this schedule entry from lists. Payment and report history is kept.',
+    archive: 'Archive',
+    confirm_archive: 'Archive this item?',
     delete_sched_btn: '🗑 Delete Schedule',
 
     // ── Payments ─────────────────────────────────────────────────────────────

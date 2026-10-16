@@ -61,7 +61,7 @@ export default function Payments() {
   async function load(cancelled?: { current: boolean }) {
     try {
       const [{ data: exhData }, { data: payData }] = await Promise.all([
-        supabase.from('exhibitions').select('*'),
+        supabase.from('exhibitions').select('*').is('archived_at', null),
         supabase.from('payments').select('*').order('created_at'),
       ])
       if (cancelled?.current) return

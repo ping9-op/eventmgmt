@@ -78,8 +78,8 @@ export default function Proposal() {
     async function loadOnMount() {
       try {
         const [{ data: exhData }, { data: propData }] = await Promise.all([
-          supabase.from('exhibitions').select('*').order('name'),
-          supabase.from('proposals').select('*').order('year'),
+          supabase.from('exhibitions').select('*').is('archived_at', null).order('name'),
+          supabase.from('proposals').select('*').is('archived_at', null).order('year'),
         ])
         if (cancelled) return
         const exhList = (exhData || []) as Exhibition[]
@@ -130,8 +130,8 @@ export default function Proposal() {
 
   async function load() {
     const [{ data: exhData }, { data: propData }] = await Promise.all([
-      supabase.from('exhibitions').select('*').order('name'),
-      supabase.from('proposals').select('*').order('year'),
+      supabase.from('exhibitions').select('*').is('archived_at', null).order('name'),
+      supabase.from('proposals').select('*').is('archived_at', null).order('year'),
     ])
     const exhList = (exhData || []) as Exhibition[]
     const propList = ((propData || []) as unknown as ProposalType[])

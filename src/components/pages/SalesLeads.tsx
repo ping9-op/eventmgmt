@@ -286,12 +286,7 @@ export default function SalesLeads() {
     if (!form.lead_source) { showToast('⚠️ Source(출처)를 선택해주세요.'); return }
     const owner = isAdmin ? form.owner : (salesOwner || form.owner)
     if (!owner) { showToast('⚠️ 담당자(Owner)를 선택해주세요.'); return }
-    const maxSerial = leads.reduce((max, l) => {
-      const n = parseInt(l.serial_no.replace(/\D/g, '')) || 0
-      return n > max ? n : max
-    }, 0)
     const { error } = await supabase.from('sales_leads').insert({
-      serial_no: `L${String(maxSerial + 1).padStart(3, '0')}`,
       company_name: form.company_name || '',
       contact_person: form.contact_person || '',
       lead_source: form.lead_source,
@@ -429,12 +424,7 @@ export default function SalesLeads() {
   async function bulkRegisterLeads(rows: Partial<SalesLead>[]) {
     setImporting(true)
     try {
-      const maxSerial = leads.reduce((max, l) => {
-        const n = parseInt(l.serial_no.replace(/\D/g, '')) || 0
-        return n > max ? n : max
-      }, 0)
-      const inserts = rows.map((r, i) => ({
-        serial_no: `L${String(maxSerial + i + 1).padStart(3, '0')}`,
+      const inserts = rows.map(r => ({
         company_name: r.company_name || '',
         contact_person: r.contact_person || '',
         phone: r.phone || null,

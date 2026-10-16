@@ -74,8 +74,8 @@ export default function Exhibitions() {
   async function load(cancelled?: { current: boolean }) {
     try {
       const [{ data: exhData, error: exhErr }, { data: propData, error: propErr }] = await Promise.all([
-        supabase.from('exhibitions').select('*').order('name'),
-        supabase.from('proposals').select('*').order('year', { ascending: true }),
+        supabase.from('exhibitions').select('*').is('archived_at', null).order('name'),
+        supabase.from('proposals').select('*').is('archived_at', null).order('year', { ascending: true }),
       ])
       if (cancelled?.current) return
       if (exhErr) { showToast('박람회 데이터 로드 중 오류가 발생했습니다.', 'error'); return }
@@ -293,26 +293,17 @@ export default function Exhibitions() {
 
   async function deleteExhibition(exhId: string) {
     try {
-      const exh = data.find(d => d.exh.id === exhId)?.exh
-      if (exh?.key) {
-        // LIKE의 '_'는 와일드카드라 다른 박람회 키(TS_% → TSX_2026)까지 걸리므로, 연도별 키를 정확히 지정해 삭제
-        const { data: props, error: yrErr } = await supabase.from('proposals').select('year').eq('exhibition_id', exhId)
-        if (yrErr) { showToast('⚠️ 결제 항목 조회 실패: ' + yrErr.message); return }
-        const payKeys = [...new Set((props || []).map(p => `${exh.key}_${p.year}`))]
-        if (payKeys.length) {
-          const { error: payErr } = await supabase.from('payments').delete().in('exhibition_key', payKeys)
-          if (payErr) { showToast('⚠️ 결제 항목 삭제 실패: ' + payErr.message); return }
-        }
-      }
-      const { error: propErr } = await supabase.from('proposals').delete().eq('exhibition_id', exhId)
-      if (propErr) { showToast('⚠️ Proposal 삭제 실패: ' + propErr.message); return }
-      const { error: exhErr } = await supabase.from('exhibitions').delete().eq('id', exhId)
-      if (exhErr) { showToast('⚠️ 박람회 삭제 실패: ' + exhErr.message); return }
+      // 삭제하지 않고 보관 처리 — 결제·보고서·리드 이력은 그대로 보존 (DB에서 실제 삭제는 차단됨)
+      const archivedAt = new Date().toISOString()
+      const { error: propErr } = await supabase.from('proposals').update({ archived_at: archivedAt }).eq('exhibition_id', exhId).is('archived_at', null)
+      if (propErr) { showToast('⚠️ Proposal 보관 실패: ' + propErr.message); return }
+      const { error: exhErr } = await supabase.from('exhibitions').update({ archived_at: archivedAt }).eq('id', exhId)
+      if (exhErr) { showToast('⚠️ 박람회 보관 실패: ' + exhErr.message); return }
       setDeleteConfirm(null)
-      showToast('박람회가 삭제되었습니다.')
+      showToast('박람회가 보관되었습니다. (이력 보존)')
       load()
     } catch (e: any) {
-      showToast('⚠️ 삭제 중 오류 발생: ' + (e?.message || String(e)))
+      showToast('⚠️ 보관 중 오류 발생: ' + (e?.message || String(e)))
     }
   }
 
@@ -661,7 +652,7 @@ export default function Exhibitions() {
             </p>
             <div className="modal-footer">
               <button className="btn btn-muted" onClick={() => setDeleteConfirm(null)}>{t('cancel')}</button>
-              <button className="btn btn-red" onClick={() => deleteExhibition(deleteConfirm)}>{t('delete')}</button>
+              <button className="btn btn-red" onClick={() => deleteExhibition(deleteConfirm)}>{t('archive')}</button>
             </div>
           </div>
         </div>

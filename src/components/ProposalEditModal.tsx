@@ -92,8 +92,9 @@ export default function ProposalEditModal({ propId, exhName, exhKey, year, initi
   }
 
   async function deleteProp() {
-    await supabase.from('payments').delete().eq('exhibition_key', `${exhKey}_${year}`)
-    await supabase.from('proposals').delete().eq('id', propId)
+    // 삭제하지 않고 보관 처리 — 결제·보고서 이력 보존
+    const { error } = await supabase.from('proposals').update({ archived_at: new Date().toISOString() }).eq('id', propId)
+    if (error) { showToast('⚠️ 보관 실패: ' + error.message); return }
     showToast(t('saved_ok'))
     onDeleted()
   }
@@ -180,8 +181,8 @@ export default function ProposalEditModal({ propId, exhName, exhKey, year, initi
           <div style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 8 }}>{t('delete_proposal_warn')}</div>
           {confirmDelete ? (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--danger)' }}>{exhName} {year} — {t('confirm_delete')}</span>
-              <button className="btn btn-sm" style={{ background: '#D63031', color: 'white', border: 'none' }} onClick={deleteProp}>{t('delete')}</button>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--danger)' }}>{exhName} {year} — {t('confirm_archive')}</span>
+              <button className="btn btn-sm" style={{ background: '#D63031', color: 'white', border: 'none' }} onClick={deleteProp}>{t('archive')}</button>
               <button className="btn btn-muted btn-sm" onClick={() => setConfirmDelete(false)}>{t('cancel')}</button>
             </div>
           ) : (

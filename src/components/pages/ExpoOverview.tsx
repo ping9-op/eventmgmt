@@ -32,8 +32,8 @@ export default function ExpoOverview() {
     async function load() {
       try {
         const [{ data: exhData }, { data: propData }, { data: payData }] = await Promise.all([
-          supabase.from('exhibitions').select('*'),
-          supabase.from('proposals').select('*').order('year'),
+          supabase.from('exhibitions').select('*').is('archived_at', null),
+          supabase.from('proposals').select('*').is('archived_at', null).order('year'),
           supabase.from('payments').select('*'),
         ])
         if (cancelled) return
