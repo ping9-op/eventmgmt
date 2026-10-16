@@ -131,7 +131,7 @@ export default function SalesLeads() {
   // Register form
   const [form, setForm] = useState<Partial<SalesLead>>({
     registered_date: new Date().toISOString().split('T')[0],
-    lead_source: 'Expo', business_type: 'Korean Restaurant',
+    business_type: 'Korean Restaurant',
     country_corridor: 'Korea → Japan', priority: 'Medium',
     owner: salesOwner || 'Andrew', current_stage: 'New Lead',
     volume_currency: 'USD', first_contact_done: false,
@@ -273,6 +273,7 @@ export default function SalesLeads() {
 
   async function register() {
     if (!form.company_name) { showToast('⚠️ Company Name은 필수입니다.'); return }
+    if (!form.lead_source) { showToast('⚠️ Source(출처)를 선택해주세요.'); return }
     const maxSerial = leads.reduce((max, l) => {
       const n = parseInt(l.serial_no.replace(/\D/g, '')) || 0
       return n > max ? n : max
@@ -281,7 +282,7 @@ export default function SalesLeads() {
       serial_no: `L${String(maxSerial + 1).padStart(3, '0')}`,
       company_name: form.company_name || '',
       contact_person: form.contact_person || '',
-      lead_source: form.lead_source || 'Expo',
+      lead_source: form.lead_source,
       business_type: form.business_type || '',
       country_corridor: form.country_corridor || '',
       priority: form.priority || 'Medium',
@@ -310,7 +311,7 @@ export default function SalesLeads() {
   function resetForm() {
     setForm({
       registered_date: new Date().toISOString().split('T')[0],
-      lead_source: 'Expo', business_type: 'Korean Restaurant',
+      business_type: 'Korean Restaurant',
       country_corridor: 'Korea → Japan', priority: 'Medium',
       owner: salesOwner || 'Andrew', current_stage: 'New Lead',
       volume_currency: 'USD', first_contact_done: false,
@@ -486,19 +487,21 @@ export default function SalesLeads() {
       if (!groups[name]) groups[name] = []
     }
   }
+  // 행사 기준일 때 행사명이 없는 리드(박람회 외 경로)는 출처로 묶는다
+  const groupKeyOf = (l: SalesLead) =>
+    groupBy === 'event' ? (l.event_name || l.lead_source) : groupBy === 'date' ? l.registered_date : l.lead_source
+  // 실제 행사 그룹인지 (출처로 대체된 그룹에는 행사명 자동 업로드를 붙이지 않음)
+  const eventKeys = new Set([...exhEventNames, ...leads.map(l => l.event_name).filter(Boolean)])
+  const isEventGroup = (k: string | null): k is string => !!k && groupBy === 'event' && eventKeys.has(k)
   filteredLeads.forEach(l => {
-    const key = groupBy === 'event' ? l.event_name : groupBy === 'date' ? l.registered_date : l.lead_source
+    const key = groupKeyOf(l)
     if (!groups[key]) groups[key] = []
     groups[key].push(l)
   })
 
   // Detail list data
   let detailLeads = filteredLeads
-  if (groupKey) {
-    if (groupBy === 'event') detailLeads = detailLeads.filter(l => l.event_name === groupKey)
-    else if (groupBy === 'date') detailLeads = detailLeads.filter(l => l.registered_date === groupKey)
-    else detailLeads = detailLeads.filter(l => l.lead_source === groupKey)
-  }
+  if (groupKey) detailLeads = detailLeads.filter(l => groupKeyOf(l) === groupKey)
   if (stageFilter) detailLeads = detailLeads.filter(l => l.current_stage === stageFilter)
   if (search) {
     const q = search.toLowerCase()
@@ -636,12 +639,12 @@ export default function SalesLeads() {
                           })}
                           {groupBy === 'event' && (
                             <td style={{ padding: '11px 8px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-                              <button
+                              {isEventGroup(k) && <button
                                 onClick={() => openGroupUpload(k)}
                                 title={`"${k}" 리드 Excel 업로드`}
                                 style={{ padding: '4px 8px', borderRadius: 6, border: '1.5px solid var(--border2)', background: 'white', cursor: 'pointer', fontSize: 13, color: 'var(--muted)', lineHeight: 1 }}>
                                 📤
-                              </button>
+                              </button>}
                             </td>
                           )}
                         </tr>
@@ -668,7 +671,7 @@ export default function SalesLeads() {
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('search_short')}
               style={{ padding: '7px 12px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, flex: 1, minWidth: 140, maxWidth: 200 }} />
             <button className="btn btn-primary btn-sm" onClick={() => setShowRegister(true)}>+ 등록</button>
-            {groupBy === 'event' && groupKey && (
+            {isEventGroup(groupKey) && (
               <button className="btn btn-outline btn-sm" onClick={() => openGroupUpload(groupKey)}>📤 Excel 업로드</button>
             )}
           </div>
@@ -684,13 +687,13 @@ export default function SalesLeads() {
               if (!file) return
               const ext = file.name.split('.').pop()?.toLowerCase()
               if (['xlsx', 'xls', 'csv'].includes(ext || '')) {
-                openMappingModal(file, groupKey && groupBy === 'event' ? groupKey : undefined)
+                openMappingModal(file, isEventGroup(groupKey) ? groupKey : undefined)
               } else {
                 showToast('⚠️ Excel 파일(.xlsx/.xls/.csv)만 지원합니다.')
               }
             }}
             onClick={() => {
-              importEventNameRef.current = (groupBy === 'event' && groupKey) ? groupKey : ''
+              importEventNameRef.current = isEventGroup(groupKey) ? groupKey : ''
               groupExcelInputRef.current?.click()
             }}
             style={{
@@ -714,7 +717,7 @@ export default function SalesLeads() {
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 12, color: dragOver ? 'var(--accent)' : 'var(--muted)', fontWeight: 600 }}>
                 <span style={{ fontSize: 16 }}>📤</span>
-                {dragOver ? '여기에 놓으세요' : `Excel 파일 드래그 또는 클릭하여 업로드${groupKey ? ` (행사명 자동: ${groupKey})` : ''}`}
+                {dragOver ? '여기에 놓으세요' : `Excel 파일 드래그 또는 클릭하여 업로드${isEventGroup(groupKey) ? ` (행사명 자동: ${groupKey})` : ''}`}
               </div>
             )}
           </div>
@@ -1084,7 +1087,8 @@ export default function SalesLeads() {
               <div><label style={{ marginTop: 0 }}>{t('email_lbl')}</label><input type="email" value={form.email || ''} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="이메일" /></div>
               <div>
                 <label style={{ marginTop: 0 }}>{t('lead_source_lbl')}</label>
-                <select value={form.lead_source || 'Expo'} onChange={e => setForm(f => ({ ...f, lead_source: e.target.value }))}>
+                <select value={form.lead_source || ''} onChange={e => setForm(f => ({ ...f, lead_source: e.target.value }))}>
+                  <option value="">-- 선택 --</option>
                   {(settings?.sources || []).map(s => <option key={s}>{s}</option>)}
                 </select>
               </div>
