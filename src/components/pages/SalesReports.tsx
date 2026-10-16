@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { STAGE_ORDER, STAGE_COLORS, isActiveStage, reachedProposal } from '../../lib/utils'
+import { STAGE_ORDER, STAGE_COLORS, isActiveStage, reachedProposal, localDateStr } from '../../lib/utils'
 import type { SalesLead } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
@@ -21,7 +21,7 @@ function filterByPeriod(leads: SalesLead[], period: PeriodFilter): SalesLead[] {
   if (period === 'month') cutoff.setDate(1)
   else if (period === '3months') cutoff.setMonth(now.getMonth() - 3)
   else if (period === 'year') cutoff.setMonth(0, 1)
-  const cutoffStr = cutoff.toISOString().split('T')[0]
+  const cutoffStr = localDateStr(cutoff)
   return leads.filter(l => (l.registered_date || '') >= cutoffStr)
 }
 
@@ -88,7 +88,7 @@ export default function SalesReports() {
     const ownrs = [...new Set(leads.map(l => l.owner))]
     const corridors = [...new Set(leads.map(l => l.country_corridor).filter(Boolean))]
     const rows: (string | number)[][] = [
-      ['GME Sales Report', new Date().toISOString().split('T')[0]],
+      ['GME Sales Report', localDateStr()],
       ['기간', periodLabel(period, t)],
       [],
       ['[KPI 요약]'],
@@ -134,7 +134,7 @@ export default function SalesReports() {
     const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
     const a = Object.assign(document.createElement('a'), {
       href: 'data:text/csv;charset=utf-8,﻿' + encodeURIComponent(csv),
-      download: `GME_Sales_Report_${new Date().toISOString().split('T')[0]}.csv`,
+      download: `GME_Sales_Report_${localDateStr()}.csv`,
     })
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
   }

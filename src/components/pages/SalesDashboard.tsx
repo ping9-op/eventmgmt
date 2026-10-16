@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { STAGE_ORDER, STAGE_COLORS, isActiveStage } from '../../lib/utils'
+import { STAGE_ORDER, STAGE_COLORS, isActiveStage, localDateStr } from '../../lib/utils'
 import type { SalesLead, SalesTask } from '../../types/database'
 import LeadDetailPanel from './LeadDetailPanel'
 import { useLang } from '../../contexts/LangContext'
@@ -33,7 +33,7 @@ export default function SalesDashboard() {
   const [loading, setLoading] = useState(true)
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = localDateStr()
 
   useEffect(() => {
     let cancelled = false

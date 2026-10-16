@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { sumByCurrency, fmtByCurrency, exhColor, formatEventDate, isPastEvent, exhDisplayName, sortUpcomingFirst } from '../../lib/utils'
+import { sumByCurrency, fmtByCurrency, exhColor, formatEventDate, isPastEvent, exhDisplayName, sortUpcomingFirst, localDateStr } from '../../lib/utils'
 import type { Exhibition, Proposal, BudgetItem } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
@@ -99,7 +99,7 @@ export default function Schedule() {
         const { error } = await supabase.from('proposals').insert({
           exhibition_id: exhId,
           year: form.year!,
-          proposal_date: form.proposal_date || new Date().toISOString().split('T')[0],
+          proposal_date: form.proposal_date || localDateStr(),
           author: form.author || '',
           date_of_event: form.date || '',
           venue: form.venue || '',

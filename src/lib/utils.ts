@@ -120,6 +120,11 @@ export function parseEventDate(str: string, year?: number): Date | null {
   return new Date(yr, month - 1, days[0])
 }
 
+/** 로컬(한국) 날짜 'YYYY-MM-DD'. toISOString()은 UTC라 KST 00~09시에 어제 날짜가 됨 */
+export function localDateStr(d: Date = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 /** 오늘(로컬 자정) 기준 날짜 차이(일). 'YYYY-MM-DD' 문자열은 UTC가 아닌 로컬 날짜로 해석 */
 export function dayDiffFromToday(d: Date | string): number | null {
   const date = typeof d === 'string' ? new Date(d.length === 10 ? `${d}T00:00:00` : d) : d

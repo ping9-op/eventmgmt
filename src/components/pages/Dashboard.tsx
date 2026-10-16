@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { exhColor, formatEventDate, isPastEvent, STAGE_ORDER, STAGE_COLORS, exhDisplayName, CUR_SYM, isActiveStage, parseEventDate, dayDiffFromToday, fmtCur as fmtMoney } from '../../lib/utils'
+import { exhColor, formatEventDate, isPastEvent, STAGE_ORDER, STAGE_COLORS, exhDisplayName, CUR_SYM, isActiveStage, parseEventDate, dayDiffFromToday, fmtCur as fmtMoney, localDateStr } from '../../lib/utils'
 import type { Exhibition, Payment, SalesLead, SalesTask, BudgetItem } from '../../types/database'
 import LeadDetailPanel from './LeadDetailPanel'
 import { useLang } from '../../contexts/LangContext'
@@ -77,7 +77,7 @@ export default function Dashboard() {
   }, [])
 
   const today = new Date()
-  const todayStr = today.toISOString().split('T')[0]
+  const todayStr = localDateStr(today)
 
   function getLatestSorted(): ExhEntry[] {
     const latest: Record<string, ExhEntry> = {}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { STAGE_ORDER, STAGE_COLORS, OUTREACH_CHANNELS } from '../../lib/utils'
+import { STAGE_ORDER, STAGE_COLORS, OUTREACH_CHANNELS, localDateStr } from '../../lib/utils'
 import LostReasonModal, { type LostReasonInput } from '../LostReasonModal'
 import DecimalInput from '../DecimalInput'
 import { useIsMobile } from '../../hooks/useBreakpoint'
@@ -74,7 +74,7 @@ export default function LeadDetailPanel({
   const [showActForm, setShowActForm] = useState(false)
   const [actType, setActType] = useState('Email')
   const [actResult, setActResult] = useState('Interested')
-  const [actDate, setActDate] = useState(new Date().toISOString().split('T')[0])
+  const [actDate, setActDate] = useState(localDateStr())
   const [actNote, setActNote] = useState('')
 
   // Lead edit state
@@ -231,7 +231,7 @@ export default function LeadDetailPanel({
         created_by: form.owner || lead?.owner || '',
       })
       if (error) { showToast('⚠️ Activity 저장 실패: ' + error.message); return }
-      setActNote(''); setShowActForm(false); setActDate(new Date().toISOString().split('T')[0])
+      setActNote(''); setShowActForm(false); setActDate(localDateStr())
       const [{ data: aData }, { data: tData }] = await Promise.all([
         supabase.from('sales_activities').select('*').eq('lead_id', leadId).order('activity_date', { ascending: false }),
         supabase.from('sales_tasks').select('*').eq('lead_id', leadId).order('due_date'),
@@ -251,7 +251,7 @@ export default function LeadDetailPanel({
   }
 
   async function markTaskDone(taskId: string) {
-    const { error } = await supabase.from('sales_tasks').update({ status: 'Done', completed_at: new Date().toISOString().split('T')[0] }).eq('id', taskId)
+    const { error } = await supabase.from('sales_tasks').update({ status: 'Done', completed_at: localDateStr() }).eq('id', taskId)
     if (error) { showToast('⚠️ 완료 처리 실패: ' + error.message); return }
     const { data } = await supabase.from('sales_tasks').select('*').eq('lead_id', leadId).order('due_date')
     setTasks((data || []) as SalesTask[])
@@ -615,7 +615,7 @@ export default function LeadDetailPanel({
                       <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--muted)', marginLeft: 6 }}>({tasks.filter(t => t.status !== 'Done').length}건 미완료)</span>
                     </div>
                     {tasks.map(tk => {
-                      const today = new Date().toISOString().split('T')[0]
+                      const today = localDateStr()
                       const isOverdue = tk.status !== 'Done' && tk.due_date < today
                       const isDone = tk.status === 'Done'
                       return (

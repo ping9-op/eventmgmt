@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { krw, exhColor, formatEventDate, exhDisplayName, CURRENCIES, COST_ITEMS, MON, formatDateRange, parseDateRange, CUR_SYM, fmtCur, fmtByCurrency, sumByCurrency } from '../../lib/utils'
+import { krw, exhColor, formatEventDate, exhDisplayName, CURRENCIES, COST_ITEMS, MON, formatDateRange, parseDateRange, CUR_SYM, fmtCur, fmtByCurrency, sumByCurrency, localDateStr } from '../../lib/utils'
 import { extractTextFromPdf, extractTextFromDocx, parseProposalText } from '../../lib/pdfParser'
 import type { Exhibition, Proposal as ProposalType, BudgetItem, ProductTarget } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
@@ -50,7 +50,7 @@ export default function Proposal() {
   const [newExhKey, setNewExhKey] = useState('')
   const [newExhRecurring, setNewExhRecurring] = useState(false)
   const [year, setYear] = useState(new Date().getFullYear() + 1)
-  const [propDate, setPropDate] = useState(new Date().toISOString().split('T')[0])
+  const [propDate, setPropDate] = useState(localDateStr())
   const [author, setAuthor] = useState('Andrew')
   const [dateOfEvent, setDateOfEvent] = useState('')
   const [eventStartDate, setEventStartDate] = useState('')
@@ -159,7 +159,7 @@ export default function Proposal() {
     setExhId(p.exhId)
     setIsNewExh(false)
     setYear(isCopy ? p.year + 1 : p.year)
-    setPropDate(isCopy ? new Date().toISOString().split('T')[0] : (propEntry.proposal_date || new Date().toISOString().split('T')[0]))
+    setPropDate(isCopy ? localDateStr() : (propEntry.proposal_date || localDateStr()))
     setEditingProposalId(isCopy ? null : propEntry.id)
     setAuthor(propEntry.author || 'Andrew')
     setDateOfEvent(propEntry.date_of_event)
@@ -378,7 +378,7 @@ export default function Proposal() {
     setEditingProposalId(null)
     setAiOutput('AI 생성 결과가 여기에 표시됩니다.\n\n"AI 변동 사유 생성" 버튼을 눌러주세요.')
     setAiMemos({})
-    setPropDate(new Date().toISOString().split('T')[0])
+    setPropDate(localDateStr())
 
     // 박람회명으로 기존 박람회 자동 매칭
     if (r.exhName) {

@@ -6,7 +6,7 @@ import LoadingSpinner from '../LoadingSpinner'
 import { Chart, ArcElement, Tooltip, DoughnutController } from 'chart.js'
 Chart.register(ArcElement, Tooltip, DoughnutController)
 import { supabase } from '../../lib/supabase'
-import { krw, exhColor, formatEventDate, isPastEvent, daysUntil, exhDisplayName, sortUpcomingFirst, fmtCur, parseEventDate, dayDiffFromToday, sumByCurrency, fmtByCurrency } from '../../lib/utils'
+import { krw, exhColor, formatEventDate, isPastEvent, daysUntil, exhDisplayName, sortUpcomingFirst, fmtCur, parseEventDate, dayDiffFromToday, sumByCurrency, fmtByCurrency, localDateStr } from '../../lib/utils'
 import type { Exhibition, BudgetItem } from '../../types/database'
 
 interface ExhEntry {
@@ -157,7 +157,7 @@ export default function ExpoOverview() {
       <div className="sec-hdr">
         <div className="bar" />
         <div className="txt">{t('upcoming')}</div>
-        <div className="sub">{t('upcoming_sub')} {new Date().toISOString().split('T')[0].replace(/-/g, '.')} · {t('upcoming_range')}</div>
+        <div className="sub">{t('upcoming_sub')} {localDateStr().replace(/-/g, '.')} · {t('upcoming_range')}</div>
       </div>
       {upcoming.length === 0 ? (
         <div className="card-sm" style={{ color: 'var(--muted)', textAlign: 'center', padding: 28 }}>{t('no_upcoming')}</div>

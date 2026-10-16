@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { exhColor, fmtCur, fmtByCurrency, sumByCurrency } from '../../lib/utils'
+import { exhColor, fmtCur, fmtByCurrency, sumByCurrency, localDateStr } from '../../lib/utils'
 import DecimalInput from '../DecimalInput'
 import type { Exhibition, Proposal, Result, ActualCost, MarketingActivity, Payment } from '../../types/database'
 import { useToast } from '../../contexts/ToastContext'
@@ -28,7 +28,7 @@ function buildDefaultFromProposal(key: string, prop: Proposal, exhName: string, 
   return {
     exhibition_key: key,
     cover_title: `${exhName} ${prop.year}`,
-    cover_date: new Date().toISOString().split('T')[0],
+    cover_date: localDateStr(),
     cover_author: prop.author || 'Andrew',
     objective: prop.objective || '',
     event_date: prop.date_of_event || '',

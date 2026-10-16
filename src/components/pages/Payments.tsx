@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { exhColor, exhDisplayName, CUR_SYM, fmtCur } from '../../lib/utils'
+import { exhColor, exhDisplayName, CUR_SYM, fmtCur, localDateStr } from '../../lib/utils'
 import type { Exhibition, Payment } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
@@ -110,8 +110,8 @@ export default function Payments() {
     setTimeout(() => {
       const pays = payments[selected] || []
       const today = new Date()
-      const d30 = new Date(today.getTime() + 30 * 86400000).toISOString().split('T')[0]
-      const d60 = new Date(today.getTime() + 60 * 86400000).toISOString().split('T')[0]
+      const d30 = localDateStr(new Date(today.getTime() + 30 * 86400000))
+      const d60 = localDateStr(new Date(today.getTime() + 60 * 86400000))
       const items: { item: string; amount: number; dueDate: string; type: 'deposit' | 'final'; currency: string }[] = []
       for (const p of pays) {
         const cur = p.currency || 'KRW'

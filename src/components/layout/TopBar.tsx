@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useLang } from '../../contexts/LangContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
+import { localDateStr } from '../../lib/utils'
 
 export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
   const navigate = useNavigate()
@@ -16,7 +17,7 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
     let cancelled = false
     async function fetchOverdue() {
       try {
-        const today = new Date().toISOString().split('T')[0]
+        const today = localDateStr()
         const [dep, fin] = await Promise.all([
           supabase.from('payments').select('id').lt('deposit_due', today).eq('deposit_paid', false).not('deposit_due', 'is', null),
           supabase.from('payments').select('id').lt('final_due', today).eq('final_paid', false).not('final_due', 'is', null),

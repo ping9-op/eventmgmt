@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
-import { STAGE_ORDER, STAGE_COLORS, OUTREACH_CHANNELS, priorityColor, normalizeStage } from '../../lib/utils'
+import { STAGE_ORDER, STAGE_COLORS, OUTREACH_CHANNELS, priorityColor, normalizeStage, localDateStr } from '../../lib/utils'
 import type { SalesLead } from '../../types/database'
 import { loadAllSettings, loadExpoEventNames, type SalesSettingsData } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
@@ -130,7 +130,7 @@ export default function SalesLeads() {
 
   // Register form
   const [form, setForm] = useState<Partial<SalesLead>>({
-    registered_date: new Date().toISOString().split('T')[0],
+    registered_date: localDateStr(),
     business_type: 'Korean Restaurant',
     country_corridor: 'Korea → Japan', priority: 'Medium',
     owner: salesOwner || 'Andrew', current_stage: 'New Lead',
@@ -282,7 +282,7 @@ export default function SalesLeads() {
       volume_currency: form.volume_currency || 'USD',
       first_contact_done: false,
       event_name: form.event_name || '',
-      registered_date: form.registered_date || new Date().toISOString().split('T')[0],
+      registered_date: form.registered_date || localDateStr(),
       phone: form.phone || null,
       email: form.email || null,
       address: form.address || null,
@@ -300,7 +300,7 @@ export default function SalesLeads() {
 
   function resetForm() {
     setForm({
-      registered_date: new Date().toISOString().split('T')[0],
+      registered_date: localDateStr(),
       business_type: 'Korean Restaurant',
       country_corridor: 'Korea → Japan', priority: 'Medium',
       owner: salesOwner || 'Andrew', current_stage: 'New Lead',
@@ -429,7 +429,7 @@ export default function SalesLeads() {
         address: r.address || null,
         remarks: r.remarks || null,
         first_contact_done: false,
-        registered_date: new Date().toISOString().split('T')[0],
+        registered_date: localDateStr(),
       }))
       const { error } = await supabase.from('sales_leads').insert(inserts)
       if (error) { showToast('⚠️ 등록 실패: ' + error.message); return }
@@ -447,7 +447,7 @@ export default function SalesLeads() {
     const H = ['SN', '등록일', '행사명', 'Company', '담당자', 'Phone', 'Email', 'Source', '주소', 'Owner', 'Stage', '첫연락', '마지막연락', '다음팔로업', '예상Volume', '통화', 'Priority', 'LostReason', 'Remarks']
     const rows = toExport.map(l => [l.serial_no, l.registered_date, l.event_name, l.company_name, l.contact_person, l.phone || '', l.email || '', l.lead_source, l.address || '', l.owner, l.current_stage, l.first_contact_done ? 'Y' : 'N', l.last_contact_date || '', l.next_follow_up_date || '', l.expected_monthly_volume || '', l.volume_currency, l.priority, l.lost_reason || '', l.remarks || ''])
     const csv = [H, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
-    const a = Object.assign(document.createElement('a'), { href: 'data:text/csv;charset=utf-8,﻿' + encodeURIComponent(csv), download: `GME_Leads_${new Date().toISOString().split('T')[0]}.csv` })
+    const a = Object.assign(document.createElement('a'), { href: 'data:text/csv;charset=utf-8,﻿' + encodeURIComponent(csv), download: `GME_Leads_${localDateStr()}.csv` })
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
     setChecked(new Set())
     showToast(`✅ ${toExport.length}개 다운로드 완료`)

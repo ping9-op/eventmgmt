@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { STAGE_COLORS, priorityColor, isActiveStage } from '../../lib/utils'
+import { STAGE_COLORS, priorityColor, isActiveStage, localDateStr } from '../../lib/utils'
 import type { SalesTask, SalesLead } from '../../types/database'
 import { loadAllSettings } from '../../lib/settings'
 import { useAuth } from '../../contexts/AuthContext'
@@ -50,8 +50,8 @@ export default function SalesFollowUp() {
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
   const [checked, setChecked] = useState<Set<string>>(new Set())
 
-  const today = new Date().toISOString().split('T')[0]
-  const thisWeekEnd = new Date(Date.now() + 7 * 864e5).toISOString().split('T')[0]
+  const today = localDateStr()
+  const thisWeekEnd = localDateStr(new Date(Date.now() + 7 * 864e5))
 
   // Add task form
   const [form, setForm] = useState({

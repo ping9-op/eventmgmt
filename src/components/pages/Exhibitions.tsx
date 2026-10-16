@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { exhColor, initExhColors, costColor, formatEventDate, isPastEvent, exhDisplayName, CUR_SYM, CURRENCIES, COST_ITEMS, MON, fmtCur, formatDateRange, parseDateRange } from '../../lib/utils'
+import { exhColor, initExhColors, costColor, formatEventDate, isPastEvent, exhDisplayName, CUR_SYM, CURRENCIES, COST_ITEMS, MON, fmtCur, formatDateRange, parseDateRange, localDateStr } from '../../lib/utils'
 import { useToast } from '../../contexts/ToastContext'
 import type { Exhibition, Proposal, BudgetItem } from '../../types/database'
 import LoadingSpinner from '../LoadingSpinner'
@@ -53,7 +53,7 @@ export default function Exhibitions() {
   const [apKey, setApKey] = useState('')   // 신규 박람회 키(약어) — 비워두면 이름에서 자동 생성
   const [apYear, setApYear] = useState(String(new Date().getFullYear()))
   const [apAuthor, setApAuthor] = useState('Andrew')
-  const [apPdate, setApPdate] = useState(new Date().toISOString().split('T')[0])
+  const [apPdate, setApPdate] = useState(localDateStr())
   const [apRecurring, setApRecurring] = useState<'1' | '0'>('1')
   const [apDate, setApDate] = useState('')
   const [apStartDate, setApStartDate] = useState('')
@@ -222,7 +222,7 @@ export default function Exhibitions() {
 
   function resetForm() {
     setApExhSel(''); setApName(''); setApKey(''); setApYear(String(new Date().getFullYear()))
-    setApAuthor('Andrew'); setApPdate(new Date().toISOString().split('T')[0])
+    setApAuthor('Andrew'); setApPdate(localDateStr())
     setApRecurring('1'); setApDate(''); setApStartDate(''); setApEndDate(''); setApVenue(''); setApObj('')
     setApResults([''])
     setApBudget(defaultBudgetRows())

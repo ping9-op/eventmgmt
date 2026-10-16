@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { STAGE_ORDER, STAGE_COLORS, priorityColor, isActiveStage } from '../../lib/utils'
+import { STAGE_ORDER, STAGE_COLORS, priorityColor, isActiveStage, localDateStr } from '../../lib/utils'
 import { logStageChange } from '../../lib/stageHistory'
 import type { SalesLead, SalesProposal } from '../../types/database'
 import { loadAllSettings } from '../../lib/settings'
@@ -158,7 +158,7 @@ export default function SalesFunnel() {
     const H = ['Company', 'Contact', 'Stage', 'Owner', 'Volume', 'Priority', 'Last Contact', 'Next Follow-up']
     const rows = toExport.map(l => [l.company_name, l.contact_person, l.current_stage, l.owner, `${l.volume_currency} ${l.expected_monthly_volume || 0}`, l.priority, l.last_contact_date || '', l.next_follow_up_date || ''])
     const csv = [H, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
-    const a = Object.assign(document.createElement('a'), { href: 'data:text/csv;charset=utf-8,﻿' + encodeURIComponent(csv), download: `GME_Funnel_${new Date().toISOString().split('T')[0]}.csv` })
+    const a = Object.assign(document.createElement('a'), { href: 'data:text/csv;charset=utf-8,﻿' + encodeURIComponent(csv), download: `GME_Funnel_${localDateStr()}.csv` })
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
     setChecked(new Set())
   }
