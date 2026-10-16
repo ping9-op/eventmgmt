@@ -46,6 +46,7 @@ const FIELD_DEFS: { key: string; label: string; required?: boolean; aliases: str
   { key: 'address', label: '주소', aliases: ['address', '주소'] },
   { key: 'remarks', label: '비고', aliases: ['remarks', '비고', '메모', 'note'] },
   { key: 'lead_source', label: 'Source', aliases: ['lead_source', 'source', '유입경로', '채널'] },
+  { key: 'registered_date', label: '등록일', aliases: ['registered_date', 'date', '등록일', '날짜', '일자', '접수일'] },
 ]
 
 function guessMapping(headers: string[]): Record<string, string> {
@@ -64,6 +65,17 @@ function readSheet(XLSX: any, wb: any, sheetName: string): { headers: string[]; 
   const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(ws, { defval: '' })
   const headers = rows.length ? Object.keys(rows[0]) : ((XLSX.utils.sheet_to_json(ws, { header: 1 })[0] || []) as any[]).map(h => String(h))
   return { headers, rows }
+}
+
+// Excel 등록일 → 'YYYY-MM-DD'. 엑셀 날짜 일련번호(45200 등)와 2026-10-16 / 2026.10.16 / 2026/10/16 형식 지원
+function parseExcelDate(v: string): string | undefined {
+  if (!v) return undefined
+  if (/^\d{5}(\.\d+)?$/.test(v)) {
+    const d = new Date(Date.UTC(1899, 11, 30) + Math.floor(Number(v)) * 86400000)
+    return d.toISOString().slice(0, 10) // UTC 기준 일련번호 → 그대로 날짜
+  }
+  const m = v.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})/)
+  return m ? `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` : undefined
 }
 
 function StageBadge({ stage }: { stage: string }) {
@@ -129,13 +141,13 @@ export default function SalesLeads() {
   const isFirstRender = useRef(true)
 
   // Register form
-  const [form, setForm] = useState<Partial<SalesLead>>({
-    registered_date: localDateStr(),
-    business_type: 'Korean Restaurant',
-    country_corridor: 'Korea → Japan', priority: 'Medium',
-    owner: salesOwner || 'Andrew', current_stage: 'New Lead',
+  // 업종/코리도/담당자는 기본값으로 채우지 않음 — 사용자가 고르지 않은 값이 실제 데이터처럼 저장되지 않도록
+  const emptyForm = (): Partial<SalesLead> => ({
+    registered_date: localDateStr(), priority: 'Medium',
+    owner: salesOwner || '', current_stage: 'New Lead',
     volume_currency: 'USD', first_contact_done: false,
   })
+  const [form, setForm] = useState<Partial<SalesLead>>(emptyForm)
 
   useEffect(() => {
     // Handle navigation state (from dashboard/reports)
@@ -264,6 +276,8 @@ export default function SalesLeads() {
   async function register() {
     if (!form.company_name) { showToast('⚠️ Company Name은 필수입니다.'); return }
     if (!form.lead_source) { showToast('⚠️ Source(출처)를 선택해주세요.'); return }
+    const owner = isAdmin ? form.owner : (salesOwner || form.owner)
+    if (!owner) { showToast('⚠️ 담당자(Owner)를 선택해주세요.'); return }
     const maxSerial = leads.reduce((max, l) => {
       const n = parseInt(l.serial_no.replace(/\D/g, '')) || 0
       return n > max ? n : max
@@ -277,7 +291,7 @@ export default function SalesLeads() {
       country_corridor: form.country_corridor || '',
       priority: form.priority || 'Medium',
       // 관리자가 아니면 owner를 임의로 지정할 수 없음 — 항상 본인 계정으로 등록 (RLS와 일치)
-      owner: isAdmin ? (form.owner || 'Andrew') : (salesOwner || form.owner || 'Andrew'),
+      owner,
       current_stage: 'New Lead',
       volume_currency: form.volume_currency || 'USD',
       first_contact_done: false,
@@ -299,19 +313,13 @@ export default function SalesLeads() {
   }
 
   function resetForm() {
-    setForm({
-      registered_date: localDateStr(),
-      business_type: 'Korean Restaurant',
-      country_corridor: 'Korea → Japan', priority: 'Medium',
-      owner: salesOwner || 'Andrew', current_stage: 'New Lead',
-      volume_currency: 'USD', first_contact_done: false,
-    })
+    setForm(emptyForm())
   }
 
   async function downloadTemplate() {
     const XLSX = await import('xlsx')
-    const headers = ['회사명', '담당자', '연락처', '이메일', '행사명', 'Owner', 'Stage', 'Priority', 'Corridor', 'Business Type', 'Volume', 'Currency', 'Address', 'Remarks']
-    const sample  = ['Sample Co.', '김철수', '+81-90-1234-5678', 'john@sample.com', 'KIF 2026', 'Andrew', 'New Lead', 'Medium', 'Korea → Japan', 'Korean Restaurant', '10000', 'USD', 'Tokyo, Japan', 'Booth에서 만남']
+    const headers = ['회사명', '담당자', '연락처', '이메일', 'Source', '행사명', '등록일', 'Owner', 'Stage', 'Priority', 'Corridor', 'Business Type', 'Volume', 'Currency', 'Address', 'Remarks']
+    const sample  = ['Sample Co.', '김철수', '+81-90-1234-5678', 'john@sample.com', 'Expo', 'KIF 2026', '2026-10-16', 'Andrew', 'New Lead', 'Medium', 'Korea → Japan', 'Korean Restaurant', '10000', 'USD', 'Tokyo, Japan', 'Booth에서 만남']
     const stageNote = ['※ Stage 유효값 →', ...STAGE_ORDER, ...Array(headers.length - 1 - STAGE_ORDER.length).fill('')]
     const ws = XLSX.utils.aoa_to_sheet([headers, sample, stageNote])
     ws['!cols'] = [22, 16, 18, 24, 16, 12, 22, 10, 18, 18, 10, 10, 18, 20].map(wch => ({ wch }))
@@ -380,20 +388,27 @@ export default function SalesLeads() {
         // 출처가 비어 있으면 행사명이 있는 행만 Expo로 간주 (박람회 외 리드를 Expo로 잘못 기록하지 않도록)
         lead_source: get(r, 'lead_source') || (event ? 'Expo' : ''),
         event_name: event,
-        owner: get(r, 'owner') || 'Andrew',
+        owner: get(r, 'owner'),
         priority: get(r, 'priority') || 'Medium',
         current_stage: normalizeStage(rawStage),
-        country_corridor: get(r, 'country_corridor') || 'Korea → Japan',
-        business_type: get(r, 'business_type') || 'Korean Restaurant',
+        country_corridor: get(r, 'country_corridor'),
+        business_type: get(r, 'business_type'),
         expected_monthly_volume: parseAmount(get(r, 'expected_monthly_volume')),
-        volume_currency: get(r, 'volume_currency') || 'USD',
+        volume_currency: get(r, 'volume_currency').toUpperCase(),
         address: get(r, 'address') || null,
         remarks: get(r, 'remarks') || null,
+        registered_date: parseExcelDate(get(r, 'registered_date')),
       }
     }).filter(r => r.company_name)
     if (!parsed.length) { showToast('⚠️ 매핑한 회사명 컬럼에 값이 없습니다. 매핑을 다시 확인해주세요.'); return }
     const noSource = parsed.filter(r => !r.lead_source).length
     if (noSource) { showToast(`⚠️ 출처(Source)와 행사명이 모두 비어 있는 행이 ${noSource}개 있습니다. Source 컬럼을 매핑하거나 값을 채워주세요.`); return }
+    // 관리자 업로드는 Owner 컬럼이 필요 (일반 매니저는 본인 계정으로 등록됨)
+    const noOwner = isAdmin ? parsed.filter(r => !r.owner).length : 0
+    if (noOwner) { showToast(`⚠️ Owner(담당자)가 비어 있는 행이 ${noOwner}개 있습니다. Owner 컬럼을 매핑하거나 값을 채워주세요.`); return }
+    // 금액이 있는데 통화가 없으면 USD로 단정할 수 없음
+    const noCur = parsed.filter(r => r.expected_monthly_volume && !r.volume_currency).length
+    if (noCur) { showToast(`⚠️ 예상 금액은 있는데 통화(Currency)가 비어 있는 행이 ${noCur}개 있습니다.`); return }
     setExcelPreview({ rows: parsed, fileName: mappingState.fileName, eventName })
     setMappingState(null)
   }
@@ -419,17 +434,17 @@ export default function SalesLeads() {
         lead_source: r.lead_source || '', // confirmMapping에서 빈 출처는 이미 걸러짐
         event_name: r.event_name || '',
         // 관리자가 아니면 Excel의 Owner 컬럼값과 무관하게 본인 계정으로 등록 (RLS와 일치)
-        owner: isAdmin ? (r.owner || 'Andrew') : (salesOwner || r.owner || 'Andrew'),
+        owner: isAdmin ? (r.owner || '') : (salesOwner || r.owner || ''), // confirmMapping에서 관리자 빈 Owner는 걸러짐
         priority: r.priority || 'Medium',
         current_stage: normalizeStage(r.current_stage),
-        country_corridor: r.country_corridor || 'Korea → Japan',
-        business_type: r.business_type || 'Korean Restaurant',
+        country_corridor: r.country_corridor || '',
+        business_type: r.business_type || '',
         expected_monthly_volume: r.expected_monthly_volume || null,
-        volume_currency: r.volume_currency || 'USD',
+        volume_currency: r.volume_currency || 'USD', // 금액 없는 행만 해당 (금액+통화 누락은 confirmMapping에서 차단)
         address: r.address || null,
         remarks: r.remarks || null,
         first_contact_done: false,
-        registered_date: localDateStr(),
+        registered_date: r.registered_date || localDateStr(),
       }))
       const { error } = await supabase.from('sales_leads').insert(inserts)
       if (error) { showToast('⚠️ 등록 실패: ' + error.message); return }
@@ -1097,7 +1112,8 @@ export default function SalesLeads() {
               <div>
                 <label style={{ marginTop: 0 }}>{t('owner_lbl')}</label>
                 {isAdmin ? (
-                  <select value={form.owner || 'Andrew'} onChange={e => setForm(f => ({ ...f, owner: e.target.value }))}>
+                  <select value={form.owner || ''} onChange={e => setForm(f => ({ ...f, owner: e.target.value }))}>
+                    <option value="">-- 선택 --</option>
                     {(settings?.owners || []).map(o => <option key={o}>{o}</option>)}
                   </select>
                 ) : (
@@ -1113,12 +1129,14 @@ export default function SalesLeads() {
               <div>
                 <label style={{ marginTop: 0 }}>{t('corridor_lbl')}</label>
                 <select value={form.country_corridor || ''} onChange={e => setForm(f => ({ ...f, country_corridor: e.target.value }))}>
+                  <option value="">—</option>
                   {(settings?.corridors || []).map(c => <option key={c}>{c}</option>)}
                 </select>
               </div>
               <div>
                 <label style={{ marginTop: 0 }}>{t('biz_type_lbl')}</label>
                 <select value={form.business_type || ''} onChange={e => setForm(f => ({ ...f, business_type: e.target.value }))}>
+                  <option value="">—</option>
                   {(settings?.business_types || []).map(b => <option key={b}>{b}</option>)}
                 </select>
               </div>
