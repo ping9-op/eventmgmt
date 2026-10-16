@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
-import { STAGE_ORDER, STAGE_COLORS, OUTREACH_CHANNELS, priorityColor, normalizeStage, localDateStr } from '../../lib/utils'
+import { STAGE_ORDER, STAGE_COLORS, OUTREACH_CHANNELS, priorityColor, normalizeStage, localDateStr, reachedStage, reachedOutreach } from '../../lib/utils'
 import type { SalesLead } from '../../types/database'
 import { loadAllSettings, loadExpoEventNames, type SalesSettingsData } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
@@ -113,6 +113,8 @@ export default function SalesLeads() {
   const [stageFilter, setStageFilter] = useState<string | null>(null)
   const [filterOwner, setFilterOwner] = useState<string | null>(null)
   const [filterStage, setFilterStage] = useState<string | null>(null)
+  const [filterReached, setFilterReached] = useState<string | null>(null) // 리포트 KPI: 해당 단계 도달(누적) 리드
+  const [filterLostReason, setFilterLostReason] = useState<string | null>(null)
   const [filterCorridor, setFilterCorridor] = useState<string | null>(null)
   const [detailPage, setDetailPage] = useState(0)
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
@@ -164,8 +166,14 @@ export default function SalesLeads() {
         setGroupKey(state.filter.event)
         setViewMode('detail')
       }
+      if (state.filter.reached) {
+        setFilterReached(state.filter.reached)
+        setViewMode('detail')
+        setGroupKey(null)
+      }
       if (state.filter.lostReason) {
         setFilterStage('Lost')
+        setFilterLostReason(state.filter.lostReason)
         setViewMode('detail')
       }
       if (state.filter.corridor) {
@@ -485,6 +493,8 @@ export default function SalesLeads() {
   let filteredLeads = leads
   if (filterOwner) filteredLeads = filteredLeads.filter(l => l.owner === filterOwner)
   if (filterStage) filteredLeads = filteredLeads.filter(l => l.current_stage === filterStage)
+  if (filterReached) filteredLeads = filteredLeads.filter(l => filterReached === 'Outreach Sent' ? reachedOutreach(l) : reachedStage(l, filterReached))
+  if (filterLostReason) filteredLeads = filteredLeads.filter(l => l.lost_reason === filterLostReason)
   if (filterCorridor) filteredLeads = filteredLeads.filter(l => l.country_corridor === filterCorridor)
 
   // Build groups — include expo-registered events even if 0 leads
@@ -589,7 +599,19 @@ export default function SalesLeads() {
             {filterStage && (
               <span style={{ background: '#FEF2F2', color: '#DC2626', padding: '4px 10px', borderRadius: 99, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
                 📊 {filterStage}
-                <button onClick={() => setFilterStage(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: 13, marginLeft: 2 }}>✕</button>
+                <button onClick={() => { setFilterStage(null); setFilterLostReason(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: 13, marginLeft: 2 }}>✕</button>
+              </span>
+            )}
+            {filterReached && (
+              <span style={{ background: '#EEF2FF', color: '#4F46E5', padding: '4px 10px', borderRadius: 99, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                📈 {filterReached} 이상 도달
+                <button onClick={() => setFilterReached(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#4F46E5', fontSize: 13, marginLeft: 2 }}>✕</button>
+              </span>
+            )}
+            {filterLostReason && (
+              <span style={{ background: '#FEF2F2', color: '#DC2626', padding: '4px 10px', borderRadius: 99, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                ❌ {filterLostReason}
+                <button onClick={() => setFilterLostReason(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: 13, marginLeft: 2 }}>✕</button>
               </span>
             )}
             {filterCorridor && (
@@ -673,7 +695,7 @@ export default function SalesLeads() {
             <button className="btn btn-outline btn-sm" onClick={() => { setViewMode('group'); setGroupKey(null); setStageFilter(null); setSearch('') }}>{t('back_to_list')}</button>
             <div className="sec-hdr" style={{ margin: 0, flex: 1 }}>
               <div className="bar" />
-              <span className="txt">👥 {groupKey || '전체'}</span>
+              <span className="txt">👥 {groupKey || '전체'}{filterReached ? ` · ${filterReached} 이상 도달` : ''}{filterLostReason ? ` · Lost: ${filterLostReason}` : ''}</span>
               <span className="sub">{detailLeads.length}개</span>
             </div>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('search_short')}

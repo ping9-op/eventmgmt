@@ -225,10 +225,20 @@ export function normalizeStage(raw: string | null | undefined): string {
 export const isActiveStage = (stage: string) => stage !== 'Won' && stage !== 'Lost'
 
 /** Proposal Sent 이상 도달 여부. Lost는 직전 단계(lost_at_stage) 기준 */
-export function reachedProposal(l: { current_stage: string; lost_at_stage?: string | null }): boolean {
-  const p = STAGE_ORDER.indexOf('Proposal Sent')
+/** 해당 단계에 한 번이라도 도달했는지 (Lost는 잃기 직전 단계 기준) */
+export function reachedStage(l: { current_stage: string; lost_at_stage?: string | null }, target: string): boolean {
+  const p = STAGE_ORDER.indexOf(target)
   const stage = l.current_stage === 'Lost' ? (l.lost_at_stage || '') : l.current_stage
   return stage !== 'Lost' && STAGE_ORDER.indexOf(stage) >= p
+}
+
+export function reachedProposal(l: { current_stage: string; lost_at_stage?: string | null }): boolean {
+  return reachedStage(l, 'Proposal Sent')
+}
+
+/** 첫 연락을 했는지: 체크박스(first_contact_done)는 자동 갱신되지 않으므로 단계 도달 여부도 함께 봄 */
+export function reachedOutreach(l: { current_stage: string; lost_at_stage?: string | null; first_contact_done?: boolean }): boolean {
+  return !!l.first_contact_done || reachedStage(l, 'Outreach Sent')
 }
 
 /** 'YYYY-MM-DD' → '오늘' / 'N일 전' 등 상대 표기 */

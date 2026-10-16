@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { STAGE_ORDER, STAGE_COLORS, priorityColor, isActiveStage, localDateStr } from '../../lib/utils'
+import { STAGE_ORDER, STAGE_COLORS, priorityColor, isActiveStage, localDateStr, reachedProposal } from '../../lib/utils'
 import { logStageChange } from '../../lib/stageHistory'
 import type { SalesLead, SalesProposal } from '../../types/database'
 import { loadAllSettings } from '../../lib/settings'
@@ -464,7 +464,8 @@ function ProposalContractView({ leads, proposals, onUpdate, onOpenLead }: {
   onOpenLead: (id: string) => void
 }) {
   const { t } = useLang()
-  const propLeads = leads.filter(l => ['Proposal Sent', 'Onboarding', 'Won', 'Lost'].includes(l.current_stage))
+  // Lost는 Proposal 단계 이상에서 잃은 리드만 (New Lead 단계에서 Lost된 리드 제외)
+  const propLeads = leads.filter(l => ['Proposal Sent', 'Onboarding', 'Won'].includes(l.current_stage) || (l.current_stage === 'Lost' && reachedProposal(l)))
   const propMap: Record<string, SalesProposal> = {}
   for (const p of proposals) propMap[p.lead_id] = p
 

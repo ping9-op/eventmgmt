@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { STAGE_ORDER, STAGE_COLORS, isActiveStage, reachedProposal, localDateStr } from '../../lib/utils'
+import { STAGE_ORDER, STAGE_COLORS, isActiveStage, reachedProposal, reachedOutreach, localDateStr } from '../../lib/utils'
 import type { SalesLead } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
@@ -93,7 +93,7 @@ export default function SalesReports() {
       [],
       ['[KPI 요약]'],
       ['전체 리드', tot],
-      ['Outreach Sent', leads.filter(l => l.first_contact_done).length],
+      ['Outreach Sent', leads.filter(reachedOutreach).length],
       ['Proposal Sent', leads.filter(l => reachedProposal(l)).length],
       ['Won', wonCount],
       ['전환율', tot ? `${Math.round(wonCount / tot * 100)}%` : '0%'],
@@ -108,7 +108,7 @@ export default function SalesReports() {
       ...evts.map(ev => {
         const el = leads.filter(l => l.event_name === ev)
         return [ev, el.length,
-          el.filter(l => l.first_contact_done).length,
+          el.filter(reachedOutreach).length,
           el.filter(l => reachedProposal(l)).length,
           el.filter(l => l.current_stage === 'Won').length,
           el.filter(l => l.current_stage === 'Lost').length]
@@ -126,7 +126,7 @@ export default function SalesReports() {
       ...ownrs.map(o => {
         const ol = leads.filter(l => l.owner === o)
         return [o, ol.length,
-          ol.filter(l => l.first_contact_done).length,
+          ol.filter(reachedOutreach).length,
           ol.filter(l => reachedProposal(l)).length,
           ol.filter(l => l.current_stage === 'Won').length]
       }),
@@ -175,8 +175,8 @@ export default function SalesReports() {
 
   const kpiCards = [
     { lbl: t('total_leads_lbl'), val: total, col: 'var(--text)', f: {} as Record<string, string> | null },
-    { lbl: 'Outreach Sent', val: leads.filter(l => l.first_contact_done).length, col: '#D97706', f: { stage: 'Outreach Sent' } },
-    { lbl: 'Proposal Sent', val: leads.filter(l => reachedProposal(l)).length, col: '#4F46E5', f: { stage: 'Proposal Sent' } },
+    { lbl: 'Outreach Sent', val: leads.filter(reachedOutreach).length, col: '#D97706', f: { reached: 'Outreach Sent' } },
+    { lbl: 'Proposal Sent', val: leads.filter(l => reachedProposal(l)).length, col: '#4F46E5', f: { reached: 'Proposal Sent' } },
     { lbl: t('won_leads_lbl'), val: won, col: '#065F46', f: { stage: 'Won' } },
     { lbl: t('conversion_rate'), val: conv + '%', col: '#7C3AED', f: null },
   ]
@@ -284,7 +284,7 @@ export default function SalesReports() {
                     onMouseOut={e => (e.currentTarget as HTMLTableRowElement).style.background = ''}>
                     <td style={{ padding: 7, fontSize: 11, fontWeight: 600 }}>{ev.replace(/ 20\d\d$/, '')}</td>
                     <td style={{ padding: 7, textAlign: 'center', fontWeight: 700 }}>{el.length}</td>
-                    <td style={{ padding: 7, textAlign: 'center', color: '#D97706', fontWeight: 600 }}>{el.filter(l => l.first_contact_done).length}</td>
+                    <td style={{ padding: 7, textAlign: 'center', color: '#D97706', fontWeight: 600 }}>{el.filter(reachedOutreach).length}</td>
                     <td style={{ padding: 7, textAlign: 'center', color: '#4F46E5', fontWeight: 600 }}>{el.filter(l => reachedProposal(l)).length}</td>
                     <td style={{ padding: 7, textAlign: 'center', color: '#065F46', fontWeight: 700 }}>{el.filter(l => l.current_stage === 'Won').length}</td>
                     <td style={{ padding: 7, textAlign: 'center', color: '#DC2626', fontWeight: 600 }}>{el.filter(l => l.current_stage === 'Lost').length}</td>
@@ -445,7 +445,7 @@ export default function SalesReports() {
                       </button>
                     </td>
                     <td style={{ padding: '9px 8px', textAlign: 'center' }}>{ol.length}</td>
-                    <td style={{ padding: '9px 8px', textAlign: 'center', color: '#D97706', fontWeight: 600 }}>{ol.filter(l => l.first_contact_done).length}</td>
+                    <td style={{ padding: '9px 8px', textAlign: 'center', color: '#D97706', fontWeight: 600 }}>{ol.filter(reachedOutreach).length}</td>
                     <td style={{ padding: '9px 8px', textAlign: 'center', color: '#4F46E5', fontWeight: 600 }}>{ol.filter(l => reachedProposal(l)).length}</td>
                     <td style={{ padding: '9px 8px', textAlign: 'center', color: '#065F46', fontWeight: 700 }}>{ol.filter(l => l.current_stage === 'Won').length}</td>
                   </tr>
