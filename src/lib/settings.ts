@@ -45,7 +45,8 @@ export async function loadAllSettings(): Promise<SalesSettingsData> {
 }
 
 export async function saveSetting(key: string, value: string[]): Promise<void> {
-  await supabase.from('sales_settings').upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+  const { error } = await supabase.from('sales_settings').upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+  if (error) throw error // 관리자가 아니면 RLS로 거부됨
 }
 
 // ── 하위 호환 (localStorage 기반 코드가 아직 있을 경우 대비) ────────────────

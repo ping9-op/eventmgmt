@@ -5,10 +5,11 @@ CREATE TABLE IF NOT EXISTS sales_settings (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- RLS 설정 (모든 인증 사용자 접근 허용)
+-- RLS 설정 — 최신 정책은 supabase/migrations/20261016060000_secure_roles_app_metadata_and_settings_rls.sql 참고 (조회: 로그인 사용자, 변경: 관리자)
 ALTER TABLE sales_settings ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all" ON sales_settings;
-CREATE POLICY "Allow all" ON sales_settings FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY sales_settings_read ON sales_settings FOR SELECT TO authenticated USING (true);
+CREATE POLICY sales_settings_admin_write ON sales_settings FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
 
 -- 기본값 삽입 (이미 존재하면 무시)
 INSERT INTO sales_settings (key, value) VALUES

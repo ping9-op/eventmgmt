@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 
-// 관리자 이메일 목록 — Supabase user_metadata.role='admin' 으로도 설정 가능
+// 관리자 이메일 목록 — app_metadata.role='admin' 으로도 설정 가능 (user_metadata는 사용자가 직접 수정할 수 있어 권한 판정에 쓰지 않음)
 const ADMIN_EMAILS = ['andrewc@gmeremit.com']
 
 // 자동 로그아웃: 2시간 이상 활동 없으면 로그아웃
@@ -77,13 +77,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAdmin = !!(
     user && (
       ADMIN_EMAILS.includes(user.email || '') ||
-      (user.user_metadata as any)?.role === 'admin'
+      (user.app_metadata as any)?.role === 'admin'
     )
   )
 
-  // 세일즈 매니저 계정 식별자 — user_metadata.sales_owner (sales_settings의 owners 목록 값과 일치해야 함)
+  // 세일즈 매니저 계정 식별자 — app_metadata.sales_owner (sales_settings의 owners 목록 값과 일치해야 함)
   // sales_leads.owner를 이 값과 매칭해 RLS가 자기 리드만 노출/수정 가능하도록 함
-  const salesOwner = (user?.user_metadata as any)?.sales_owner || null
+  const salesOwner = (user?.app_metadata as any)?.sales_owner || null
 
   async function signIn(email: string, password: string) {
     const { error } = await supabase.auth.signInWithPassword({ email, password })

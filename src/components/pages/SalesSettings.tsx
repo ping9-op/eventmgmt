@@ -6,6 +6,7 @@ import {
 } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
 import { useLang } from '../../contexts/LangContext'
+import { useAuth } from '../../contexts/AuthContext'
 
 // ── 편집 가능 설정 카드 ─────────────────────────────────────────────────────
 function EditableCard({
@@ -122,6 +123,7 @@ function ReadonlyCard({ icon, label, desc, items, systemFixedLabel }: { icon: st
 export default function SalesSettings() {
   const { t } = useLang()
   const { showToast } = useToast()
+  const { isAdmin } = useAuth()
   const [settings, setSettings] = useState<SalesSettingsData | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -155,6 +157,7 @@ export default function SalesSettings() {
 
   async function handleAdd(key: keyof SalesSettingsData, val: string) {
     if (!settings) return
+    if (!isAdmin) { showToast('⚠️ 설정은 관리자만 수정할 수 있습니다.'); return }
     const updated = [...settings[key], val]
     setSettings(s => s ? { ...s, [key]: updated } : s)
     setSaving(key)
@@ -173,6 +176,7 @@ export default function SalesSettings() {
 
   async function handleRemove(key: keyof SalesSettingsData, idx: number) {
     if (!settings) return
+    if (!isAdmin) { showToast('⚠️ 설정은 관리자만 수정할 수 있습니다.'); return }
     const updated = settings[key].filter((_, i) => i !== idx)
     setSettings(s => s ? { ...s, [key]: updated } : s)
     setSaving(key)
