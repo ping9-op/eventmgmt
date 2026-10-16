@@ -71,18 +71,9 @@ export default function ExpoOverview() {
 
   const entryDate = (e: ExhEntry) => parseEventDate(e.date, e.year)
 
-  function getLatestSorted(): ExhEntry[] {
-    const latest: Record<string, ExhEntry> = {}
-    for (const e of entries) if (!latest[e.key] || e.year > latest[e.key].year) latest[e.key] = e
-    return Object.values(latest).sort((a, b) => {
-      const da = entryDate(a), db = entryDate(b)
-      return da && db ? da.getTime() - db.getTime() : a.name.localeCompare(b.name)
-    })
-  }
-
   function getUpcoming(): UpcomingItem[] {
     const items: UpcomingItem[] = []
-    for (const e of getLatestSorted()) {
+    for (const e of entries) { // 연도별 전체 (내년 초안이 있어도 올해 일정이 빠지지 않도록)
       const d = entryDate(e)
       if (!d) continue
       const diff = dayDiffFromToday(d)!

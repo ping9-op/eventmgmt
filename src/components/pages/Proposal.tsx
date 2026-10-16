@@ -169,7 +169,8 @@ export default function Proposal() {
     setObjective(propEntry.objective)
     setProducts((propEntry.products as ProductTarget[]) || [{ product: 'GMEBIZ', target: '' }])
     setExpectedResults((propEntry.expected_results as string[]) || [''])
-    const newBudget = ((propEntry.budget as BudgetItem[]) || []).map(b => ({ ...b, prev: b.curr, curr: b.curr }))
+    // 복사: 원본 금액이 새 제안서의 전년도 값. 편집: 저장된 전년도 값을 그대로 유지 (현재값으로 덮어쓰지 않음)
+    const newBudget = ((propEntry.budget as BudgetItem[]) || []).map(b => ({ ...b, prev: isCopy ? b.curr : (b.prev || 0), curr: b.curr }))
     setBudget(newBudget.length ? newBudget : [{ item: 'Booth Fee', curr: 0, prev: 0, note: '', currency: 'KRW' }])
     setSaved(false)
     setAiOutput('AI 생성 결과가 여기에 표시됩니다.\n\n"AI 변동 사유 생성" 버튼을 눌러주세요.')
@@ -515,7 +516,8 @@ export default function Proposal() {
 
   const prevBudgetMap: Record<string, number> = {}
   if (exhId) {
-    const exhProposals = proposals.filter(p => p.exhibition_id === exhId).sort((a, b) => a.year - b.year)
+    // 비교 기준은 작성 중인 연도보다 이전 연도 중 가장 최근 제안서 (편집 중인 자신이나 미래 연도와 비교하지 않음)
+    const exhProposals = proposals.filter(p => p.exhibition_id === exhId && p.year < year).sort((a, b) => a.year - b.year)
     const prev = exhProposals[exhProposals.length - 1]
     if (prev) for (const b of (prev.budget as BudgetItem[]) || []) prevBudgetMap[b.item] = b.curr
   }
@@ -524,7 +526,8 @@ export default function Proposal() {
 
   async function exportDocx() {
     const exhName = isNewExh ? newExhName : (exhibitions.find(e => e.id === exhId)?.name || '박람회')
-    const prevYear = year - 1
+    // 비교 연도: 실제 직전 제안서 연도 (격년 개최 등으로 year-1이 아닐 수 있음)
+    const prevYear = Math.max(0, ...proposals.filter(p => p.exhibition_id === exhId && p.year < year).map(p => p.year)) || year - 1
     const activeBudget = budget.filter(b => b.curr > 0 || b.prev > 0)
     // 합계는 통화별로 (JPY/USD 항목을 KRW로 더하지 않도록)
     const curOf = (b: BudgetItem) => b.currency || 'KRW'

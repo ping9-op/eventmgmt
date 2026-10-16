@@ -76,10 +76,12 @@ export default function ProposalEditModal({ propId, exhName, exhKey, year, initi
         })
       }
     }
-    // 예산에서 삭제된 항목 중 미납인 결제만 삭제 (납부 완료 항목은 이력 보존)
+    // 이번 편집에서 예산에서 빠진 항목의 미납 결제만 삭제 (납부 완료 항목은 이력 보존)
+    // 원래 예산에 없던 결제(결제 관리에서 직접 추가한 Flight 등)는 건드리지 않음
     const activeItems = new Set(activeBudget.map(b => b.item))
+    const removedItems = new Set(initialBudget.filter(b => b.item && !activeItems.has(b.item)).map(b => b.item))
     for (const pay of pays) {
-      if (!activeItems.has(pay.item) && !pay.deposit_paid && !pay.final_paid) {
+      if (removedItems.has(pay.item) && !pay.deposit_paid && !pay.final_paid) {
         await supabase.from('payments').delete().eq('id', pay.id)
       }
     }

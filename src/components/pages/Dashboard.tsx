@@ -90,7 +90,7 @@ export default function Dashboard() {
 
   function getUpcoming(): UpcomingItem[] {
     const items: UpcomingItem[] = []
-    for (const e of getLatestSorted()) {
+    for (const e of entries) { // 연도별 전체 (내년 초안이 있어도 올해 일정이 빠지지 않도록)
       const eventDate = parseEventDate(e.date, e.year)
       if (!eventDate) continue
       const diff = dayDiffFromToday(eventDate)!
