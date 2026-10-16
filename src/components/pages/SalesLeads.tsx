@@ -4,7 +4,9 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { STAGE_ORDER, STAGE_COLORS, OUTREACH_CHANNELS, priorityColor, normalizeStage, localDateStr, reachedStage, reachedOutreach } from '../../lib/utils'
 import type { SalesLead } from '../../types/database'
-import { loadAllSettings, loadExpoEventNames, type SalesSettingsData } from '../../lib/settings'
+import { loadAllSettings, type SalesSettingsData } from '../../lib/settings'
+import { loadEventRefs, eventLabel, type EventRef } from '../../lib/events'
+import { toEventRefMap, leadEventLabel, leadEventGroupKey, eventGroupLabel, isEventKey, isExpoKey, matchEventRef, eventSelectOptions, eventSelectToFields } from '../../lib/leadEvents'
 import { useToast } from '../../contexts/ToastContext'
 import LeadDetailPanel from './LeadDetailPanel'
 import LostReasonModal, { LeadContactMeta, type LostReasonInput } from '../LostReasonModal'
@@ -17,7 +19,12 @@ import LoadingSpinner from '../LoadingSpinner'
 type GroupBy = 'event' | 'date' | 'source'
 type ViewMode = 'group' | 'detail'
 
-interface ExcelPreview { rows: Partial<SalesLead>[]; fileName: string; eventName?: string }
+type LeadRow = Partial<SalesLead>
+
+// 그룹별 업로드 시 모든 행에 적용할 행사 (박람회 행사면 proposalId 포함)
+interface UploadTarget { proposalId: string | null; eventName: string }
+
+interface ExcelPreview { rows: LeadRow[]; fileName: string; eventName?: string }
 
 interface MappingState {
   fileName: string
@@ -26,7 +33,7 @@ interface MappingState {
   headers: string[]
   rows: Record<string, any>[]
   mapping: Record<string, string>
-  eventName?: string
+  target?: UploadTarget
 }
 
 // 매핑 대상 필드 + 자동 추측용 헤더 별칭 (엑셀 양식마다 헤더명이 달라도 여기 별칭에 걸리면 자동 선택됨)
@@ -104,7 +111,8 @@ export default function SalesLeads() {
   const PRIORITIES = ['High', 'Medium', 'Low']
 
   const [leads, setLeads] = useState<SalesLead[]>([])
-  const [exhEventNames, setExhEventNames] = useState<string[]>([]) // 박람회에서 온 이벤트명 목록
+  const [eventRefs, setEventRefs] = useState<EventRef[]>([]) // 박람회 행사 목록 (보관 제외)
+  const refMap = toEventRefMap(eventRefs)
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<ViewMode>('group')
   const [groupBy, setGroupBy] = useState<GroupBy>('event')
@@ -135,8 +143,8 @@ export default function SalesLeads() {
   // Lost 전환 대기 (사유 입력 모달)
   const [pendingLostIds, setPendingLostIds] = useState<string[] | null>(null)
 
-  // 그룹별 업로드용 이벤트명 ref
-  const importEventNameRef = useRef<string>('')
+  // 그룹별 업로드용 행사 ref
+  const importTargetRef = useRef<UploadTarget | null>(null)
   const groupExcelInputRef = useRef<HTMLInputElement>(null)
   const groupPdfInputRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
@@ -150,6 +158,8 @@ export default function SalesLeads() {
     volume_currency: 'USD', first_contact_done: false,
   })
   const [form, setForm] = useState<Partial<SalesLead>>(emptyForm)
+  // 등록 폼 행사 선택값: 'p:<proposalId>' / 't:<행사명>' / ''
+  const [formEvent, setFormEvent] = useState('')
 
   useEffect(() => {
     // Handle navigation state (from dashboard/reports)
@@ -161,10 +171,12 @@ export default function SalesLeads() {
         setViewMode('detail')
         setGroupKey(null)
       }
-      if (state.filter.event) {
+      // 행사 필터: proposalId(박람회 행사) 우선, event(행사명 문자열 — 로드 후 박람회 행사와 매칭), source(행사 없는 리드의 출처)
+      if (state.filter.proposalId || state.filter.event != null || state.filter.source != null) {
         setGroupBy('event')
-        setGroupKey(state.filter.event)
         setViewMode('detail')
+        if (state.filter.proposalId) setGroupKey(`p:${state.filter.proposalId}`)
+        else if (state.filter.source != null && state.filter.event == null) setGroupKey(`s:${state.filter.source}`)
       }
       if (state.filter.reached) {
         setFilterReached(state.filter.reached)
@@ -184,15 +196,23 @@ export default function SalesLeads() {
     let cancelled = false
     async function run() {
       try {
-        const [{ data: leadsData }, expoNames, s] = await Promise.all([
+        const [{ data: leadsData }, refs, s] = await Promise.all([
           supabase.from('sales_leads').select('*').order('registered_date', { ascending: false }),
-          loadExpoEventNames(),
+          loadEventRefs(),
           loadAllSettings(),
         ])
         if (!cancelled) {
-          setLeads((leadsData || []) as SalesLead[])
+          const rows = (leadsData || []) as LeadRow[]
+          setLeads(rows as SalesLead[])
           setSettings(s)
-          setExhEventNames(expoNames)
+          setEventRefs(refs)
+          // 행사명 문자열로 넘어온 필터 → 박람회 행사면 proposal_id 그룹, 아니면 박람회 외 행사 그룹
+          const ev: unknown = state?.filter?.event
+          if (!state?.filter?.proposalId && typeof ev === 'string' && ev) {
+            const ref = matchEventRef(ev, refs)
+            const pid = ref?.proposalId ?? rows.find(l => l.proposal_id && l.event_name === ev)?.proposal_id
+            setGroupKey(pid ? `p:${pid}` : `t:${ev}`)
+          }
         }
       } catch (e) {
         showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error')
@@ -298,7 +318,7 @@ export default function SalesLeads() {
       current_stage: 'New Lead',
       volume_currency: form.volume_currency || 'USD',
       first_contact_done: false,
-      event_name: form.event_name || '',
+      ...eventSelectToFields(formEvent, refMap), // proposal_id + event_name(표시명 스냅샷)
       registered_date: form.registered_date || localDateStr(),
       phone: form.phone || null,
       email: form.email || null,
@@ -317,6 +337,7 @@ export default function SalesLeads() {
 
   function resetForm() {
     setForm(emptyForm())
+    setFormEvent('')
   }
 
   async function downloadTemplate() {
@@ -332,7 +353,7 @@ export default function SalesLeads() {
     showToast('📋 템플릿이 다운로드되었습니다.')
   }
 
-  async function openMappingModal(file: File, overrideEventName?: string) {
+  async function openMappingModal(file: File, target?: UploadTarget) {
     const XLSX = await import('xlsx')
     const reader = new FileReader()
     reader.onload = e => {
@@ -350,7 +371,7 @@ export default function SalesLeads() {
         headers,
         rows,
         mapping: guessMapping(headers),
-        eventName: overrideEventName,
+        target,
       })
     }
     reader.readAsArrayBuffer(file)
@@ -375,15 +396,24 @@ export default function SalesLeads() {
 
   function confirmMapping() {
     if (!mappingState) return
-    const { rows, mapping, eventName } = mappingState
+    const { rows, mapping, target } = mappingState
     const get = (r: Record<string, any>, fieldKey: string) => {
       const h = mapping[fieldKey]
       return h ? String(r[h] ?? '').trim() : ''
     }
-    const parsed: Partial<SalesLead>[] = rows.map(r => {
+    const parsed: LeadRow[] = rows.map(r => {
       const rawStage = get(r, 'current_stage')
-      const event = eventName || get(r, 'event_name')
+      // 그룹 업로드면 그룹의 행사를 모든 행에 적용. 아니면 행의 행사명을 박람회 행사와 매칭(대소문자 무시)해 proposal_id 연결
+      let event = '', proposalId: string | null = null
+      if (target) { event = target.eventName; proposalId = target.proposalId }
+      else {
+        const raw = get(r, 'event_name')
+        const ref = matchEventRef(raw, eventRefs)
+        if (ref) { event = eventLabel(ref); proposalId = ref.proposalId }
+        else event = raw
+      }
       return {
+        proposal_id: proposalId,
         company_name: get(r, 'company_name'),
         contact_person: get(r, 'contact_person'),
         phone: get(r, 'phone') || null,
@@ -412,16 +442,16 @@ export default function SalesLeads() {
     // 금액이 있는데 통화가 없으면 USD로 단정할 수 없음
     const noCur = parsed.filter(r => r.expected_monthly_volume && !r.volume_currency).length
     if (noCur) { showToast(`⚠️ 예상 금액은 있는데 통화(Currency)가 비어 있는 행이 ${noCur}개 있습니다.`); return }
-    setExcelPreview({ rows: parsed, fileName: mappingState.fileName, eventName })
+    setExcelPreview({ rows: parsed, fileName: mappingState.fileName, eventName: target?.eventName })
     setMappingState(null)
   }
 
-  function openGroupUpload(eventName: string) {
-    importEventNameRef.current = eventName
+  function openGroupUpload(target: UploadTarget | null) {
+    importTargetRef.current = target
     groupExcelInputRef.current?.click()
   }
 
-  async function bulkRegisterLeads(rows: Partial<SalesLead>[]) {
+  async function bulkRegisterLeads(rows: LeadRow[]) {
     setImporting(true)
     try {
       const inserts = rows.map(r => ({
@@ -431,6 +461,7 @@ export default function SalesLeads() {
         email: r.email || null,
         lead_source: r.lead_source || '', // confirmMapping에서 빈 출처는 이미 걸러짐
         event_name: r.event_name || '',
+        proposal_id: r.proposal_id ?? null,
         // 관리자가 아니면 Excel의 Owner 컬럼값과 무관하게 본인 계정으로 등록 (RLS와 일치)
         owner: isAdmin ? (r.owner || '') : (salesOwner || r.owner || ''), // confirmMapping에서 관리자 빈 Owner는 걸러짐
         priority: r.priority || 'Medium',
@@ -458,7 +489,7 @@ export default function SalesLeads() {
     const toExport = ids && ids.length > 0 ? leads.filter(l => ids.includes(l.id)) : (checked.size > 0 ? leads.filter(l => checked.has(l.id)) : leads)
     if (!toExport.length) { showToast('⚠️ 내보낼 리드가 없습니다.'); return }
     const H = ['SN', '등록일', '행사명', 'Company', '담당자', 'Phone', 'Email', 'Source', '주소', 'Owner', 'Stage', '첫연락', '마지막연락', '다음팔로업', '예상Volume', '통화', 'Priority', 'LostReason', 'Remarks']
-    const rows = toExport.map(l => [l.serial_no, l.registered_date, l.event_name, l.company_name, l.contact_person, l.phone || '', l.email || '', l.lead_source, l.address || '', l.owner, l.current_stage, l.first_contact_done ? 'Y' : 'N', l.last_contact_date || '', l.next_follow_up_date || '', l.expected_monthly_volume || '', l.volume_currency, l.priority, l.lost_reason || '', l.remarks || ''])
+    const rows = toExport.map(l => [l.serial_no, l.registered_date, leadEventLabel(l, refMap), l.company_name, l.contact_person, l.phone || '', l.email || '', l.lead_source, l.address || '', l.owner, l.current_stage, l.first_contact_done ? 'Y' : 'N', l.last_contact_date || '', l.next_follow_up_date || '', l.expected_monthly_volume || '', l.volume_currency, l.priority, l.lost_reason || '', l.remarks || ''])
     const csv = [H, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
     const a = Object.assign(document.createElement('a'), { href: 'data:text/csv;charset=utf-8,﻿' + encodeURIComponent(csv), download: `GME_Leads_${localDateStr()}.csv` })
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
@@ -488,24 +519,32 @@ export default function SalesLeads() {
   if (filterCorridor) filteredLeads = filteredLeads.filter(l => l.country_corridor === filterCorridor)
 
   // Build groups — include expo-registered events even if 0 leads
+  // 그룹 키는 접두사로 구분: 행사 기준 'p:<proposalId>'(박람회) / 't:<행사명>'(박람회 외) / 's:<출처>'(행사 없음),
+  // 날짜 기준 'd:<날짜>', 출처 기준 's:<출처>'. 화면에는 groupLabelOf로 사람이 읽는 이름을 표시
   const groups: Record<string, SalesLead[]> = {}
-  // 먼저 박람회 등록 이벤트를 빈 배열로 미리 추가 (event 그룹일 때만)
+  // 먼저 박람회 행사를 빈 배열로 미리 추가 (event 그룹일 때만)
   if (groupBy === 'event') {
-    for (const name of exhEventNames) {
-      if (!groups[name]) groups[name] = []
-    }
+    for (const r of eventRefs) groups[`p:${r.proposalId}`] = []
   }
-  // 행사 기준일 때 행사명이 없는 리드(박람회 외 경로)는 출처로 묶는다
+  // 행사 기준일 때 행사가 없는 리드(박람회 외 경로)는 출처로 묶는다
   const groupKeyOf = (l: SalesLead) =>
-    groupBy === 'event' ? (l.event_name || l.lead_source) : groupBy === 'date' ? l.registered_date : l.lead_source
+    groupBy === 'event' ? leadEventGroupKey(l) : groupBy === 'date' ? `d:${l.registered_date}` : `s:${l.lead_source}`
+  const groupLabelOf = (k: string | null): string => {
+    if (!k) return '전체'
+    if (groupBy === 'event') return eventGroupLabel(k, refMap, groups[k] || [])
+    return k.slice(2) || '(미지정)'
+  }
   // 실제 행사 그룹인지 (출처로 대체된 그룹에는 행사명 자동 업로드를 붙이지 않음)
-  const eventKeys = new Set([...exhEventNames, ...leads.map(l => l.event_name).filter(Boolean)])
-  const isEventGroup = (k: string | null): k is string => !!k && groupBy === 'event' && eventKeys.has(k)
+  const isEventGroup = (k: string | null): k is string => groupBy === 'event' && isEventKey(k)
+  const isExpoGroup = (k: string | null): k is string => groupBy === 'event' && isExpoKey(k)
+  const uploadTargetOf = (k: string | null): UploadTarget | null =>
+    isEventGroup(k) ? { proposalId: isExpoKey(k) ? k.slice(2) : null, eventName: groupLabelOf(k) } : null
   filteredLeads.forEach(l => {
     const key = groupKeyOf(l)
     if (!groups[key]) groups[key] = []
     groups[key].push(l)
   })
+  const groupKeyLabel = groupLabelOf(groupKey)
 
   // Detail list data
   let detailLeads = filteredLeads
@@ -519,7 +558,7 @@ export default function SalesLeads() {
   // Group view search
   const groupSearchFiltered = search
     ? Object.fromEntries(
-      Object.entries(groups).map(([k, ls]) => [k, ls.filter(l => [l.company_name, l.contact_person, l.owner, l.event_name].some(v => (v || '').toLowerCase().includes(search.toLowerCase())))])
+      Object.entries(groups).map(([k, ls]) => [k, ls.filter(l => [l.company_name, l.contact_person, l.owner, leadEventLabel(l, refMap)].some(v => (v || '').toLowerCase().includes(search.toLowerCase())))])
     )
     : groups
 
@@ -538,7 +577,7 @@ export default function SalesLeads() {
       <input ref={groupExcelInputRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }}
         onChange={e => {
           const f = e.target.files?.[0]
-          if (f) openMappingModal(f, importEventNameRef.current || undefined)
+          if (f) openMappingModal(f, importTargetRef.current || undefined)
           e.target.value = ''
         }} />
 
@@ -629,10 +668,11 @@ export default function SalesLeads() {
                 </thead>
                 <tbody>
                   {Object.entries(groupSearchFiltered)
-                    .filter(([k, ls]) => ls.length > 0 || exhEventNames.includes(k))
+                    .filter(([k, ls]) => ls.length > 0 || isExpoGroup(k))
                     .map(([k, ls]) => {
-                      const isExhEvent = exhEventNames.includes(k)
+                      const isExhEvent = isExpoGroup(k)
                       const isEmpty = ls.length === 0
+                      const label = groupLabelOf(k)
                       return (
                         <tr key={k}
                           style={{ cursor: 'pointer', transition: 'background .1s' }}
@@ -641,7 +681,7 @@ export default function SalesLeads() {
                           onMouseOut={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = ''))}>
                           <td style={{ padding: '11px 14px', fontWeight: 700, color: 'var(--accent)' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                              {k || '(미지정)'}
+                              {label}
                               {isExhEvent && (
                                 <span style={{ fontSize: 9, fontWeight: 700, background: '#FFF0F0', color: 'var(--accent)', padding: '2px 6px', borderRadius: 99, border: '1px solid var(--accent)', whiteSpace: 'nowrap' }}>
                                   박람회
@@ -660,8 +700,8 @@ export default function SalesLeads() {
                           {groupBy === 'event' && (
                             <td style={{ padding: '11px 8px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                               {isEventGroup(k) && <button
-                                onClick={() => openGroupUpload(k)}
-                                title={`"${k}" 리드 Excel 업로드`}
+                                onClick={() => openGroupUpload(uploadTargetOf(k))}
+                                title={`"${label}" 리드 Excel 업로드`}
                                 style={{ padding: '4px 8px', borderRadius: 6, border: '1.5px solid var(--border2)', background: 'white', cursor: 'pointer', fontSize: 13, color: 'var(--muted)', lineHeight: 1 }}>
                                 📤
                               </button>}
@@ -685,14 +725,14 @@ export default function SalesLeads() {
             <button className="btn btn-outline btn-sm" onClick={() => { setViewMode('group'); setGroupKey(null); setStageFilter(null); setSearch('') }}>{t('back_to_list')}</button>
             <div className="sec-hdr" style={{ margin: 0, flex: 1 }}>
               <div className="bar" />
-              <span className="txt">👥 {groupKey || '전체'}{filterReached ? ` · ${filterReached} 이상 도달` : ''}{filterLostReason ? ` · Lost: ${filterLostReason}` : ''}</span>
+              <span className="txt">👥 {groupKeyLabel}{filterReached ? ` · ${filterReached} 이상 도달` : ''}{filterLostReason ? ` · Lost: ${filterLostReason}` : ''}</span>
               <span className="sub">{detailLeads.length}개</span>
             </div>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('search_short')}
               style={{ padding: '7px 12px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, flex: 1, minWidth: 140, maxWidth: 200 }} />
             <button className="btn btn-primary btn-sm" onClick={() => setShowRegister(true)}>+ 등록</button>
             {isEventGroup(groupKey) && (
-              <button className="btn btn-outline btn-sm" onClick={() => openGroupUpload(groupKey)}>📤 Excel 업로드</button>
+              <button className="btn btn-outline btn-sm" onClick={() => openGroupUpload(uploadTargetOf(groupKey))}>📤 Excel 업로드</button>
             )}
           </div>
 
@@ -707,13 +747,13 @@ export default function SalesLeads() {
               if (!file) return
               const ext = file.name.split('.').pop()?.toLowerCase()
               if (['xlsx', 'xls', 'csv'].includes(ext || '')) {
-                openMappingModal(file, isEventGroup(groupKey) ? groupKey : undefined)
+                openMappingModal(file, uploadTargetOf(groupKey) || undefined)
               } else {
                 showToast('⚠️ Excel 파일(.xlsx/.xls/.csv)만 지원합니다.')
               }
             }}
             onClick={() => {
-              importEventNameRef.current = isEventGroup(groupKey) ? groupKey : ''
+              importTargetRef.current = uploadTargetOf(groupKey)
               groupExcelInputRef.current?.click()
             }}
             style={{
@@ -730,14 +770,14 @@ export default function SalesLeads() {
               <div>
                 <div style={{ fontSize: 32, marginBottom: 8 }}>📂</div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: dragOver ? 'var(--accent)' : 'var(--muted)', marginBottom: 4 }}>
-                  {groupKey ? `"${groupKey}" 리드 파일을 여기에 드래그하거나 클릭하여 업로드` : '파일을 드래그하거나 클릭하여 업로드'}
+                  {groupKey ? `"${groupKeyLabel}" 리드 파일을 여기에 드래그하거나 클릭하여 업로드` : '파일을 드래그하거나 클릭하여 업로드'}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--muted)' }}>Excel (.xlsx / .xls / .csv) 지원</div>
               </div>
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 12, color: dragOver ? 'var(--accent)' : 'var(--muted)', fontWeight: 600 }}>
                 <span style={{ fontSize: 16 }}>📤</span>
-                {dragOver ? '여기에 놓으세요' : `Excel 파일 드래그 또는 클릭하여 업로드${isEventGroup(groupKey) ? ` (행사명 자동: ${groupKey})` : ''}`}
+                {dragOver ? '여기에 놓으세요' : `Excel 파일 드래그 또는 클릭하여 업로드${isEventGroup(groupKey) ? ` (행사명 자동: ${groupKeyLabel})` : ''}`}
               </div>
             )}
           </div>
@@ -824,7 +864,7 @@ export default function SalesLeads() {
                     value=""
                     onChange={e => {
                       if (!e.target.value) return
-                      if (window.confirm(`"${groupKey}" 전체 ${detailLeads.length}개 리드를 "${e.target.value}"으로 변경합니까?`)) {
+                      if (window.confirm(`"${groupKeyLabel}" 전체 ${detailLeads.length}개 리드를 "${e.target.value}"으로 변경합니까?`)) {
                         bulkUpdateStage(detailLeads.map(l => l.id), e.target.value)
                       }
                       e.target.value = ''
@@ -862,7 +902,7 @@ export default function SalesLeads() {
                         {l.current_stage}
                       </span>
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>{l.event_name.replace(/ 20\d\d$/, '')} · {l.lead_source}</div>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>{[leadEventLabel(l, refMap), l.lead_source].filter(Boolean).join(' · ')}</div>
                     <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--muted)', flexWrap: 'wrap', alignItems: 'center' }}>
                       <LeadContactMeta channel={l.outreach_channel} lastContact={l.last_contact_date} />
                       {l.next_follow_up_date && <span style={{ color: '#4F46E5', fontWeight: 600 }}>팔업: {l.next_follow_up_date}</span>}
@@ -911,7 +951,7 @@ export default function SalesLeads() {
                         </td>
                         <td style={{ padding: '9px 12px', color: 'var(--muted)', fontWeight: 600 }}>{l.serial_no}</td>
                         <td style={{ padding: '9px 12px' }}>{l.registered_date}</td>
-                        <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--muted)' }}>{l.event_name.replace(/ 20\d\d$/, '')}</td>
+                        <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--muted)' }}>{leadEventLabel(l, refMap) || '—'}</td>
                         <td style={{ padding: '9px 12px', fontWeight: 700 }}>{l.company_name}</td>
                         <td style={{ padding: '9px 12px' }}>{l.contact_person}</td>
                         <td style={{ padding: '9px 12px', fontSize: 11 }}>{l.phone || '—'}<br /><span style={{ color: 'var(--muted)' }}>{l.email || '—'}</span></td>
@@ -1016,9 +1056,9 @@ export default function SalesLeads() {
                 </tbody>
               </table>
             </div>
-            {mappingState.eventName && (
+            {mappingState.target && (
               <div style={{ fontSize: 12, marginTop: 10, background: '#FFF0F0', color: 'var(--accent)', padding: '6px 10px', borderRadius: 7, fontWeight: 700 }}>
-                📌 행사명은 "{mappingState.eventName}"으로 자동 적용됩니다 (행사명 매핑은 무시됩니다)
+                📌 행사명은 "{mappingState.target.eventName}"으로 자동 적용됩니다 (행사명 매핑은 무시됩니다)
               </div>
             )}
             <div className="modal-footer">
@@ -1114,11 +1154,10 @@ export default function SalesLeads() {
               </div>
               <div>
                 <label style={{ marginTop: 0 }}>{t('event_name_lbl')}</label>
-                <select value={form.event_name || ''} onChange={e => setForm(f => ({ ...f, event_name: e.target.value }))}>
+                <select value={formEvent} onChange={e => setFormEvent(e.target.value)}>
                   <option value="">{t('select_event')}</option>
-                  {/* 박람회 등록 이벤트 우선, 설정 이벤트 추가 */}
-                  {exhEventNames.map(ev => <option key={ev}>{ev}</option>)}
-                  {(settings?.event_names || []).filter(ev => !exhEventNames.includes(ev)).map(ev => <option key={ev}>{ev}</option>)}
+                  {/* 박람회 행사 우선, 설정의 박람회 외 행사 추가 */}
+                  {eventSelectOptions(eventRefs, settings?.event_names || []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
               <div>

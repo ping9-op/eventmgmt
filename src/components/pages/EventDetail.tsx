@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { toEventRef, eventLabel, legacyKey, eventPath, type EventRef } from '../../lib/events'
 import { exhColor, formatEventDate, fmtCur } from '../../lib/utils'
 import DecimalInput from '../DecimalInput'
 import { useToast } from '../../contexts/ToastContext'
@@ -103,8 +104,35 @@ function fmtAmt(amt: number, cur: string) {
   return fmtCur(amt || 0, cur)
 }
 
-export default function EventDetail() {
+// 이전 주소(/expo/event/:key/:year) → 회차 없는(session null) 행사의 proposal_id 경로로 대체 이동
+export function LegacyEventRedirect() {
   const { key, year } = useParams<{ key: string; year: string }>()
+  const navigate = useNavigate()
+  const [notFound, setNotFound] = useState(false)
+  useEffect(() => {
+    let mounted = true
+    async function resolve() {
+      const { data: exhs } = await supabase.from('exhibitions').select('id').eq('key', key || '')
+      const exhIds = (exhs || []).map(e => e.id)
+      // 보관되지 않은 행사 우선
+      const { data: props } = exhIds.length
+        ? await supabase.from('proposals').select('id').in('exhibition_id', exhIds).eq('year', parseInt(year || '0')).is('session', null)
+            .order('archived_at', { ascending: false, nullsFirst: true }).limit(1)
+        : { data: null }
+      const prop = props?.[0]
+      if (!mounted) return
+      if (prop) navigate(eventPath(prop.id), { replace: true })
+      else setNotFound(true)
+    }
+    resolve()
+    return () => { mounted = false }
+  }, [key, year])
+  if (notFound) return <EmptyState icon="📄" title="행사를 찾을 수 없습니다" sub={`${key} ${year}`} />
+  return null
+}
+
+export default function EventDetail() {
+  const { proposalId } = useParams<{ proposalId: string }>()
   const navigate = useNavigate()
   const { showToast } = useToast()
   const { t } = useLang()
@@ -131,9 +159,10 @@ export default function EventDetail() {
   const [showLeaveModal, setShowLeaveModal] = useState(false)
   const [pendingNav, setPendingNav] = useState<(() => void) | null>(null)
   const justLoaded = useRef(true)
+  const [ev, setEv] = useState<EventRef | null>(null)
 
-  const dbKey = `${key}_${year}`
-  const yearNum = parseInt(year || '0')
+  const yearNum = ev?.year || 0
+  const year = ev ? String(ev.year) : ''
 
   useEffect(() => {
     let mounted = true
@@ -142,21 +171,29 @@ export default function EventDetail() {
     setLoading(true)
     async function load() {
       try {
-        const [{ data: exhData }, { data: allProps }, { data: evData }, { data: payData }] = await Promise.all([
-          supabase.from('exhibitions').select('*').eq('key', key || '').single(),
-          supabase.from('proposals').select('*').order('year'),
-          supabase.from('event_data').select('*').eq('exhibition_key', dbKey).single(),
-          supabase.from('payments').select('*').eq('exhibition_key', dbKey),
+        const pid = proposalId || ''
+        const [{ data: curProp }, { data: evData }, { data: payData }] = await Promise.all([
+          supabase.from('proposals').select('*').eq('id', pid).maybeSingle(),
+          supabase.from('event_data').select('*').eq('proposal_id', pid).maybeSingle(),
+          supabase.from('payments').select('*').eq('proposal_id', pid),
         ])
         let paymentsToSet = (payData || []) as unknown as Payment[]
-        if (exhData) {
+        const { data: exhData } = curProp
+          ? await supabase.from('exhibitions').select('*').eq('id', curProp.exhibition_id).maybeSingle()
+          : { data: null }
+        if (curProp && exhData) {
+          const ref = toEventRef(curProp, exhData)
           if (mounted) {
+            setEv(ref)
             setExhName(exhData.name)
             setColor(exhColor(exhData.name))
           }
-          const props = (allProps as any[])?.filter((p: any) => p.exhibition_id === exhData.id) || []
-          const cur = props.find((p: any) => p.year === yearNum)
-          const prev = [...props].filter((p: any) => p.year < yearNum).sort((a: any, b: any) => b.year - a.year)[0]
+          // 전년도 비교 대상 = 같은 박람회의 이전 연도 중 가장 최근 proposal (보관 제외)
+          const { data: prevProps } = await supabase.from('proposals').select('*')
+            .eq('exhibition_id', exhData.id).lt('year', curProp.year).is('archived_at', null)
+            .order('year', { ascending: false }).order('session', { ascending: false, nullsFirst: false }).limit(1)
+          const cur: any = curProp
+          const prev: any = prevProps?.[0]
           if (mounted) {
             if (cur) setOverview({ ...cur, budget: (cur.budget as any) || [] })
             if (prev) setPrevOverview({ ...prev, budget: (prev.budget as any) || [] })
@@ -174,7 +211,7 @@ export default function EventDetail() {
               if (!existing) {
                 // 새 예산 항목 — 결제 행 추가
                 const { data: newPay } = await supabase.from('payments').insert({
-                  exhibition_key: dbKey, item: b.item, total: b.curr,
+                  proposal_id: ref.proposalId, exhibition_key: legacyKey(ref), item: b.item, total: b.curr,
                   currency: b.currency || 'KRW',
                   deposit_amount: 0, deposit_due: null, deposit_paid: false,
                   final_amount: 0, final_due: null, final_paid: false,
@@ -223,7 +260,7 @@ export default function EventDetail() {
       if (mounted) setTimeout(() => { justLoaded.current = false }, 100)
     })
     return () => { mounted = false }
-  }, [key, year, refreshKey])
+  }, [proposalId, refreshKey])
 
   // 변경사항 감지 — 로드 직후는 무시, 그 이후 변경만 추적
   useEffect(() => {
@@ -249,10 +286,11 @@ export default function EventDetail() {
   }
 
   async function save() {
+    if (!ev) return
     setSaving(true)
     try {
       const payload = {
-        exhibition_key: dbKey, tab,
+        proposal_id: ev.proposalId, exhibition_key: legacyKey(ev), tab,
         checklist: checklist as unknown as never,
         design: design as unknown as never,
         gifts_onboard: giftsOnboard as unknown as never,
@@ -308,8 +346,9 @@ export default function EventDetail() {
   }
 
   async function addPayRow() {
+    if (!ev) return
     const newPay = {
-      exhibition_key: dbKey, item: '새 항목', total: 0, currency: 'KRW',
+      proposal_id: ev.proposalId, exhibition_key: legacyKey(ev), item: '새 항목', total: 0, currency: 'KRW',
       deposit_amount: 0, deposit_due: null, deposit_paid: false,
       final_amount: 0, final_due: null, final_paid: false,
     }
@@ -347,7 +386,7 @@ export default function EventDetail() {
           <button className="back" onClick={() => safeNavigate(() => navigate(-1))}>{t('ev_back')}</button>
           <div style={{ width: 4, height: 20, background: color, borderRadius: 3, flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="ev-name">{exhName} {year}</div>
+            <div className="ev-name">{ev ? eventLabel(ev) : ''}</div>
             <div className="ev-sub">
               {overview ? `${formatEventDate(overview.date_of_event, yearNum)} · ${overview.venue}` : ''}
             </div>
@@ -404,7 +443,7 @@ export default function EventDetail() {
                   <div className="g3" style={{ padding: isMobile ? '12px 14px' : '18px 24px' }}>
                     {[
                       [t('col_exh'), exhName],
-                      [t('year_label'), year],
+                      [t('year_label'), ev?.session ? `${year} ${ev.session}` : year],
                       [t('col_date'), formatEventDate(overview.date_of_event, yearNum)],
                       [t('venue'), overview.venue || '-'],
                       [t('author_label'), overview.author || '-'],
@@ -703,7 +742,8 @@ export default function EventDetail() {
         <ProposalEditModal
           propId={overview.id}
           exhName={exhName}
-          exhKey={key || ''}
+          exhKey={ev?.key || ''}
+          session={ev?.session ?? null}
           year={yearNum}
           initialDate={overview.date_of_event || ''}
           initialVenue={overview.venue || ''}

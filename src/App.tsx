@@ -22,6 +22,7 @@ const SalesFollowUp = lazy(() => import('./components/pages/SalesFollowUp'))
 const SalesReports = lazy(() => import('./components/pages/SalesReports'))
 const SalesSettings = lazy(() => import('./components/pages/SalesSettings'))
 const EventDetail = lazy(() => import('./components/pages/EventDetail'))
+const LegacyEventRedirect = lazy(() => import('./components/pages/EventDetail').then(m => ({ default: m.LegacyEventRedirect })))
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -62,7 +63,9 @@ export default function App() {
         <Route path="sales/reports" element={<Suspense fallback={<LoadingSpinner />}><SalesReports /></Suspense>} />
         <Route path="sales/settings" element={<Suspense fallback={<LoadingSpinner />}><SalesSettings /></Suspense>} />
         <Route path="settings" element={<Suspense fallback={<LoadingSpinner />}><SalesSettings /></Suspense>} />
-        <Route path="expo/event/:key/:year" element={<Suspense fallback={<LoadingSpinner />}><EventDetail /></Suspense>} />
+        <Route path="expo/event/:proposalId" element={<Suspense fallback={<LoadingSpinner />}><EventDetail /></Suspense>} />
+        {/* 이전 주소(/expo/event/KIF/2026) 호환 — proposal_id 경로로 대체 이동 */}
+        <Route path="expo/event/:key/:year" element={<Suspense fallback={<LoadingSpinner />}><LegacyEventRedirect /></Suspense>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

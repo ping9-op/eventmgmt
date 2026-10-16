@@ -5,7 +5,9 @@ import LostReasonModal, { type LostReasonInput } from '../LostReasonModal'
 import DecimalInput from '../DecimalInput'
 import { useIsMobile } from '../../hooks/useBreakpoint'
 import { logStageChange } from '../../lib/stageHistory'
-import { loadAllSettings, loadExpoEventNames, CONTRACT_STATUSES as SYSTEM_CONTRACT_STATUSES, ONBOARD_STATUSES as SYSTEM_ONBOARD_STATUSES, type SalesSettingsData } from '../../lib/settings'
+import { loadEventRefs, type EventRef } from '../../lib/events'
+import { toEventRefMap, leadEventLabel, eventSelectOptions, leadEventSelectValue, eventSelectToFields } from '../../lib/leadEvents'
+import { loadAllSettings, CONTRACT_STATUSES as SYSTEM_CONTRACT_STATUSES, ONBOARD_STATUSES as SYSTEM_ONBOARD_STATUSES, type SalesSettingsData } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
 import type { SalesLead, SalesActivity, SalesTask, SalesProposal } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
@@ -83,12 +85,21 @@ export default function LeadDetailPanel({
   // Fee Rate는 입력 중인 문자열을 그대로 유지해야 "0." 같은 중간 입력(소수점)이 가능하다
   const [feeRateText, setFeeRateText] = useState<string | null>(null)
 
-  const [expoEventNames, setExpoEventNames] = useState<string[]>([])
+  const [eventRefs, setEventRefs] = useState<EventRef[]>([])
+  // 행사 선택값: 'p:<proposalId>' (박람회 행사) / 't:<행사명>' (박람회 외) / '' (없음)
+  const [eventSel, setEventSel] = useState('')
+  const refMap = toEventRefMap(eventRefs)
 
   useEffect(() => {
     loadAllSettings().then(setSettings)
-    loadExpoEventNames().then(setExpoEventNames)
+    loadEventRefs().then(setEventRefs)
   }, [])
+
+  function applyLoadedLead(l: SalesLead) {
+    setLead(l)
+    setForm(l)
+    setEventSel(leadEventSelectValue(l))
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -101,10 +112,7 @@ export default function LeadDetailPanel({
           supabase.from('sales_proposals').select('*').eq('lead_id', leadId).single(),
         ])
         if (cancelled) return
-        if (lData) {
-          setLead(lData as SalesLead)
-          setForm(lData as SalesLead)
-        }
+        if (lData) applyLoadedLead(lData as SalesLead)
         setActivities((aData || []) as SalesActivity[])
         setTasks((tData || []) as SalesTask[])
         if (pData) {
@@ -129,6 +137,10 @@ export default function LeadDetailPanel({
       const newStage = form.current_stage || lead.current_stage
       const stageChanged = newStage !== lead.current_stage
 
+      // 행사는 선택이 바뀐 경우에만 proposal_id + event_name을 함께 저장한다.
+      // (proposal_id 그대로 event_name만 바뀌면 DB 트리거가 proposal_id를 초기화하므로, 변경 없을 때는 보내지 않음)
+      const eventChanged = eventSel !== leadEventSelectValue(lead)
+      const eventFields = eventChanged ? eventSelectToFields(eventSel, refMap, lead.event_name) : {}
       const updates: Partial<SalesLead> = {
         company_name: form.company_name || lead.company_name,
         // contact_person은 NOT NULL 컬럼 → 지운 경우 빈 문자열로 저장 (이전 값으로 되돌리지 않음)
@@ -137,7 +149,7 @@ export default function LeadDetailPanel({
         email: form.email,
         lead_source: form.lead_source || lead.lead_source,
         // 비울 수 있는 필드는 빈 값도 그대로 저장 (|| 로 이전 값으로 되돌리면 지울 방법이 없음)
-        event_name: form.event_name ?? lead.event_name,
+        ...eventFields,
         owner: form.owner || lead.owner,
         priority: form.priority || lead.priority,
         country_corridor: form.country_corridor ?? lead.country_corridor,
@@ -188,7 +200,7 @@ export default function LeadDetailPanel({
       showToast(t('saved_ok'))
       onRefresh()
       const { data } = await supabase.from('sales_leads').select('*').eq('id', leadId).single()
-      if (data) { setLead(data as SalesLead); setForm(data as SalesLead) }
+      if (data) applyLoadedLead(data as SalesLead)
     } catch (err: any) {
       showToast('⚠️ 저장 실패: ' + (err?.message || '알 수 없는 오류'))
     } finally {
@@ -267,7 +279,7 @@ export default function LeadDetailPanel({
       if (error) throw error
       logStageChange(leadId, prev, stage, lead?.owner || undefined)
       const { data } = await supabase.from('sales_leads').select('*').eq('id', leadId).single()
-      if (data) { setLead(data as SalesLead); setForm(data as SalesLead) }
+      if (data) applyLoadedLead(data as SalesLead)
       onRefresh()
     } catch (err: any) {
       setForm(f => ({ ...f, current_stage: prev || undefined }))
@@ -276,6 +288,14 @@ export default function LeadDetailPanel({
   }
 
   if (!lead) return null
+
+  const leadLabel = leadEventLabel(lead, refMap)
+  const eventOptions = eventSelectOptions(eventRefs, settings?.event_names || [])
+  // 현재 값이 목록에 없으면(보관된 박람회 행사, 설정에서 삭제된 행사명) 옵션에 추가 — 없으면 첫 옵션처럼 잘못 보임
+  if (eventSel && !eventOptions.some(o => o.value === eventSel)) {
+    const isExpo = eventSel.startsWith('p:')
+    eventOptions.unshift({ value: eventSel, label: isExpo ? (lead.event_name || '(보관된 행사)') : eventSel.slice(2), isExpo })
+  }
 
   const feeRateValue = feeRateText ?? String(propForm.proposed_fee_rate ?? proposal?.proposed_fee_rate ?? '')
   function onFeeRateChange(v: string) {
@@ -304,7 +324,7 @@ export default function LeadDetailPanel({
           <div style={{ background: 'var(--sb)', padding: '16px 22px', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.company_name}</div>
-              <div style={{ fontSize: 12, color: '#B0A0A0' }}>{lead.contact_person} · {lead.event_name.replace(/ 20\d\d$/, '')}</div>
+              <div style={{ fontSize: 12, color: '#B0A0A0' }}>{[lead.contact_person, leadLabel].filter(Boolean).join(' · ')}</div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
               <span style={{ display: 'inline-block', padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 700, color: 'white', background: stageBg, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -368,10 +388,10 @@ export default function LeadDetailPanel({
                   </select>
                 </Field>
                 <Field label="Event Name">
-                  <select value={form.event_name || ''} onChange={e => setForm(f => ({ ...f, event_name: e.target.value }))}>
+                  <select value={eventSel} onChange={e => setEventSel(e.target.value)}>
                     <option value="">{t('select_placeholder')}</option>
-                    {/* 등록 화면과 동일: 박람회 등록 이벤트 우선, 설정 이벤트 추가 */}
-                    {withCurrent([...expoEventNames, ...(settings?.event_names || []).filter(n => !expoEventNames.includes(n))], form.event_name).map(n => <option key={n}>{n}</option>)}
+                    {/* 등록 화면과 동일: 박람회 행사 우선, 설정의 박람회 외 행사 추가 */}
+                    {eventOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </Field>
                 <Field label="Owner">

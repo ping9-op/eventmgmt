@@ -7,6 +7,7 @@ import type { Exhibition, Proposal as ProposalType, BudgetItem, ProductTarget } 
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
 import DecimalInput, { parseAmount } from '../DecimalInput'
+import { SESSIONS, eventLabel, legacyKey } from '../../lib/events'
 import {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
   WidthType, AlignmentType, HeadingLevel, BorderStyle, ShadingType,
@@ -23,7 +24,27 @@ interface ParsedProposal {
 }
 
 interface SavedProposal {
-  key: string; exhId: string; name: string; year: number; date: string; total: string; color: string
+  proposalId: string; key: string; exhId: string; name: string; year: number; session: string | null; date: string; total: string; color: string
+}
+
+// 회차 정렬 순서: 연 1회(null) → 상반기 → 하반기
+const sessionOrder = (s: string | null | undefined) => (s === '상반기' ? 1 : s === '하반기' ? 2 : 0)
+// 연도 → 회차 순 비교 (오름차순)
+const cmpEvent = (a: { year: number; session?: string | null }, b: { year: number; session?: string | null }) =>
+  a.year - b.year || sessionOrder(a.session) - sessionOrder(b.session)
+
+function buildSavedList(propList: ProposalType[], exhList: Exhibition[]): SavedProposal[] {
+  return propList.map(p => {
+    const exh = exhList.find(e => e.id === p.exhibition_id)
+    const budgetItems = (p.budget as BudgetItem[]) || []
+    return {
+      proposalId: p.id, key: exh?.key || '', exhId: p.exhibition_id,
+      name: exh?.name || '', year: p.year, session: p.session ?? null,
+      date: p.date_of_event,
+      total: fmtByCurrency(sumByCurrency(budgetItems, b => b.curr, b => (b as any).currency)),
+      color: exhColor(exh?.name || ''),
+    }
+  }).sort((a, b) => b.year - a.year || a.name.localeCompare(b.name) || sessionOrder(a.session) - sessionOrder(b.session))
 }
 
 export default function Proposal() {
@@ -50,6 +71,7 @@ export default function Proposal() {
   const [newExhKey, setNewExhKey] = useState('')
   const [newExhRecurring, setNewExhRecurring] = useState(false)
   const [year, setYear] = useState(new Date().getFullYear() + 1)
+  const [session, setSession] = useState<string | null>(null) // 회차: null = 연 1회
   const [propDate, setPropDate] = useState(localDateStr())
   const [author, setAuthor] = useState('Andrew')
   const [dateOfEvent, setDateOfEvent] = useState('')
@@ -83,23 +105,12 @@ export default function Proposal() {
         ])
         if (cancelled) return
         const exhList = (exhData || []) as Exhibition[]
-        const propList = ((propData || []) as unknown as ProposalType[])
+        const propList = ((propData || []) as unknown as ProposalType[]).sort(cmpEvent)
         setExhibitions(exhList)
         setProposals(propList)
 
         // Build saved proposals list
-        const list: SavedProposal[] = propList.map(p => {
-          const exh = exhList.find(e => e.id === p.exhibition_id)
-          const budgetItems = (p.budget as BudgetItem[]) || []
-          return {
-            key: exh?.key || '', exhId: p.exhibition_id,
-            name: exh?.name || '', year: p.year,
-            date: p.date_of_event,
-            total: fmtByCurrency(sumByCurrency(budgetItems, b => b.curr, b => (b as any).currency)),
-            color: exhColor(exh?.name || ''),
-          }
-        }).sort((a, b) => b.year - a.year || a.name.localeCompare(b.name))
-        setSavedList(list)
+        setSavedList(buildSavedList(propList, exhList))
 
         // Pre-fill if editing
         if (initExhId) {
@@ -107,7 +118,9 @@ export default function Proposal() {
           const latest = exhProposals[exhProposals.length - 1]
           if (latest) {
             setExhId(initExhId)
+            // 다음 행사: 최신 행사의 다음 해, 같은 회차 (필요 시 폼에서 변경)
             setYear(latest.year + 1)
+            setSession(latest.session ?? null)
             setAuthor(latest.author || 'Andrew')
             setDateOfEvent(latest.date_of_event)
             const { start, end } = parseDateRange(latest.date_of_event)
@@ -134,31 +147,22 @@ export default function Proposal() {
       supabase.from('proposals').select('*').is('archived_at', null).order('year'),
     ])
     const exhList = (exhData || []) as Exhibition[]
-    const propList = ((propData || []) as unknown as ProposalType[])
+    const propList = ((propData || []) as unknown as ProposalType[]).sort(cmpEvent)
     setExhibitions(exhList)
     setProposals(propList)
 
     // Build saved proposals list
-    const list: SavedProposal[] = propList.map(p => {
-      const exh = exhList.find(e => e.id === p.exhibition_id)
-      const budgetItems = (p.budget as BudgetItem[]) || []
-      return {
-        key: exh?.key || '', exhId: p.exhibition_id,
-        name: exh?.name || '', year: p.year,
-        date: p.date_of_event,
-        total: fmtByCurrency(sumByCurrency(budgetItems, b => b.curr, b => (b as any).currency)),
-        color: exhColor(exh?.name || ''),
-      }
-    }).sort((a, b) => b.year - a.year || a.name.localeCompare(b.name))
-    setSavedList(list)
+    setSavedList(buildSavedList(propList, exhList))
   }
 
   function loadFromSaved(p: SavedProposal, isCopy = false) {
-    const propEntry = proposals.find(pr => pr.exhibition_id === p.exhId && pr.year === p.year)
+    const propEntry = proposals.find(pr => pr.id === p.proposalId)
     if (!propEntry) return
     setExhId(p.exhId)
     setIsNewExh(false)
+    // 복사: 다음 해 같은 회차로 (필요 시 폼에서 변경)
     setYear(isCopy ? p.year + 1 : p.year)
+    setSession(p.session)
     setPropDate(isCopy ? localDateStr() : (propEntry.proposal_date || localDateStr()))
     setEditingProposalId(isCopy ? null : propEntry.id)
     setAuthor(propEntry.author || 'Andrew')
@@ -176,10 +180,10 @@ export default function Proposal() {
     setAiOutput('AI 생성 결과가 여기에 표시됩니다.\n\n"AI 변동 사유 생성" 버튼을 눌러주세요.')
     setStep(1)
     window.scrollTo(0, 0)
-    const displayName = exhDisplayName(p.name, p.key)
+    const srcLabel = eventLabel({ name: exhDisplayName(p.name, p.key), year: p.year, session: p.session })
     showToast(isCopy
-      ? `✅ ${displayName} ${p.year} 기준 복사 완료 — ${p.year + 1}년도 내용을 수정 후 저장하세요.`
-      : `✏️ ${displayName} ${p.year} 불러왔습니다.`)
+      ? `✅ ${srcLabel} 기준 복사 완료 — ${p.year + 1}년도${p.session ? ` ${p.session}` : ''} 내용을 수정 후 저장하세요.`
+      : `✏️ ${srcLabel} 불러왔습니다.`)
   }
 
   async function save() {
@@ -196,7 +200,7 @@ export default function Proposal() {
         finalExhKey = key
       }
       const proposalData = {
-        exhibition_id: finalExhId, year, proposal_date: propDate, author,
+        exhibition_id: finalExhId, year, session, proposal_date: propDate, author,
         date_of_event: dateOfEvent, venue, objective,
         products: products.filter(p => p.product) as unknown as never,
         expected_results: expectedResults.filter(r => r) as unknown as never,
@@ -206,15 +210,15 @@ export default function Proposal() {
       if (editingProposalId) {
         // 기존 제안서 수정 — payments는 그대로 유지
         const { error } = await supabase.from('proposals').update(proposalData).eq('id', editingProposalId)
-        if (error) throw new Error(error.message)
+        if (error) throw new Error(error.code === '23505' ? `${eventLabel({ name: '', year, session }).trim()} 제안서가 이미 있습니다.` : error.message)
       } else {
         // 신규 또는 복사 — 제안서 + 결제 항목 모두 새로 생성
-        const { error } = await supabase.from('proposals').insert(proposalData)
-        if (error) throw new Error(error.message)
-        const dbKey = `${finalExhKey}_${year}`
+        const { data: newProp, error } = await supabase.from('proposals').insert(proposalData).select().single()
+        if (error || !newProp) throw new Error(error?.code === '23505' ? `${eventLabel({ name: '', year, session }).trim()} 제안서가 이미 있습니다.` : (error?.message || '제안서 저장 실패'))
+        const dbKey = legacyKey({ key: finalExhKey, year, session })
         for (const b of budget.filter(b => b.curr > 0)) {
           const { error: payErr } = await supabase.from('payments').insert({
-            exhibition_key: dbKey, item: b.item, total: b.curr, currency: (b as any).currency || 'KRW',
+            proposal_id: newProp.id, exhibition_key: dbKey, item: b.item, total: b.curr, currency: (b as any).currency || 'KRW',
             deposit_amount: 0, deposit_due: null, deposit_paid: false,
             final_amount: 0, final_due: null, final_paid: false,
           })
@@ -405,6 +409,7 @@ export default function Proposal() {
     }
 
     setYear(r.year)
+    setSession(null)
     setVenue(r.venue)
     setEventStartDate(r.eventStart)
     setEventEndDate(r.eventEnd)
@@ -444,7 +449,7 @@ export default function Proposal() {
 
     const userMsg =
       `아래 박람회 예산 변동 내역을 바탕으로 각 항목별 변동 사유를 작성해주세요.\n\n` +
-      `박람회: ${exhName} ${year}\n\n` +
+      `박람회: ${eventLabel({ name: exhName, year, session })}\n\n` +
       `예산 변동 항목:\n${itemLines}\n\n` +
       `반드시 아래 형식으로만 응답하세요 (추가 설명 없이):\n` +
       `── [항목명] ──\n` +
@@ -514,20 +519,21 @@ export default function Proposal() {
     }
   }
 
+  // 비교 기준은 작성 중인 행사보다 앞선 행사 중 가장 최근 제안서
+  // (이전 연도, 또는 같은 연도의 앞 회차: 상반기 → 하반기. 편집 중인 자신이나 이후 행사와 비교하지 않음)
+  const prevProposal = exhId
+    ? proposals.filter(p => p.exhibition_id === exhId && p.id !== editingProposalId && cmpEvent(p, { year, session }) < 0).sort(cmpEvent).pop()
+    : undefined
   const prevBudgetMap: Record<string, number> = {}
-  if (exhId) {
-    // 비교 기준은 작성 중인 연도보다 이전 연도 중 가장 최근 제안서 (편집 중인 자신이나 미래 연도와 비교하지 않음)
-    const exhProposals = proposals.filter(p => p.exhibition_id === exhId && p.year < year).sort((a, b) => a.year - b.year)
-    const prev = exhProposals[exhProposals.length - 1]
-    if (prev) for (const b of (prev.budget as BudgetItem[]) || []) prevBudgetMap[b.item] = b.curr
-  }
+  if (prevProposal) for (const b of (prevProposal.budget as BudgetItem[]) || []) prevBudgetMap[b.item] = b.curr
 
   const changedItems = budget.filter(r => (r.prev && r.curr !== r.prev) || (!r.prev && r.curr > 0))
 
   async function exportDocx() {
     const exhName = isNewExh ? newExhName : (exhibitions.find(e => e.id === exhId)?.name || '박람회')
-    // 비교 연도: 실제 직전 제안서 연도 (격년 개최 등으로 year-1이 아닐 수 있음)
-    const prevYear = Math.max(0, ...proposals.filter(p => p.exhibition_id === exhId && p.year < year).map(p => p.year)) || year - 1
+    // 비교 연도: 실제 직전 제안서의 연도(·회차) (격년 개최 등으로 year-1이 아닐 수 있음)
+    const prevYear = prevProposal ? `${prevProposal.year}${prevProposal.session ? ` ${prevProposal.session}` : ''}` : String(year - 1)
+    const currYear = `${year}${session ? ` ${session}` : ''}`
     const activeBudget = budget.filter(b => b.curr > 0 || b.prev > 0)
     // 합계는 통화별로 (JPY/USD 항목을 KRW로 더하지 않도록)
     const curOf = (b: BudgetItem) => b.currency || 'KRW'
@@ -576,7 +582,7 @@ export default function Proposal() {
           // ── 제목 ──
           new Paragraph({
             children: [new TextRun({
-              text: `Proposal to Apply for Booth in the ${exhName} ${year}`,
+              text: `Proposal to Apply for Booth in the ${exhName} ${currYear}`,
               bold: true, size: 32, color: RED, font: 'Calibri',
             })],
             spacing: { after: 160 },
@@ -654,8 +660,8 @@ export default function Proposal() {
                 children: [
                   hdrCell('No', 6),
                   hdrCell('Item', 24),
-                  hdrCell(String(prevYear), 18),
-                  hdrCell(String(year), 18),
+                  hdrCell(prevYear, 18),
+                  hdrCell(currYear, 18),
                   hdrCell('Note', 34),
                 ],
               }),
@@ -692,7 +698,7 @@ export default function Proposal() {
     try {
       const blob = await Packer.toBlob(doc)
       const url = URL.createObjectURL(blob)
-      const a = Object.assign(document.createElement('a'), { href: url, download: `${exhName}_${year}_Proposal.docx` })
+      const a = Object.assign(document.createElement('a'), { href: url, download: `${exhName}_${year}${session ? `_${session}` : ''}_Proposal.docx` })
       document.body.appendChild(a); a.click(); document.body.removeChild(a)
       URL.revokeObjectURL(url)
       showToast(t('save_docx') + ' ✓')
@@ -890,7 +896,7 @@ export default function Proposal() {
             </div>
           )}
 
-          <div className="form-row cols2" style={{ marginTop: 14 }}>
+          <div className="form-row cols3" style={{ marginTop: 14 }}>
             <div>
               <label style={{ marginTop: 0 }}>{t('exh_name_lbl')}</label>
               <input
@@ -904,6 +910,13 @@ export default function Proposal() {
               <label style={{ marginTop: 0 }}>{t('year_label')}</label>
               {/* 비운 상태로 다시 입력 가능 (빈 값이면 기존 연도 유지) */}
               <DecimalInput integer value={year} onChange={v => { if (v) setYear(v) }} />
+            </div>
+            <div>
+              <label style={{ marginTop: 0 }}>회차</label>
+              <select value={session || ''} onChange={e => setSession(e.target.value || null)}>
+                <option value="">연 1회</option>
+                {SESSIONS.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
             </div>
           </div>
           <div className="form-row cols2" style={{ marginTop: 14 }}>
@@ -1158,7 +1171,7 @@ export default function Proposal() {
           </div>
         ) : (
           pageItems.map((p, idx) => (
-            <div key={`${p.exhId}-${p.year}`} className="proposal-list-item"
+            <div key={p.proposalId} className="proposal-list-item"
               style={{ cursor: 'default', transition: 'box-shadow .15s' }}
               onMouseOver={e => (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 14px rgba(0,0,0,.1)'}
               onMouseOut={e => (e.currentTarget as HTMLDivElement).style.boxShadow = ''}>
@@ -1167,8 +1180,8 @@ export default function Proposal() {
               </div>
               <div className="pli-color" style={{ background: p.color }} />
               <div className="pli-body">
-                <div className="pli-name">{exhDisplayName(p.name, p.key)} {p.year}</div>
-                <div className="pli-meta">{p.year} &nbsp;·&nbsp; {formatEventDate(p.date, p.year)} &nbsp;·&nbsp; {t('total')} {p.total}</div>
+                <div className="pli-name">{exhDisplayName(p.name, p.key)} {p.year}{p.session ? ` ${p.session}` : ''}</div>
+                <div className="pli-meta">{p.year}{p.session ? ` ${p.session}` : ''} &nbsp;·&nbsp; {formatEventDate(p.date, p.year)} &nbsp;·&nbsp; {t('total')} {p.total}</div>
               </div>
               <div className="pli-actions">
                 <button className="btn btn-outline btn-sm" onClick={() => loadFromSaved(p, false)}>✏️ {t('edit')}</button>

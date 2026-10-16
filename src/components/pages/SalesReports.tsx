@@ -7,6 +7,8 @@ import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
 import LoadingSpinner from '../LoadingSpinner'
 import { computeAvgDaysPerStage, type StageHistoryRow } from '../../lib/stageHistory'
+import { loadEventRefs, type EventRef } from '../../lib/events'
+import { toEventRefMap, groupLeadsByEvent, eventGroupFilter } from '../../lib/leadEvents'
 
 type PeriodFilter = 'all' | 'month' | '3months' | 'year'
 
@@ -53,19 +55,22 @@ export default function SalesReports() {
   const [stageHistory, setStageHistory] = useState<StageHistoryRow[]>([])
   const [loading, setLoading] = useState(true)
   const [period, setPeriod] = useState<PeriodFilter>('all')
+  const [eventRefs, setEventRefs] = useState<EventRef[]>([])
 
   useEffect(() => {
     let cancelled = false
     async function load() {
       try {
-        const [{ data: leadData, error: le }, { data: histData }] = await Promise.all([
+        const [{ data: leadData, error: le }, { data: histData }, refs] = await Promise.all([
           supabase.from('sales_leads').select('*'),
           supabase.from('sales_stage_history').select('*').order('changed_at'),
+          loadEventRefs(),
         ])
         if (le) { showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error') }
         if (!cancelled) {
           setAllLeads((leadData || []) as SalesLead[])
           setStageHistory((histData || []) as StageHistoryRow[])
+          setEventRefs(refs)
         }
       } catch (e) {
         showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error')
@@ -84,7 +89,7 @@ export default function SalesReports() {
   function exportCSV() {
     const tot = leads.length
     const wonCount = leads.filter(l => l.current_stage === 'Won').length
-    const evts = [...new Set(leads.map(l => l.event_name))]
+    const evts = groupLeadsByEvent(leads, toEventRefMap(eventRefs))
     const ownrs = [...new Set(leads.map(l => l.owner))]
     const corridors = [...new Set(leads.map(l => l.country_corridor).filter(Boolean))]
     const rows: (string | number)[][] = [
@@ -106,8 +111,8 @@ export default function SalesReports() {
       [],
       ['[행사별 성과]', 'Total', 'Outreach Sent', 'Proposal', 'Won', 'Lost'],
       ...evts.map(ev => {
-        const el = leads.filter(l => l.event_name === ev)
-        return [ev, el.length,
+        const el = ev.leads
+        return [ev.label, el.length,
           el.filter(reachedOutreach).length,
           el.filter(l => reachedProposal(l)).length,
           el.filter(l => l.current_stage === 'Won').length,
@@ -153,7 +158,8 @@ export default function SalesReports() {
     return { stage: s, count: exact, rate, col: c.bg }
   })
 
-  const events = [...new Set(leads.map(l => l.event_name))]
+  // 박람회 행사는 proposal_id 기준(이름 변경·회차 추가에도 유지), 박람회 외 행사는 행사명, 행사 없는 리드는 출처별
+  const events = groupLeadsByEvent(leads, toEventRefMap(eventRefs))
   const owners = [...new Set(leads.map(l => l.owner))]
   const corridors = [...new Set(leads.map(l => l.country_corridor).filter(Boolean))]
   const lostLeads = leads.filter(l => l.current_stage === 'Lost' && l.lost_reason)
@@ -276,13 +282,13 @@ export default function SalesReports() {
             </thead>
             <tbody>
               {events.map(ev => {
-                const el = leads.filter(l => l.event_name === ev)
+                const el = ev.leads
                 return (
-                  <tr key={ev} style={{ borderBottom: '0.5px solid var(--border)', cursor: 'pointer', transition: 'background .1s' }}
-                    onClick={() => goToLeads({ event: ev })}
+                  <tr key={ev.key} style={{ borderBottom: '0.5px solid var(--border)', cursor: 'pointer', transition: 'background .1s' }}
+                    onClick={() => goToLeads(eventGroupFilter(ev.key))}
                     onMouseOver={e => (e.currentTarget as HTMLTableRowElement).style.background = '#FDF5F5'}
                     onMouseOut={e => (e.currentTarget as HTMLTableRowElement).style.background = ''}>
-                    <td style={{ padding: 7, fontSize: 11, fontWeight: 600 }}>{ev.replace(/ 20\d\d$/, '')}</td>
+                    <td style={{ padding: 7, fontSize: 11, fontWeight: 600, color: ev.key.startsWith('s:') ? 'var(--muted)' : undefined }}>{ev.label}</td>
                     <td style={{ padding: 7, textAlign: 'center', fontWeight: 700 }}>{el.length}</td>
                     <td style={{ padding: 7, textAlign: 'center', color: '#D97706', fontWeight: 600 }}>{el.filter(reachedOutreach).length}</td>
                     <td style={{ padding: 7, textAlign: 'center', color: '#4F46E5', fontWeight: 600 }}>{el.filter(l => reachedProposal(l)).length}</td>

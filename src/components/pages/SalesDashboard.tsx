@@ -8,6 +8,8 @@ import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
 import { useIsMobile } from '../../hooks/useBreakpoint'
 import LoadingSpinner from '../LoadingSpinner'
+import { loadEventRefs, type EventRef } from '../../lib/events'
+import { toEventRefMap, groupLeadsByEvent, eventGroupFilter } from '../../lib/leadEvents'
 
 function krwusd(vol: number | null, cur: string): string {
   if (!vol) return '-'
@@ -32,6 +34,7 @@ export default function SalesDashboard() {
   const [tasks, setTasks] = useState<SalesTask[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
+  const [eventRefs, setEventRefs] = useState<EventRef[]>([])
 
   const today = localDateStr()
 
@@ -39,15 +42,17 @@ export default function SalesDashboard() {
     let cancelled = false
     async function load() {
       try {
-        const [{ data: leadData, error: le }, { data: taskData, error: te }] = await Promise.all([
+        const [{ data: leadData, error: le }, { data: taskData, error: te }, refs] = await Promise.all([
           supabase.from('sales_leads').select('*'),
           supabase.from('sales_tasks').select('*'),
+          loadEventRefs(),
         ])
         if (le) throw le
         if (te) throw te
         if (!cancelled) {
           setLeads((leadData || []) as SalesLead[])
           setTasks((taskData || []) as SalesTask[])
+          setEventRefs(refs)
         }
       } catch (err: any) {
         showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error')
@@ -243,7 +248,8 @@ export default function SalesDashboard() {
 
       {/* 행사별 리드 현황 */}
       {(() => {
-        const events = [...new Set(leads.map(l => l.event_name))].filter(Boolean)
+        // 박람회 행사는 proposal_id로, 박람회 외 행사는 행사명으로, 행사 없는 리드는 출처별로 묶는다 (누락 없이)
+        const events = groupLeadsByEvent(leads, toEventRefMap(eventRefs))
         if (!events.length) return null
         return (
           <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px', marginTop: 20 }}>
@@ -268,7 +274,7 @@ export default function SalesDashboard() {
                 </thead>
                 <tbody>
                   {events.map(ev => {
-                    const el = leads.filter(l => l.event_name === ev)
+                    const el = ev.leads
                     const eWon = el.filter(l => l.current_stage === 'Won').length
                     const eLost = el.filter(l => l.current_stage === 'Lost').length
                     const eActive = el.filter(l => isActiveStage(l.current_stage)).length
@@ -277,11 +283,11 @@ export default function SalesDashboard() {
                     const activePct = eTotal ? Math.round(eActive / eTotal * 100) : 0
                     const lostPct = eTotal ? Math.round(eLost / eTotal * 100) : 0
                     return (
-                      <tr key={ev} style={{ borderBottom: '0.5px solid var(--border)', cursor: 'pointer', transition: 'background .1s' }}
-                        onClick={() => navigate('/sales/leads', { state: { filter: { event: ev } } })}
+                      <tr key={ev.key} style={{ borderBottom: '0.5px solid var(--border)', cursor: 'pointer', transition: 'background .1s' }}
+                        onClick={() => navigate('/sales/leads', { state: { filter: eventGroupFilter(ev.key) } })}
                         onMouseOver={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = '#FDF5F5'))}
                         onMouseOut={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = ''))}>
-                        <td style={{ padding: '9px 14px', fontWeight: 600, fontSize: 12 }}>{ev.replace(/ 20\d\d$/, '')}</td>
+                        <td style={{ padding: '9px 14px', fontWeight: 600, fontSize: 12, color: ev.key.startsWith('s:') ? 'var(--muted)' : undefined }}>{ev.label}</td>
                         <td style={{ padding: '9px 10px', textAlign: 'center', fontWeight: 700 }}>{eTotal}</td>
                         <td style={{ padding: '9px 10px', textAlign: 'center', color: '#4F46E5', fontWeight: 600 }}>{eActive}</td>
                         <td style={{ padding: '9px 10px', textAlign: 'center', color: '#065F46', fontWeight: 700 }}>{eWon}</td>

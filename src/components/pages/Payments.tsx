@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { exhColor, exhDisplayName, CUR_SYM, fmtCur, localDateStr } from '../../lib/utils'
-import type { Exhibition, Payment } from '../../types/database'
+import type { Payment } from '../../types/database'
+import { loadEventRefs, eventLabel, legacyKey, type EventRef } from '../../lib/events'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
 import LoadingSpinner from '../LoadingSpinner'
@@ -39,10 +40,12 @@ export default function Payments() {
   const location = useLocation()
   const { t } = useLang()
   const { showToast } = useToast()
-  const initKey = (location.state as any)?.key || null
-  const [payments, setPayments] = useState<Record<string, Payment[]>>({})
-  const [exhibitions, setExhibitions] = useState<Record<string, Exhibition>>({})
-  const [selected, setSelected] = useState<string | null>(null)
+  // 선택 행사: { proposalId } 우선, 이전 형식 { key: 'KIF_2026' }도 허용
+  const initProposalId: string | null = (location.state as any)?.proposalId || null
+  const initLegacyKey: string | null = (location.state as any)?.key || null
+  const [payments, setPayments] = useState<Record<string, Payment[]>>({}) // proposal_id → payments
+  const [events, setEvents] = useState<EventRef[]>([])
+  const [selected, setSelected] = useState<string | null>(null) // proposal_id
   const [loading, setLoading] = useState(true)
   const [showInvoice, setShowInvoice] = useState(false)
   const [saving, setSaving] = useState<string | null>(null)
@@ -60,22 +63,23 @@ export default function Payments() {
 
   async function load(cancelled?: { current: boolean }) {
     try {
-      const [{ data: exhData }, { data: payData }] = await Promise.all([
-        supabase.from('exhibitions').select('*').is('archived_at', null),
+      const [refs, { data: payData }] = await Promise.all([
+        loadEventRefs(),
         supabase.from('payments').select('*').order('created_at'),
       ])
       if (cancelled?.current) return
-      const exhMap: Record<string, Exhibition> = {}
-      for (const e of (exhData || [])) exhMap[e.key] = e
-      setExhibitions(exhMap)
+      setEvents(refs)
       const payMap: Record<string, Payment[]> = {}
-      for (const p of (payData || []) as Payment[]) {
-        if (!payMap[p.exhibition_key]) payMap[p.exhibition_key] = []
-        payMap[p.exhibition_key].push(p)
+      for (const p of (payData || []) as (Payment & { proposal_id?: string | null })[]) {
+        if (!p.proposal_id) continue
+        if (!payMap[p.proposal_id]) payMap[p.proposal_id] = []
+        payMap[p.proposal_id].push(p)
       }
       setPayments(payMap)
-      const keys = Object.keys(payMap)
-      if (initKey && keys.includes(initKey)) setSelected(initKey)
+      const initEv = initProposalId
+        ? refs.find(e => e.proposalId === initProposalId)
+        : initLegacyKey ? refs.find(e => legacyKey(e) === initLegacyKey) : undefined
+      if (initEv && !selected) setSelected(initEv.proposalId)
       // initKey가 없거나 유효하지 않을 때 임의의 첫 박람회를 자동 선택하지 않는다.
       // (실제로는 데이터가 있는 박람회를 보러 왔는데, 엉뚱하게 선택된 다른 — 데이터 없는 —
       //  박람회의 빈 화면을 보고 "아무것도 입력되지 않았다"고 오인하는 문제를 방지)
@@ -163,10 +167,13 @@ export default function Payments() {
     const depAmt = parseFloat(addForm.depositAmt) || 0
     const finAmt = addForm.finalAmt !== '' ? (parseFloat(addForm.finalAmt) || 0) : Math.round((total - depAmt) * 100) / 100
 
+    const ev = events.find(e => e.proposalId === selected)
+    if (!ev) { setAddError('행사를 선택하세요'); return }
     setAddLoading(true)
     try {
       const { error } = await supabase.from('payments').insert({
-        exhibition_key: selected!,
+        proposal_id: ev.proposalId,
+        exhibition_key: legacyKey(ev),
         item: itemName,
         total,
         currency: addForm.currency,
@@ -223,25 +230,16 @@ export default function Payments() {
     load()
   }
 
-  const keys = Object.keys(payments).sort((a, b) => {
-    const ya = parseInt(a.split('_').pop() || '0'), yb = parseInt(b.split('_').pop() || '0')
-    return yb - ya || a.localeCompare(b)
-  })
+  // 목록 = 보관되지 않은 행사 (연도 → 이름 → 회차 순, loadEventRefs 정렬 그대로)
+  const selEv = events.find(e => e.proposalId === selected) || null
   const selPays = selected ? (payments[selected] || []) : []
 
-  function exhNameFromKey(dbKey: string): string {
-    const parts = dbKey.split('_')
-    const yr = parts[parts.length - 1]
-    const k = parts.slice(0, -1).join('_')
-    return exhDisplayName(exhibitions[k]?.name || k, k) + ' ' + yr
-  }
-
-  function exhColorFromKey(dbKey: string): string {
-    const k = dbKey.split('_').slice(0, -1).join('_')
-    return exhColor(exhibitions[k]?.name || k)
+  function evName(e: EventRef): string {
+    return eventLabel({ ...e, name: exhDisplayName(e.name, e.key) })
   }
 
   function payStatus(pays: Payment[]): { label: string; color: string } {
+    if (pays.length === 0) return { label: t('no_items'), color: 'var(--muted)' }
     const allPaid = pays.every(p => p.deposit_paid && p.final_paid)
     const somePaid = pays.some(p => p.deposit_paid || p.final_paid)
     if (allPaid) return { label: '✓ ' + t('paid_done'), color: '#2E7D51' }
@@ -262,12 +260,13 @@ export default function Payments() {
       <div className="pay-layout">
         {/* 왼쪽 목록 */}
         <div className="pay-list">
-          {keys.map(k => {
-            const pays = payments[k]
+          {events.map(e => {
+            const k = e.proposalId
+            const pays = payments[k] || []
             const st = payStatus(pays)
             return (
               <div key={k} className={`pay-list-item${selected === k ? ' active' : ''}`} onClick={() => setSelected(k)}>
-                <div style={{ fontWeight: 700 }}>{exhNameFromKey(k)}</div>
+                <div style={{ fontWeight: 700 }}>{evName(e)}</div>
                 <div className="sub" style={{ marginTop: 4 }}>
                   <span style={{ color: selected === k ? '#FFCCCC' : st.color, fontSize: 11, fontWeight: 600 }}>{st.label}</span>
                   {' · '}{pays.length} {t('item_col')}
@@ -278,11 +277,11 @@ export default function Payments() {
         </div>
 
         {/* 오른쪽 상세 */}
-        {selected ? (
+        {selected && selEv ? (
           <div style={{ overflowY: 'auto' }}>
             <div className="page-hdr-row" style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 16, fontWeight: 700 }}>
-                {exhNameFromKey(selected)} {t('payment_schedule_lbl')}
+                {evName(selEv)} {t('payment_schedule_lbl')}
               </div>
               <div className="page-hdr-actions">
                 <button className="btn btn-primary btn-sm" onClick={openAddModal}>
@@ -386,7 +385,7 @@ export default function Payments() {
 
             {/* 항목별 카드 */}
             {selPays.map(pay => {
-              const color = exhColorFromKey(selected)
+              const color = exhColor(selEv.name)
               const isSaving = saving === pay.id
               return (
                 <PaymentCard

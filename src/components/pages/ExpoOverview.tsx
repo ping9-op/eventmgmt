@@ -8,16 +8,21 @@ Chart.register(ArcElement, Tooltip, DoughnutController)
 import { supabase } from '../../lib/supabase'
 import { krw, exhColor, formatEventDate, isPastEvent, daysUntil, exhDisplayName, sortUpcomingFirst, fmtCur, parseEventDate, dayDiffFromToday, sumByCurrency, fmtByCurrency, localDateStr } from '../../lib/utils'
 import type { Exhibition, BudgetItem } from '../../types/database'
+import { eventLabel, eventPath } from '../../lib/events'
 
 interface ExhEntry {
-  key: string; exhId: string; name: string; year: number; date: string; venue: string
+  proposalId: string; key: string; exhId: string; name: string; year: number; session: string | null; date: string; venue: string
   budget: BudgetItem[]; total: number; recurring: boolean
   proposal_date: string; author: string
 }
 
 interface UpcomingItem {
-  days: number; kind: string; name: string; date: string; color: string; detail: string; icon: string; payKey?: string
+  days: number; kind: string; name: string; date: string; color: string; detail: string; icon: string; proposalId?: string
 }
+
+// 표시용 행사명 (약어 포함 박람회명 + 연도 + 회차)
+const entryLabel = (e: Pick<ExhEntry, 'name' | 'key' | 'year' | 'session'>) =>
+  eventLabel({ name: exhDisplayName(e.name, e.key), year: e.year, session: e.session })
 
 export default function ExpoOverview() {
   const navigate = useNavigate()
@@ -44,7 +49,7 @@ export default function ExpoOverview() {
           const exh = exhMap[p.exhibition_id]
           const budget = (p.budget as BudgetItem[]) || []
           return {
-            key: exh?.key || '', exhId: exh?.id || '', name: exh?.name || '', year: p.year,
+            proposalId: p.id, key: exh?.key || '', exhId: exh?.id || '', name: exh?.name || '', year: p.year, session: p.session ?? null,
             date: p.date_of_event, venue: p.venue,
             budget, total: budget.reduce((s, b) => s + (b.curr || 0), 0),
             recurring: exh?.recurring || false,
@@ -53,10 +58,12 @@ export default function ExpoOverview() {
         })
         setEntries(list)
 
+        // 결제는 proposal_id(행사) 기준으로 묶음
         const payMap: Record<string, any[]> = {}
         for (const p of (payData || []) as any[]) {
-          if (!payMap[p.exhibition_key]) payMap[p.exhibition_key] = []
-          payMap[p.exhibition_key].push(p)
+          if (!p.proposal_id) continue
+          if (!payMap[p.proposal_id]) payMap[p.proposal_id] = []
+          payMap[p.proposal_id].push(p)
         }
         setPayments(payMap)
       } catch (e) {
@@ -78,13 +85,13 @@ export default function ExpoOverview() {
       if (!d) continue
       const diff = dayDiffFromToday(d)!
       if (diff >= -7 && diff <= 60) {
-        items.push({ days: diff, kind: 'expo', name: exhDisplayName(e.name, e.key) + ' ' + e.year, date: formatEventDate(e.date, e.year), color: exhColor(e.name), detail: e.venue, icon: '📅' })
+        items.push({ days: diff, kind: 'expo', name: entryLabel(e), date: formatEventDate(e.date, e.year), color: exhColor(e.name), detail: e.venue, icon: '📅' })
       }
     }
-    for (const [dbKey, pays] of Object.entries(payments)) {
-      const parts = dbKey.split('_'); const yr = parts[parts.length - 1]; const k = parts.slice(0, -1).join('_')
-      const exhEntry = entries.find(x => x.key === k)
-      const name = exhDisplayName(exhEntry?.name || k, k) + ' ' + yr
+    for (const [proposalId, pays] of Object.entries(payments)) {
+      const exhEntry = entries.find(x => x.proposalId === proposalId)
+      if (!exhEntry) continue // 보관된 행사의 결제는 일정에서 제외
+      const name = entryLabel(exhEntry)
       for (const p of pays) {
         for (const [type, due, amount, paid] of [
           ['deposit', p.deposit_due, p.deposit_amount, p.deposit_paid],
@@ -93,7 +100,7 @@ export default function ExpoOverview() {
           if (paid || !due) continue
           const diff = dayDiffFromToday(due)
           if (diff != null && diff >= -7 && diff <= 60) {
-            items.push({ days: diff, kind: type, name, date: due, color: diff < 0 ? '#D63031' : '#C47D1A', detail: `${p.item}  ${fmtCur(amount || 0, p.currency || 'KRW')}`, icon: '💰', payKey: dbKey })
+            items.push({ days: diff, kind: type, name, date: due, color: diff < 0 ? '#D63031' : '#C47D1A', detail: `${p.item}  ${fmtCur(amount || 0, p.currency || 'KRW')}`, icon: '💰', proposalId })
           }
         }
       }
@@ -120,7 +127,7 @@ export default function ExpoOverview() {
     .filter(e => isPastEvent(e.date, e.year))
     .map(e => {
       const spent: Record<string, number> = {}
-      for (const p of payments[`${e.key}_${e.year}`] || []) {
+      for (const p of payments[e.proposalId] || []) {
         const amt = (p.deposit_paid ? p.deposit_amount || 0 : 0) + (p.final_paid ? p.final_amount || 0 : 0)
         if (amt) spent[p.currency || 'KRW'] = (spent[p.currency || 'KRW'] || 0) + amt
       }
@@ -161,7 +168,7 @@ export default function ExpoOverview() {
             const dt = d < 0 ? `D+${Math.abs(d)}` : d === 0 ? 'D-Day' : `D-${d}`
             const isExh = u.kind === 'expo'
             return (
-              <div key={i} className="ucard" style={{ borderColor: u.color, background: bg }} onClick={() => navigate(isExh ? '/expo/schedule' : '/expo/payments', !isExh && u.payKey ? { state: { key: u.payKey } } : undefined)}>
+              <div key={i} className="ucard" style={{ borderColor: u.color, background: bg }} onClick={() => navigate(isExh ? '/expo/schedule' : '/expo/payments', !isExh && u.proposalId ? { state: { proposalId: u.proposalId } } : undefined)}>
                 <div className="uc-top">
                   <span className="uc-kind">{u.icon} {u.kind === 'expo' ? t('kind_expo') : u.kind === 'deposit' ? t('deposit_pay') : u.kind === 'final' ? t('final_pay_short') : u.kind}</span>
                   <span className="uc-d" style={{ color: dc }}>{dt}</span>
@@ -194,9 +201,9 @@ export default function ExpoOverview() {
           <div className="val" style={{ color: 'var(--amber)', fontSize: 18 }}>{fmtByCurrency(avg)}</div>
           <div className="sub">{t('all_hist')}</div>
         </div>
-        <div className="metric" onClick={() => biggest && navigate(`/expo/event/${biggest.key}/${biggest.year || maxYear}`)} style={{ cursor: 'pointer' }}>
+        <div className="metric" onClick={() => biggest && navigate(eventPath(biggest.proposalId))} style={{ cursor: 'pointer' }}>
           <div className="lbl">{t('top_lbl')}</div>
-          <div className="val" style={{ color: 'var(--danger)', fontSize: 15 }}>{biggest ? exhDisplayName(biggest.name, biggest.key) : ''} {biggest?.year}</div>
+          <div className="val" style={{ color: 'var(--danger)', fontSize: 15 }}>{biggest ? entryLabel(biggest) : ''}</div>
           <div className="sub">{biggest ? fmtByCurrency(budgetByCur([biggest])) : "-"}</div>
         </div>
       </div>
@@ -218,10 +225,10 @@ export default function ExpoOverview() {
         </thead>
         <tbody>
           {ranked.map(({ e, spent, approved, rate }, i) => (
-            <tr key={`${e.key}_${e.year}`} style={{ cursor: 'pointer', ...(i === 0 ? { color: 'var(--accent)', fontWeight: 700 } : {}) }}
-              onClick={() => navigate(`/expo/event/${e.key}/${e.year}`)}>
+            <tr key={e.proposalId} style={{ cursor: 'pointer', ...(i === 0 ? { color: 'var(--accent)', fontWeight: 700 } : {}) }}
+              onClick={() => navigate(eventPath(e.proposalId))}>
               <td>{i + 1}</td>
-              <td>{exhDisplayName(e.name, e.key)} {e.year}</td>
+              <td>{entryLabel(e)}</td>
               <td style={{ whiteSpace: 'nowrap' }}>{formatEventDate(e.date, e.year)}</td>
               <td style={{ color: 'var(--muted)' }}>{e.venue}</td>
               <td style={{ textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--muted)' }}>{curStr(approved)}</td>
@@ -336,11 +343,11 @@ function YearDonutSection({ entries }: { entries: ExhEntry[] }) {
                 <div className="donut-legend">
                   {yEntries.map((e, i) => {
                     const past = isPastEvent(e.date, e.year)
-                    const label = (exhDisplayName(e.name, e.key) + ' ' + e.year)
+                    const label = entryLabel(e)
                     const displayLabel = label.length > 22 ? label.slice(0, 21) + '…' : label
                     return (
                       <div key={i} className="dl"
-                        onClick={() => navigate(`/expo/event/${e.key}/${e.year}`)}
+                        onClick={() => navigate(eventPath(e.proposalId))}
                         style={{ cursor: 'pointer', borderRadius: 6, padding: '3px 5px 3px 2px', transition: 'background .15s' }}
                         onMouseOver={ev => { (ev.currentTarget as HTMLDivElement).style.background = '#FDF0F0' }}
                         onMouseOut={ev => { (ev.currentTarget as HTMLDivElement).style.background = '' }}>

@@ -244,6 +244,7 @@ export type Database = {
 
 export interface Exhibition {
   id: string; key: string; name: string; recurring: boolean; color?: string | null
+  archived_at?: string | null
 }
 
 export interface BudgetItem {
@@ -259,12 +260,14 @@ export interface Proposal {
   author: string; date_of_event: string; venue: string; objective: string
   products: ProductTarget[]; expected_results: string[]
   budget: BudgetItem[]; explanations: Record<string, string>
+  session?: string | null; archived_at?: string | null
 }
 
 export interface Payment {
   id: string; exhibition_key: string; item: string; total: number; currency: string
   deposit_amount: number; deposit_due: string | null; deposit_paid: boolean
   final_amount: number; final_due: string | null; final_paid: boolean
+  proposal_id?: string | null
 }
 
 export interface ActualCost {
@@ -285,6 +288,7 @@ export interface Result {
   shortcomings: string[]; improvements: string[]; recommendations: string[]
   requests: string[]; conclusion: string; cover_title: string; cover_date: string
   cover_author: string; sections_enabled: Record<string, boolean>
+  proposal_id?: string | null
 }
 
 export interface SubItem {
@@ -324,6 +328,7 @@ export interface EventData {
   gifts_event: GiftItem[]
   equipment: EquipmentItem[]
   itinerary: ItineraryItem[]
+  proposal_id?: string | null
 }
 
 export interface SalesLead {
@@ -335,6 +340,7 @@ export interface SalesLead {
   last_contact_date: string | null; next_action: string | null; next_follow_up_date: string | null
   lost_reason: string | null; remarks: string | null
   outreach_channel?: string | null; lost_reason_note?: string | null; lost_at_stage?: string | null
+  proposal_id?: string | null
 }
 
 export interface SalesActivity {

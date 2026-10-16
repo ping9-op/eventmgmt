@@ -6,9 +6,10 @@ import type { Exhibition, Proposal, BudgetItem } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
 import LoadingSpinner from '../LoadingSpinner'
+import { SESSIONS, eventLabel, eventPath } from '../../lib/events'
 
 interface ExhEntry {
-  key: string; name: string; year: number
+  proposalId: string; key: string; name: string; year: number; session: string | null
   date: string; venue: string; total: Record<string, number>; recurring: boolean
   proposal_date: string; author: string
 }
@@ -46,7 +47,7 @@ export default function Schedule() {
         const exh = map[p.exhibition_id]
         const budget = (p.budget as BudgetItem[]) || []
         return {
-          key: exh?.key || '', name: exh?.name || '', year: p.year,
+          proposalId: p.id, key: exh?.key || '', name: exh?.name || '', year: p.year, session: p.session ?? null,
           date: p.date_of_event, venue: p.venue,
           total: sumByCurrency(budget, b => b.curr, b => b.currency), // 통화별 합계
           recurring: exh?.recurring || false,
@@ -68,7 +69,7 @@ export default function Schedule() {
   }, [])
 
   function openNew() {
-    setForm({ year: new Date().getFullYear() + 1, author: '' })
+    setForm({ year: new Date().getFullYear() + 1, session: null, author: '' })
     setModal({ open: true, isNew: true })
   }
 
@@ -99,6 +100,7 @@ export default function Schedule() {
         const { error } = await supabase.from('proposals').insert({
           exhibition_id: exhId,
           year: form.year!,
+          session: form.session || null,
           proposal_date: form.proposal_date || localDateStr(),
           author: form.author || '',
           date_of_event: form.date || '',
@@ -111,22 +113,16 @@ export default function Schedule() {
         })
         if (error) throw error
       } else if (modal.entry) {
-        const exhEntry = Object.values(exhMap).find(e => e.key === modal.entry!.key)
-        if (exhEntry) {
-          const { data: propData, error: findErr } = await supabase.from('proposals')
-            .select('id').eq('exhibition_id', exhEntry.id).eq('year', modal.entry.year).single()
-          if (findErr) throw findErr
-          if (propData) {
-            const { error } = await supabase.from('proposals').update({
-              date_of_event: form.date || '',
-              venue: form.venue || '',
-              year: form.year!,
-              proposal_date: form.proposal_date || '',
-              author: form.author || '',
-            }).eq('id', propData.id)
-            if (error) throw error
-          }
-        }
+        // proposal id로 직접 갱신
+        const { error } = await supabase.from('proposals').update({
+          date_of_event: form.date || '',
+          venue: form.venue || '',
+          year: form.year!,
+          session: form.session || null,
+          proposal_date: form.proposal_date || '',
+          author: form.author || '',
+        }).eq('id', modal.entry.proposalId)
+        if (error) throw error
       }
 
       setModal({ open: false, isNew: false }); setConfirmDel(false)
@@ -138,11 +134,9 @@ export default function Schedule() {
     }
   }
 
-  async function deleteEntry(key: string, year: number) {
-    const exh = Object.values(exhMap).find(e => e.key === key)
-    if (!exh) return
+  async function deleteEntry(proposalId: string) {
     // 삭제하지 않고 보관 처리 (이력 보존)
-    const { error } = await supabase.from('proposals').update({ archived_at: new Date().toISOString() }).eq('exhibition_id', exh.id).eq('year', year).is('archived_at', null)
+    const { error } = await supabase.from('proposals').update({ archived_at: new Date().toISOString() }).eq('id', proposalId).is('archived_at', null)
     if (error) { if (mountedRef.current) showToast('⚠️ 보관 실패: ' + error.message); return }
     if (mountedRef.current) load()
   }
@@ -202,14 +196,14 @@ export default function Schedule() {
                   const past = isPastEvent(e.date, e.year)
                   const color = exhColor(e.name)
                   return (
-                    <tr key={`${e.key}_${e.year}`}>
+                    <tr key={e.proposalId}>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <div style={{ width: 5, height: 20, background: color, borderRadius: 3, flexShrink: 0 }} />
                           <span style={{ fontWeight: 700, color, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3 }}
-                            onClick={() => navigate(`/expo/event/${e.key}/${e.year}`)}
-                            title={`${e.name} ${e.year} 이벤트 상세 보기`}>
-                            {exhDisplayName(e.name, e.key)} {e.year}
+                            onClick={() => navigate(eventPath(e.proposalId))}
+                            title={`${eventLabel(e)} 이벤트 상세 보기`}>
+                            {exhDisplayName(e.name, e.key)} {e.year}{e.session ? ` ${e.session}` : ''}
                           </span>
                         </div>
                       </td>
@@ -254,6 +248,13 @@ export default function Schedule() {
                 <input type="number" value={form.year || ''} onChange={e => setForm(f => ({ ...f, year: parseInt(e.target.value) }))} />
               </div>
               <div>
+                <label style={{ marginTop: 0 }}>회차</label>
+                <select value={form.session || ''} onChange={e => setForm(f => ({ ...f, session: e.target.value || null }))}>
+                  <option value="">연 1회</option>
+                  {SESSIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
                 <label style={{ marginTop: 0 }}>{t('author_label')}</label>
                 <input value={form.author || ''} onChange={e => setForm(f => ({ ...f, author: e.target.value }))} />
               </div>
@@ -286,7 +287,7 @@ export default function Schedule() {
                     <button className="btn btn-sm" style={{ background: '#D63031', color: 'white', border: 'none' }}
                       onClick={async () => {
                         if (!modal.entry) return
-                        await deleteEntry(modal.entry.key, modal.entry.year)
+                        await deleteEntry(modal.entry.proposalId)
                         setModal({ open: false, isNew: false }); setConfirmDel(false)
                       }}>{t('archive')}</button>
                     <button className="btn btn-muted btn-sm" onClick={() => setConfirmDel(false)}>{t('cancel')}</button>

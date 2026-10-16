@@ -7,6 +7,7 @@ import LeadDetailPanel from './LeadDetailPanel'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
 import LoadingSpinner from '../LoadingSpinner'
+import { eventLabel } from '../../lib/events'
 
 
 function fmtCur(amt: number, cur: string, lang: string): string {
@@ -16,14 +17,17 @@ function fmtCur(amt: number, cur: string, lang: string): string {
 }
 
 interface ExhEntry {
-  key: string; name: string; year: number; date: string; venue: string
+  proposalId: string; key: string; name: string; year: number; session: string | null; date: string; venue: string
   budget: BudgetItem[]; total: number; recurring: boolean
 }
 
 interface UpcomingItem {
   days: number; kind: string; name: string; date: string
-  color: string; detail: string; icon: string; path: string; payKey?: string
+  color: string; detail: string; icon: string; path: string; proposalId?: string
 }
+
+// 표시용 행사명 (약어 포함 박람회명 + 연도 + 회차)
+const entryLabel = (e: ExhEntry) => eventLabel({ name: exhDisplayName(e.name, e.key), year: e.year, session: e.session })
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -55,13 +59,15 @@ export default function Dashboard() {
           const exh = exhMap[p.exhibition_id]
           if (!exh) continue
           const budget = (p.budget as unknown as BudgetItem[]) || []
-          allEntries.push({ key: exh.key, name: exh.name, year: p.year, date: p.date_of_event, venue: p.venue, budget, total: budget.reduce((s, b) => s + (b.curr || 0), 0), recurring: exh.recurring })
+          allEntries.push({ proposalId: p.id, key: exh.key, name: exh.name, year: p.year, session: p.session ?? null, date: p.date_of_event, venue: p.venue, budget, total: budget.reduce((s, b) => s + (b.curr || 0), 0), recurring: exh.recurring })
         }
         setEntries(allEntries)
+        // 결제는 proposal_id(행사) 기준으로 묶음
         const payMap: Record<string, Payment[]> = {}
         for (const p of (payData || []) as Payment[]) {
-          if (!payMap[p.exhibition_key]) payMap[p.exhibition_key] = []
-          payMap[p.exhibition_key].push(p)
+          if (!p.proposal_id) continue
+          if (!payMap[p.proposal_id]) payMap[p.proposal_id] = []
+          payMap[p.proposal_id].push(p)
         }
         setPayments(payMap)
         setLeads((leadData || []) as SalesLead[])
@@ -95,13 +101,13 @@ export default function Dashboard() {
       if (!eventDate) continue
       const diff = dayDiffFromToday(eventDate)!
       if (diff >= -7 && diff <= 60) {
-        items.push({ days: diff, kind: 'expo', name: exhDisplayName(e.name, e.key) + ' ' + e.year, date: formatEventDate(e.date, e.year), color: exhColor(e.name), detail: e.venue, icon: '📅', path: '/expo/schedule' })
+        items.push({ days: diff, kind: 'expo', name: entryLabel(e), date: formatEventDate(e.date, e.year), color: exhColor(e.name), detail: e.venue, icon: '📅', path: '/expo/schedule' })
       }
     }
-    for (const [dbKey, pays] of Object.entries(payments)) {
-      const parts = dbKey.split('_'); const yr = parts[parts.length - 1]; const k = parts.slice(0, -1).join('_')
-      const exhEntry = entries.find(e => e.key === k)
-      const name = exhDisplayName(exhEntry?.name || k, k) + ' ' + yr
+    for (const [proposalId, pays] of Object.entries(payments)) {
+      const exhEntry = entries.find(e => e.proposalId === proposalId)
+      if (!exhEntry) continue // 보관된 행사의 결제는 일정에서 제외
+      const name = entryLabel(exhEntry)
       for (const p of pays) {
         for (const [type, due, amount, paid] of [
           ['deposit', p.deposit_due, p.deposit_amount, p.deposit_paid] as [string, string | null, number, boolean],
@@ -110,7 +116,7 @@ export default function Dashboard() {
           if (paid || !due) continue
           const diff = dayDiffFromToday(due)
           if (diff != null && diff >= -7 && diff <= 60) {
-            items.push({ days: diff, kind: type, name, date: due, color: diff < 0 ? '#D63031' : '#C47D1A', detail: `${p.item}  ${fmtMoney(amount || 0, p.currency || 'KRW')}`, icon: '💰', path: '/expo/payments', payKey: dbKey })
+            items.push({ days: diff, kind: type, name, date: due, color: diff < 0 ? '#D63031' : '#C47D1A', detail: `${p.item}  ${fmtMoney(amount || 0, p.currency || 'KRW')}`, icon: '💰', path: '/expo/payments', proposalId })
           }
         }
       }
@@ -216,7 +222,7 @@ export default function Dashboard() {
                 onMouseOut={ev => (ev.currentTarget as HTMLDivElement).style.opacity = '1'}>
                 <div>
                   <span style={{ fontSize: 12, fontWeight: 600 }}>{exhDisplayName(e.name, e.key)}</span>
-                  <span style={{ fontSize: 12, fontWeight: 600, marginLeft: 5 }}>{e.year}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, marginLeft: 5 }}>{e.year}{e.session ? ` ${e.session}` : ''}</span>
                 </div>
                 <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', flexShrink: 0, maxWidth: '55%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{recentExhBudgetStr(e)}</span>
               </div>
@@ -291,7 +297,7 @@ export default function Dashboard() {
             const txtCol = urgent ? '#DC2626' : passed ? '#9CA3AF' : '#4F46E5'
             const dayLabel = passed ? `D+${Math.abs(d)}` : d === 0 ? 'D-Day' : `D-${d}`
             return (
-              <div key={idx} onClick={() => navigate(ev.path, ev.payKey ? { state: { key: ev.payKey } } : undefined)} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 0', borderBottom: '0.5px solid var(--border)', cursor: 'pointer' }}
+              <div key={idx} onClick={() => navigate(ev.path, ev.proposalId ? { state: { proposalId: ev.proposalId } } : undefined)} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 0', borderBottom: '0.5px solid var(--border)', cursor: 'pointer' }}
                 onMouseOver={ev2 => (ev2.currentTarget as HTMLDivElement).style.opacity = '.7'}
                 onMouseOut={ev2 => (ev2.currentTarget as HTMLDivElement).style.opacity = '1'}>
                 <div style={{ background: bgCol, borderRadius: 8, padding: '5px 8px', textAlign: 'center', minWidth: 46, flexShrink: 0 }}>

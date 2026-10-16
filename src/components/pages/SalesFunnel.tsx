@@ -11,6 +11,8 @@ import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
 import { useIsMobile } from '../../hooks/useBreakpoint'
 import LoadingSpinner from '../LoadingSpinner'
+import { loadEventRefs, type EventRef } from '../../lib/events'
+import { toEventRefMap, leadEventLabel } from '../../lib/leadEvents'
 
 type TabType = 'board' | 'table' | 'proposal'
 
@@ -29,6 +31,11 @@ export default function SalesFunnel() {
   const isMobile = useIsMobile()
   const [owners, setOwners] = useState<string[]>([])
   useEffect(() => { loadAllSettings().then(s => setOwners(s.owners)) }, [])
+  // 리드 행사 표시명 (박람회 행사는 proposal_id 기준 현재 이름)
+  const [eventRefs, setEventRefs] = useState<EventRef[]>([])
+  useEffect(() => { loadEventRefs().then(setEventRefs).catch(() => {}) }, [])
+  const refMap = toEventRefMap(eventRefs)
+  const evLabel = (l: SalesLead) => leadEventLabel(l, refMap)
 
   const KPI_CARDS = [
     { lbl: t('total'), stage: null as string | null, col: 'var(--text)' },
@@ -184,7 +191,7 @@ export default function SalesFunnel() {
     : baseFiltered
 
   const tableFiltered = tableSearch
-    ? filtered.filter(l => `${l.company_name} ${l.contact_person} ${l.event_name}`.toLowerCase().includes(tableSearch.toLowerCase()))
+    ? filtered.filter(l => `${l.company_name} ${l.contact_person} ${evLabel(l)}`.toLowerCase().includes(tableSearch.toLowerCase()))
     : filtered
   const allIds = tableFiltered.map(l => l.id)
 
@@ -299,7 +306,7 @@ export default function SalesFunnel() {
                           onMouseOut={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = ''; (e.currentTarget as HTMLDivElement).style.transform = '' }}>
                           <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 2 }}>{l.company_name}</div>
                           <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>{l.contact_person} · {l.owner}</div>
-                          <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 5 }}>{l.event_name.replace(/ 20\d\d$/, '')}</div>
+                          {evLabel(l) && <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 5 }}>{evLabel(l)}</div>}
                           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)', marginBottom: 6 }}>
                             {l.volume_currency === 'KRW' ? `₩${(l.expected_monthly_volume || 0).toLocaleString()}` : `$${(l.expected_monthly_volume || 0).toLocaleString()}`}
                           </div>
@@ -353,7 +360,7 @@ export default function SalesFunnel() {
                         </span>
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
-                        {l.event_name.replace(/ 20\d\d$/, '')} · {l.volume_currency === 'KRW' ? `₩${(l.expected_monthly_volume || 0).toLocaleString()}` : `$${(l.expected_monthly_volume || 0).toLocaleString()}`}
+                        {evLabel(l) && `${evLabel(l)} · `}{l.volume_currency === 'KRW' ? `₩${(l.expected_monthly_volume || 0).toLocaleString()}` : `$${(l.expected_monthly_volume || 0).toLocaleString()}`}
                       </div>
                       <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--muted)', flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
                         <LeadContactMeta channel={l.outreach_channel} lastContact={l.last_contact_date} />
@@ -412,7 +419,7 @@ export default function SalesFunnel() {
                             <input type="checkbox" checked={checked.has(l.id)} onChange={() => toggleCheck(l.id)} style={{ width: 15, height: 15, accentColor: 'var(--accent)', cursor: 'pointer' }} />
                           </td>
                           <td style={{ padding: '9px 12px', fontWeight: 700 }}>{l.company_name}<br /><span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 400 }}>{l.contact_person}</span></td>
-                          <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--muted)' }}>{l.event_name.replace(/ 20\d\d$/, '')}</td>
+                          <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--muted)' }}>{evLabel(l) || '—'}</td>
                           <td style={{ padding: '9px 12px' }}>{l.owner}</td>
                           <td style={{ padding: '9px 12px', textAlign: 'center' }}>{l.first_contact_done ? '✅' : '—'}</td>
                           <td style={{ padding: '9px 12px' }} onClick={e => e.stopPropagation()}>

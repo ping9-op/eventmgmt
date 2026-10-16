@@ -4,6 +4,7 @@ import { useToast } from '../contexts/ToastContext'
 import { useLang } from '../contexts/LangContext'
 import { CURRENCIES, COST_ITEMS, MON, formatDateRange, parseDateRange } from '../lib/utils'
 import DecimalInput from './DecimalInput'
+import { eventLabel, legacyKey } from '../lib/events'
 
 
 interface BudgetRow { item: string; curr: number; prev: number; currency: string; note: string }
@@ -13,6 +14,7 @@ interface Props {
   exhName: string
   exhKey: string
   year: number
+  session?: string | null  // 회차 (상반기/하반기). 미지정 = 연 1회
   initialDate: string
   initialVenue: string
   initialObjective: string
@@ -23,7 +25,7 @@ interface Props {
   onDeleted: () => void
 }
 
-export default function ProposalEditModal({ propId, exhName, exhKey, year, initialDate, initialVenue, initialObjective, initialResults, initialBudget, onClose, onSaved, onDeleted }: Props) {
+export default function ProposalEditModal({ propId, exhName, exhKey, year, session = null, initialDate, initialVenue, initialObjective, initialResults, initialBudget, onClose, onSaved, onDeleted }: Props) {
   const { showToast } = useToast()
   const { t } = useLang()
   const [date, setDate] = useState(initialDate)
@@ -36,6 +38,7 @@ export default function ProposalEditModal({ propId, exhName, exhKey, year, initi
 
   const initDates = parseDateRange(initialDate)
   const [startDate, setStartDate] = useState(initDates.start)
+  const title = eventLabel({ name: exhName, year, session })
   const [endDate, setEndDate] = useState(initDates.end)
 
   function updateRow(i: number, field: keyof BudgetRow, val: string | number) {
@@ -52,9 +55,8 @@ export default function ProposalEditModal({ propId, exhName, exhKey, year, initi
       budget: budget as unknown as never,
     }).eq('id', propId)
 
-    // 예산 변경 시 결제 일정 동기화
-    const payKey = `${exhKey}_${year}`
-    const { data: existingPays } = await supabase.from('payments').select('*').eq('exhibition_key', payKey)
+    // 예산 변경 시 결제 일정 동기화 (proposal_id 기준)
+    const { data: existingPays } = await supabase.from('payments').select('*').eq('proposal_id', propId)
     const pays = (existingPays || []) as any[]
     const activeBudget = budget.filter(b => b.item && b.curr > 0)
 
@@ -69,7 +71,8 @@ export default function ProposalEditModal({ propId, exhName, exhKey, year, initi
         }
       } else {
         await supabase.from('payments').insert({
-          exhibition_key: payKey, item: b.item, total: b.curr,
+          proposal_id: propId, exhibition_key: legacyKey({ key: exhKey, year, session }),
+          item: b.item, total: b.curr,
           currency: b.currency || 'KRW',
           deposit_amount: 0, deposit_due: null, deposit_paid: false,
           final_amount: 0, final_due: null, final_paid: false,
@@ -103,7 +106,7 @@ export default function ProposalEditModal({ propId, exhName, exhKey, year, initi
     <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="modal" style={{ width: 660 }}>
         <div className="modal-hdr">
-          <h3>{exhName} {year} {t('edit_proposal_title')}</h3>
+          <h3>{title} {t('edit_proposal_title')}</h3>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
 
@@ -181,7 +184,7 @@ export default function ProposalEditModal({ propId, exhName, exhKey, year, initi
           <div style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 8 }}>{t('delete_proposal_warn')}</div>
           {confirmDelete ? (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--danger)' }}>{exhName} {year} — {t('confirm_archive')}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--danger)' }}>{title} — {t('confirm_archive')}</span>
               <button className="btn btn-sm" style={{ background: '#D63031', color: 'white', border: 'none' }} onClick={deleteProp}>{t('archive')}</button>
               <button className="btn btn-muted btn-sm" onClick={() => setConfirmDelete(false)}>{t('cancel')}</button>
             </div>

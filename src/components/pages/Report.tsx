@@ -3,7 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { exhColor, fmtCur, fmtByCurrency, sumByCurrency, localDateStr } from '../../lib/utils'
 import DecimalInput from '../DecimalInput'
-import type { Exhibition, Proposal, Result, ActualCost, MarketingActivity, Payment } from '../../types/database'
+import type { Proposal, Result, ActualCost, MarketingActivity, Payment } from '../../types/database'
+import { loadEventRefs, eventLabel, legacyKey, type EventRef } from '../../lib/events'
 import { useToast } from '../../contexts/ToastContext'
 import pptxgen from 'pptxgenjs'
 import { useLang } from '../../contexts/LangContext'
@@ -12,7 +13,9 @@ import EmptyState from '../EmptyState'
 
 const PHOTO_BUCKET = 'report-photos'
 
-interface ReportKey { label: string; exhibition_key: string }
+// proposal_id 연결 컬럼 포함 (공용 인터페이스에 아직 없을 수 있어 로컬 확장)
+type PaymentRow = Payment & { proposal_id?: string | null }
+type ResultRow = Result & { proposal_id?: string | null }
 
 // 결제 일정(payments)에서 항목별로 이미 납부 완료된 금액 합계를 구한다
 function paidTotalForItem(pays: Payment[] | undefined, item: string): number {
@@ -23,11 +26,12 @@ function paidTotalForItem(pays: Payment[] | undefined, item: string): number {
 }
 
 // Proposal 데이터로 보고서 초기값 자동 생성
-function buildDefaultFromProposal(key: string, prop: Proposal, exhName: string, pays?: Payment[]): Partial<Result> {
+function buildDefaultFromProposal(ev: EventRef, prop: Proposal, pays?: Payment[]): Partial<ResultRow> {
   const budget = (prop.budget as any[]) || []
   return {
-    exhibition_key: key,
-    cover_title: `${exhName} ${prop.year}`,
+    proposal_id: ev.proposalId,
+    exhibition_key: legacyKey(ev),
+    cover_title: eventLabel(ev),
     cover_date: localDateStr(),
     cover_author: prop.author || 'Andrew',
     objective: prop.objective || '',
@@ -57,70 +61,69 @@ export default function Report() {
   const { t } = useLang()
   const navigate = useNavigate()
   const location = useLocation()
-  const initKey = (location.state as any)?.key || null
-  const [reportKeys, setReportKeys] = useState<ReportKey[]>([])
-  const [selected, setSelected] = useState<string | null>(null)
+  // 선택 행사: { proposalId } 우선, 이전 형식 { key: 'KIF_2026' }도 허용
+  const initProposalId: string | null = (location.state as any)?.proposalId || null
+  const initLegacyKey: string | null = (location.state as any)?.key || null
+  const fromNav = !!(initProposalId || initLegacyKey)
+  const [events, setEvents] = useState<EventRef[]>([])
+  const [selected, setSelected] = useState<string | null>(null) // proposal_id
   const [report, setReport] = useState<Result | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [generatingPPT, setGeneratingPPT] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
-  // Proposal 데이터 캐시 (exhibition_key → proposal)
-  const [propCache, setPropCache] = useState<Record<string, { prop: Proposal; exhName: string }>>({})
-  // 결제 일정 캐시 (exhibition_key → payments) — 실제 지출 자동 반영에 사용
+  // Proposal 데이터 캐시 (proposal_id → proposal)
+  const [propCache, setPropCache] = useState<Record<string, Proposal>>({})
+  // 결제 일정 캐시 (proposal_id → payments) — 실제 지출 자동 반영에 사용
   const [paymentsByKey, setPaymentsByKey] = useState<Record<string, Payment[]>>({})
   const photoInputRef = useRef<HTMLInputElement>(null)
+
+  const selectedEv = events.find(e => e.proposalId === selected) || null
 
   useEffect(() => {
     let cancelled = false
 
     async function load() {
       try {
-        const [{ data: exhData }, { data: propData }, { data: resultData }, { data: payData }] = await Promise.all([
-          supabase.from('exhibitions').select('*'),
-          supabase.from('proposals').select('*').order('year'),
+        const [refs, { data: propData }, { data: resultData }, { data: payData }] = await Promise.all([
+          loadEventRefs(),
+          supabase.from('proposals').select('*').is('archived_at', null),
           supabase.from('results').select('*'),
           supabase.from('payments').select('*'),
         ])
         if (cancelled) return
 
-        const exhMap: Record<string, Exhibition> = {}
-        for (const e of (exhData || [])) exhMap[e.id] = e
-
         const payMap: Record<string, Payment[]> = {}
-        for (const p of (payData || []) as unknown as Payment[]) {
-          if (!payMap[p.exhibition_key]) payMap[p.exhibition_key] = []
-          payMap[p.exhibition_key].push(p)
+        for (const p of (payData || []) as unknown as PaymentRow[]) {
+          if (!p.proposal_id) continue
+          if (!payMap[p.proposal_id]) payMap[p.proposal_id] = []
+          payMap[p.proposal_id].push(p)
         }
         if (!cancelled) setPaymentsByKey(payMap)
 
-        // Proposal 캐시 구성 (exhibition_key → 최신 proposal)
-        const cache: Record<string, { prop: Proposal; exhName: string }> = {}
-        for (const p of (propData || []) as unknown as Proposal[]) {
-          const exh = exhMap[p.exhibition_id]
-          if (!exh) continue
-          const k = `${exh.key}_${p.year}`
-          cache[k] = { prop: p, exhName: exh.name }
-        }
+        // Proposal 캐시 구성 (proposal_id → proposal)
+        const cache: Record<string, Proposal> = {}
+        for (const p of (propData || []) as unknown as Proposal[]) cache[p.id] = p
         if (!cancelled) setPropCache(cache)
 
-        const keys: ReportKey[] = Object.entries(cache).map(([k, { exhName, prop }]) => ({
-          label: `${exhName} ${prop.year}`,
-          exhibition_key: k,
-        })).sort((a, b) => b.label.localeCompare(a.label))
-        if (!cancelled) setReportKeys(keys)
+        // 보고서 목록 = 보관되지 않은 행사 (연도 → 이름 → 회차 순)
+        if (!cancelled) setEvents(refs)
 
         const resultMap: Record<string, Result> = {}
-        for (const r of (resultData || []) as unknown as Result[]) resultMap[r.exhibition_key] = r
+        for (const r of (resultData || []) as unknown as ResultRow[]) if (r.proposal_id) resultMap[r.proposal_id] = r
 
-        const sel = initKey || keys[0]?.exhibition_key
-        if (sel && !cancelled) {
+        const initEv = initProposalId
+          ? refs.find(e => e.proposalId === initProposalId)
+          : initLegacyKey ? refs.find(e => legacyKey(e) === initLegacyKey) : undefined
+        const ev = initEv || refs[0]
+        if (ev && !cancelled) {
+          const sel = ev.proposalId
           setSelected(sel)
           // 기존 저장된 보고서가 있으면 로드, 없으면 Proposal에서 자동 생성
           if (resultMap[sel]) {
             setReport(resultMap[sel])
           } else if (cache[sel]) {
-            setReport(buildDefaultFromProposal(sel, cache[sel].prop, cache[sel].exhName, payMap[sel]) as unknown as Result)
+            setReport(buildDefaultFromProposal(ev, cache[sel], payMap[sel]) as unknown as Result)
           }
         }
       } catch (e) {
@@ -136,19 +139,22 @@ export default function Report() {
 
   async function selectKey(k: string) {
     setSelected(k)
-    const { data } = await supabase.from('results').select('*').eq('exhibition_key', k).single()
+    const ev = events.find(e => e.proposalId === k)
+    const { data } = await supabase.from('results').select('*').eq('proposal_id', k).maybeSingle()
     if (data) {
       setReport(data as unknown as Result)
-    } else if (propCache[k]) {
+    } else if (ev && propCache[k]) {
       // 저장된 보고서 없음 → Proposal 데이터로 자동 초기화
-      setReport(buildDefaultFromProposal(k, propCache[k].prop, propCache[k].exhName, paymentsByKey[k]) as unknown as Result)
+      setReport(buildDefaultFromProposal(ev, propCache[k], paymentsByKey[k]) as unknown as Result)
     } else {
       setReport(null)
     }
   }
 
   async function uploadPhotos(files: File[]) {
-    if (!selected || files.length === 0) return
+    if (!selected || !selectedEv || files.length === 0) return
+    // 저장소 폴더는 기존 사진과 같은 문자열 키 폴더 유지 (기존 사진 URL은 그대로 유효)
+    const folder = legacyKey(selectedEv)
     setUploadingPhoto(true)
     try {
       const urls: string[] = []
@@ -161,7 +167,7 @@ export default function Report() {
         const contentType = (file.type && file.type !== 'application/octet-stream')
           ? file.type
           : (mimeMap[ext] || 'image/jpeg')
-        const path = `${selected}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
+        const path = `${folder}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
         const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(path, file, { upsert: false, contentType })
         if (error) {
           showToast('⚠️ 사진 업로드 실패: ' + error.message)
@@ -192,20 +198,21 @@ export default function Report() {
   }
 
   async function saveReport() {
-    if (!report || !selected) return
+    if (!report || !selected || !selectedEv) return
     setSaving(true)
     try {
-      const { data: existing } = await supabase.from('results').select('id').eq('exhibition_key', selected).single()
+      const { data: existing } = await supabase.from('results').select('id').eq('proposal_id', selected).maybeSingle()
       if (existing) {
         const { error } = await supabase.from('results').update(report as unknown as never).eq('id', existing.id)
         if (error) throw error
       } else {
-        const { error } = await supabase.from('results').insert({ ...report, exhibition_key: selected } as unknown as never)
+        const { id: _id, ...rest } = report as ResultRow
+        const { error } = await supabase.from('results').insert({ ...rest, proposal_id: selected, exhibition_key: legacyKey(selectedEv) } as unknown as never)
         if (error) throw error
       }
       showToast('보고서가 저장되었습니다.')
       // ExpoOverview가 mount될 때 fresh 데이터를 fetching하도록 overview로 이동
-      if (initKey) navigate('/expo/overview', { state: { from: 'report', key: selected } })
+      if (fromNav) navigate('/expo/overview', { state: { from: 'report', proposalId: selected } })
     } finally {
       setSaving(false)
     }
@@ -341,7 +348,8 @@ export default function Report() {
     // 템플릿: 제목 오른쪽 배치 x=5.86 y=2.89, 48pt black / 날짜 x=9.24 y=4.20 18pt
     const cv = pptx.addSlide()
     cv.addImage({ data: coverB64, x: 0, y: 0, w: 13.33, h: 7.5 })
-    cv.addText(r.cover_title || selected, {
+    const evTitle = selectedEv ? eventLabel(selectedEv) : ''
+    cv.addText(r.cover_title || evTitle, {
       x: 5.86, y: 2.89, w: 6.92, h: 1.72,
       fontSize: 48, bold: true, color: DARK, fontFace: FONT, valign: 'middle', wrap: true,
     })
@@ -533,7 +541,7 @@ export default function Report() {
       })
     }
 
-    const fname = (r.cover_title || selected).replace(/[\s/\\]/g, '_') + '_Result_Report.pptx'
+    const fname = (r.cover_title || evTitle || 'Report').replace(/[\s/\\]/g, '_') + '_Result_Report.pptx'
     await pptx.writeFile({ fileName: fname })
     showToast('PPT가 생성되었습니다.')
 
@@ -546,13 +554,13 @@ export default function Report() {
 
   function initReport(): Result {
     return {
-      id: '', exhibition_key: selected || '',
+      id: '', exhibition_key: selectedEv ? legacyKey(selectedEv) : '',
       objective: '', event_date: '', event_venue: '', event_target: '',
       actual_costs: [], marketing_activities: [], marketing_photos: [],
       reg_remittance: 0, reg_card: 0, reg_biz: 0, reg_onboard: 0, reg_followup: '',
       cost_per_person: 0, visitors: 0, new_merchants: 0, new_registrations: 0,
       shortcomings: [], improvements: [], recommendations: [], requests: [],
-      conclusion: '', cover_title: selected || '', cover_date: '', cover_author: '',
+      conclusion: '', cover_title: selectedEv ? eventLabel(selectedEv) : '', cover_date: '', cover_author: '',
       sections_enabled: {}
     }
   }
@@ -603,9 +611,9 @@ export default function Report() {
       <div className="report-layout">
         {/* Left */}
         <div className="report-list">
-          {reportKeys.map(k => (
-            <div key={k.exhibition_key} className={`report-list-item${selected === k.exhibition_key ? ' active' : ''}`} onClick={() => selectKey(k.exhibition_key)}>
-              {k.label}
+          {events.map(e => (
+            <div key={e.proposalId} className={`report-list-item${selected === e.proposalId ? ' active' : ''}`} onClick={() => selectKey(e.proposalId)}>
+              {eventLabel(e)}
             </div>
           ))}
         </div>

@@ -9,6 +9,7 @@ import ProposalEditModal from '../ProposalEditModal'
 import { useLang } from '../../contexts/LangContext'
 import EmptyState from '../EmptyState'
 import DecimalInput from '../DecimalInput'
+import { SESSIONS, eventLabel, eventPath, legacyKey } from '../../lib/events'
 
 
 function budgetStr(budget: BudgetItem[]): string {
@@ -21,7 +22,7 @@ interface ExhEntry { exh: Exhibition; proposals: (Proposal & { budget: BudgetIte
 interface BudgetRow { item: string; curr: number; currency: string; note: string }
 
 interface EpModalState {
-  propId: string; exhName: string; exhKey: string; year: number
+  propId: string; exhName: string; exhKey: string; year: number; session: string | null
   initialDate: string; initialVenue: string; initialObjective: string; initialResults: string[]
   initialBudget: Array<{ item: string; curr: number; prev: number; currency: string; note: string }>
 }
@@ -52,6 +53,7 @@ export default function Exhibitions() {
   const [apName, setApName] = useState('')
   const [apKey, setApKey] = useState('')   // 신규 박람회 키(약어) — 비워두면 이름에서 자동 생성
   const [apYear, setApYear] = useState(String(new Date().getFullYear()))
+  const [apSession, setApSession] = useState('')   // 회차: '' = 연 1회, '상반기' | '하반기'
   const [apAuthor, setApAuthor] = useState('Andrew')
   const [apPdate, setApPdate] = useState(localDateStr())
   const [apRecurring, setApRecurring] = useState<'1' | '0'>('1')
@@ -81,7 +83,9 @@ export default function Exhibitions() {
       if (exhErr) { showToast('박람회 데이터 로드 중 오류가 발생했습니다.', 'error'); return }
       if (propErr) { showToast('Proposal 데이터 로드 중 오류가 발생했습니다.', 'error'); return }
       const exhList = exhData || []
-      const propList = (propData || []) as unknown as Proposal[]
+      // 연도 → 회차(상반기 → 하반기) 순 정렬 — 마지막 항목이 최신 행사
+      const propList = ((propData || []) as unknown as Proposal[])
+        .sort((a, b) => a.year - b.year || (a.session || '').localeCompare(b.session || ''))
       const knownExhIds = new Set(exhList.map(e => e.id))
 
       const entries: ExhEntry[] = exhList.map(exh => ({
@@ -169,11 +173,13 @@ export default function Exhibitions() {
         exhKey = data.find(d => d.exh.id === exhId)?.exh.key || ''
       }
 
-      // 같은 연도 Proposal이 이미 있는지 확인
-      const { data: existing } = await supabase.from('proposals')
-        .select('id').eq('exhibition_id', exhId).eq('year', parseInt(apYear)).single()
-      if (existing) {
-        showToast(`⚠️ ${apName} ${apYear}년 Proposal이 이미 존재합니다.`)
+      // 같은 연도·회차 Proposal이 이미 있는지 확인 (보관된 것 포함 — DB UNIQUE 제약과 동일 기준)
+      const session = apSession || null
+      let dupQ = supabase.from('proposals').select('id').eq('exhibition_id', exhId).eq('year', parseInt(apYear))
+      dupQ = session ? dupQ.eq('session', session) : dupQ.is('session', null)
+      const { data: existing } = await dupQ.limit(1)
+      if (existing && existing.length > 0) {
+        showToast(`⚠️ ${eventLabel({ name: apName, year: parseInt(apYear), session })} Proposal이 이미 존재합니다.`)
         return
       }
 
@@ -181,9 +187,10 @@ export default function Exhibitions() {
         item: b.item, curr: b.curr, prev: 0, note: b.note, currency: b.currency
       }))
 
-      const { error: propErr } = await supabase.from('proposals').insert({
+      const { data: newProp, error: propErr } = await supabase.from('proposals').insert({
         exhibition_id: exhId,
         year: parseInt(apYear),
+        session,
         proposal_date: apPdate,
         author: apAuthor,
         date_of_event: apDate,
@@ -193,16 +200,17 @@ export default function Exhibitions() {
         expected_results: apResults.filter(r => r.trim()) as unknown as never,
         budget: budgetItems as unknown as never,
         explanations: {}
-      })
-      if (propErr) {
-        showToast('⚠️ 저장 실패: ' + propErr.message)
+      }).select().single()
+      if (propErr || !newProp) {
+        showToast('⚠️ 저장 실패: ' + (propErr?.message || '알 수 없는 오류'))
         return
       }
 
-      // 결제 항목 자동 생성 (실제 exhKey 사용)
+      // 결제 항목 자동 생성 (proposal_id로 연결, exhibition_key는 이행 기간용)
       for (const b of budgetItems) {
         await supabase.from('payments').insert({
-          exhibition_key: `${exhKey}_${apYear}`,
+          proposal_id: newProp.id,
+          exhibition_key: legacyKey({ key: exhKey, year: newProp.year, session: newProp.session }),
           item: b.item, total: b.curr, currency: b.currency,
           deposit_amount: Math.round(b.curr / 2), deposit_due: null, deposit_paid: false,
           final_amount: Math.round(b.curr / 2), final_due: null, final_paid: false,
@@ -221,7 +229,7 @@ export default function Exhibitions() {
   }
 
   function resetForm() {
-    setApExhSel(''); setApName(''); setApKey(''); setApYear(String(new Date().getFullYear()))
+    setApExhSel(''); setApName(''); setApKey(''); setApYear(String(new Date().getFullYear())); setApSession('')
     setApAuthor('Andrew'); setApPdate(localDateStr())
     setApRecurring('1'); setApDate(''); setApStartDate(''); setApEndDate(''); setApVenue(''); setApObj('')
     setApResults([''])
@@ -345,7 +353,8 @@ export default function Exhibitions() {
               <div className="ec-body" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
                 <div className="ec-hdr">
                   <div className="ec-name" style={{ color, cursor: latest ? 'pointer' : 'default', textDecoration: latest ? 'underline' : 'none', textUnderlineOffset: 3 }}
-                    onClick={() => latest && navigate(`/expo/event/${exh.key}/${latest.year}`)}>
+                    onClick={() => latest && navigate(eventPath(latest.id))}
+                    title={latest ? `${eventLabel({ name: exh.name, year: latest.year, session: latest.session ?? null })} 이벤트 상세 보기` : undefined}>
                     {exhDisplayName(exh.name, exh.key)}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
@@ -365,7 +374,7 @@ export default function Exhibitions() {
                   </div>
                 </div>
                 <div className="ec-meta">
-                  {latest ? `📅 ${formatEventDate(latest.date_of_event, latest.year)} · 📍 ${latest.venue}` : t('no_history')}
+                  {latest ? `📅 ${latest.session ? `${latest.session} · ` : ''}${formatEventDate(latest.date_of_event, latest.year)} · 📍 ${latest.venue}` : t('no_history')}
                 </div>
 
                 {/* 참가 이력 */}
@@ -374,13 +383,13 @@ export default function Exhibitions() {
                   {[...proposals].reverse().map((p, i) => (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '0.5px solid var(--border)', flexWrap: 'wrap', gap: 4 }}>
                       <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap', marginRight: 8 }}>
-                        {p.year} · {formatEventDate(p.date_of_event, p.year)}
+                        {p.year}{p.session ? ` ${p.session}` : ''} · {formatEventDate(p.date_of_event, p.year)}
                       </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                         <span style={{ fontSize: 12, fontWeight: 700, color, whiteSpace: 'nowrap' }}>{budgetStr(p.budget)}</span>
                         <button className="btn btn-outline btn-sm" style={{ padding: '2px 8px', fontSize: 10, minHeight: 44 }}
                           onClick={() => setEpModal({
-                            propId: p.id, exhName: exh.name, exhKey: exh.key, year: p.year,
+                            propId: p.id, exhName: exh.name, exhKey: exh.key, year: p.year, session: p.session ?? null,
                             initialDate: p.date_of_event, initialVenue: p.venue,
                             initialObjective: p.objective || '',
                             initialResults: (p.expected_results as string[]) || [],
@@ -409,7 +418,7 @@ export default function Exhibitions() {
                     onClick={() => navigate('/expo/create', { state: { exhId: exh.id } })}>✏️ {t('btn_proposal')}</button>
                   <button className="btn btn-muted btn-sm" style={{ flex: 1 }} disabled={!latest}
                     title={latest ? undefined : 'Proposal을 먼저 작성하세요'}
-                    onClick={() => latest && navigate('/expo/report', { state: { key: `${exh.key}_${latest.year}` } })}>📋 {t('btn_report')}</button>
+                    onClick={() => latest && navigate('/expo/report', { state: { proposalId: latest.id } })}>📋 {t('btn_report')}</button>
                 </div>
               </div>
             </div>
@@ -464,6 +473,15 @@ export default function Exhibitions() {
                 <input value={apKey} onChange={e => setApKey(e.target.value)} placeholder="예: SITF (비우면 이름에서 자동 생성)" disabled={!!apExhSel} />
               </div>
               <div><label>{t('year_label')}</label><input type="number" value={apYear} onChange={e => setApYear(e.target.value)} /></div>
+            </div>
+            <div className="form-row cols3">
+              <div>
+                <label>회차</label>
+                <select value={apSession} onChange={e => setApSession(e.target.value)}>
+                  <option value="">연 1회</option>
+                  {SESSIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
             </div>
             <div className="form-row cols3">
               <div><label>{t('author_label')}</label><input value={apAuthor} onChange={e => setApAuthor(e.target.value)} /></div>
