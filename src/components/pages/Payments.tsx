@@ -9,6 +9,8 @@ import LoadingSpinner from '../LoadingSpinner'
 import EmptyState from '../EmptyState'
 import PaymentCard from '../PaymentCard'
 
+const INVOICE_PARSE_ENABLED = false
+
 
 function sumByCur(pays: Payment[], fn: (p: Payment) => number): string {
   const acc: Record<string, number> = {}
@@ -286,12 +288,15 @@ export default function Payments() {
                 <button className="btn btn-primary btn-sm" onClick={openAddModal}>
                   {t('add_pay_item')}
                 </button>
-                <button className="btn btn-purple btn-sm" onClick={() => {
-                  if (showInvoice) { setInvoiceParsed(null); setInvoiceParseLoading(false) }
-                  setShowInvoice(v => !v)
-                }}>
-                  {showInvoice ? `✕ ${t('close')}` : t('invoice_upload')}
-                </button>
+                {/* 인보이스 파싱은 실제 파일을 읽지 않는 목업(기존 값/가짜 날짜를 채워 저장함)이라 실제 파서 구현 전까지 숨김 */}
+                {INVOICE_PARSE_ENABLED && (
+                  <button className="btn btn-purple btn-sm" onClick={() => {
+                    if (showInvoice) { setInvoiceParsed(null); setInvoiceParseLoading(false) }
+                    setShowInvoice(v => !v)
+                  }}>
+                    {showInvoice ? `✕ ${t('close')}` : t('invoice_upload')}
+                  </button>
+                )}
               </div>
             </div>
 

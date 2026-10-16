@@ -58,3 +58,18 @@ export function loadSalesSettings() {
     corridors:    DEFAULTS.corridors,
   }
 }
+
+/** 박람회 × 연도로 만든 리드 행사명 목록 ("{박람회명} {연도}", 최신순). 리드 등록/수정 화면이 같은 목록을 쓰도록 공용화 */
+export async function loadExpoEventNames(): Promise<string[]> {
+  const [{ data: propData }, { data: exhData }] = await Promise.all([
+    supabase.from('proposals').select('year, exhibition_id'),
+    supabase.from('exhibitions').select('id, name'),
+  ])
+  const exhName: Record<string, string> = {}
+  for (const e of (exhData || [])) exhName[e.id] = e.name
+  const names = new Set<string>()
+  for (const p of (propData || [])) {
+    if (exhName[p.exhibition_id]) names.add(`${exhName[p.exhibition_id]} ${p.year}`)
+  }
+  return [...names].sort().reverse()
+}

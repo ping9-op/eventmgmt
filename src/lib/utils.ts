@@ -120,6 +120,16 @@ export function parseEventDate(str: string, year?: number): Date | null {
   return new Date(yr, month - 1, days[0])
 }
 
+/** 오늘(로컬 자정) 기준 날짜 차이(일). 'YYYY-MM-DD' 문자열은 UTC가 아닌 로컬 날짜로 해석 */
+export function dayDiffFromToday(d: Date | string): number | null {
+  const date = typeof d === 'string' ? new Date(d.length === 10 ? `${d}T00:00:00` : d) : d
+  if (isNaN(date.getTime())) return null
+  const now = new Date()
+  const a = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const b = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  return Math.round((a.getTime() - b.getTime()) / 86400000)
+}
+
 export function formatEventDate(str: string, fallbackYear?: number): string {
   if (!str) return ''
   const s = str.toLowerCase()

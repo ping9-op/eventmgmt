@@ -295,8 +295,14 @@ export default function Exhibitions() {
     try {
       const exh = data.find(d => d.exh.id === exhId)?.exh
       if (exh?.key) {
-        const { error: payErr } = await supabase.from('payments').delete().like('exhibition_key', `${exh.key}_%`)
-        if (payErr) { showToast('⚠️ 결제 항목 삭제 실패: ' + payErr.message); return }
+        // LIKE의 '_'는 와일드카드라 다른 박람회 키(TS_% → TSX_2026)까지 걸리므로, 연도별 키를 정확히 지정해 삭제
+        const { data: props, error: yrErr } = await supabase.from('proposals').select('year').eq('exhibition_id', exhId)
+        if (yrErr) { showToast('⚠️ 결제 항목 조회 실패: ' + yrErr.message); return }
+        const payKeys = [...new Set((props || []).map(p => `${exh.key}_${p.year}`))]
+        if (payKeys.length) {
+          const { error: payErr } = await supabase.from('payments').delete().in('exhibition_key', payKeys)
+          if (payErr) { showToast('⚠️ 결제 항목 삭제 실패: ' + payErr.message); return }
+        }
       }
       const { error: propErr } = await supabase.from('proposals').delete().eq('exhibition_id', exhId)
       if (propErr) { showToast('⚠️ Proposal 삭제 실패: ' + propErr.message); return }

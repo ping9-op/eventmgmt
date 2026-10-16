@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { krw, exhColor, formatEventDate, isPastEvent, exhDisplayName, sortUpcomingFirst } from '../../lib/utils'
+import { sumByCurrency, fmtByCurrency, exhColor, formatEventDate, isPastEvent, exhDisplayName, sortUpcomingFirst } from '../../lib/utils'
 import type { Exhibition, Proposal, BudgetItem } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
@@ -9,7 +9,7 @@ import LoadingSpinner from '../LoadingSpinner'
 
 interface ExhEntry {
   key: string; name: string; year: number
-  date: string; venue: string; total: number; recurring: boolean
+  date: string; venue: string; total: Record<string, number>; recurring: boolean
   proposal_date: string; author: string
 }
 
@@ -48,7 +48,7 @@ export default function Schedule() {
         return {
           key: exh?.key || '', name: exh?.name || '', year: p.year,
           date: p.date_of_event, venue: p.venue,
-          total: budget.reduce((s, b) => s + b.curr, 0),
+          total: sumByCurrency(budget, b => b.curr, b => b.currency), // 통화별 합계
           recurring: exh?.recurring || false,
           proposal_date: p.proposal_date, author: p.author
         }
@@ -175,7 +175,7 @@ export default function Schedule() {
       {Object.entries(yearGroups).sort((a, b) => Number(b[0]) - Number(a[0])).map(([year, yEntries]) => {
         const doneCount = yEntries.filter(e => isPastEvent(e.date, e.year)).length
         const schedCount = yEntries.length - doneCount
-        const yearTotal = yEntries.reduce((s, e) => s + e.total, 0)
+        const yearTotal = sumByCurrency(yEntries.flatMap(e => Object.entries(e.total)), ([, v]) => v, ([c]) => c)
         return (
           <div key={year} className="yr-section" style={{ marginTop: 28 }}>
             <div className="yr-header">
@@ -183,7 +183,7 @@ export default function Schedule() {
               <span className="badge" style={{ background: doneCount === yEntries.length ? '#7B8AA0' : 'var(--accent)', fontSize: 12 }}>
                 {doneCount === yEntries.length ? t('badge_all_done') : `${schedCount}${t('unit_scheduled')}`}
               </span>
-              <div className="yr-meta">{yEntries.length}{t('unit_exh')} &nbsp;·&nbsp; {krw(yearTotal)}</div>
+              <div className="yr-meta">{yEntries.length}{t('unit_exh')} &nbsp;·&nbsp; {fmtByCurrency(yearTotal)}</div>
             </div>
             <div className="table-scroll-wrapper">
             <table className="rank-table">
@@ -224,7 +224,7 @@ export default function Schedule() {
                           {past ? t('badge_done') : t('badge_scheduled')}
                         </span>
                       </td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, color, cursor: 'pointer' }} onClick={() => openEdit(e)}>{krw(e.total)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color, cursor: 'pointer' }} onClick={() => openEdit(e)}>{fmtByCurrency(e.total)}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>
                         <button className="btn btn-outline btn-sm" style={{ whiteSpace: 'nowrap' }} onClick={() => openEdit(e)}>{t('edit')}</button>
                       </td>

@@ -526,9 +526,18 @@ export default function Proposal() {
     const exhName = isNewExh ? newExhName : (exhibitions.find(e => e.id === exhId)?.name || '박람회')
     const prevYear = year - 1
     const activeBudget = budget.filter(b => b.curr > 0 || b.prev > 0)
-    const totalCurr = activeBudget.reduce((s, b) => s + (b.curr || 0), 0)
-    const totalPrev = activeBudget.reduce((s, b) => s + (b.prev || 0), 0)
-    const diff = totalCurr - totalPrev
+    // 합계는 통화별로 (JPY/USD 항목을 KRW로 더하지 않도록)
+    const curOf = (b: BudgetItem) => b.currency || 'KRW'
+    const totalCurr = sumByCurrency(activeBudget, b => b.curr, curOf)
+    const totalPrev = sumByCurrency(activeBudget, b => b.prev, curOf)
+    const curOrder = (a: string, b: string) => (a === 'KRW' ? -1 : b === 'KRW' ? 1 : a.localeCompare(b))
+    const fmtTotals = (t: Record<string, number>, sign = false) => Object.entries(t).filter(([, v]) => v !== 0).sort(([a], [b]) => curOrder(a, b))
+      .map(([c, v]) => `${sign ? (v > 0 ? '+' : '-') : ''}${c} ${Math.abs(v).toLocaleString()}`).join(' + ')
+    const hasPrev = Object.values(totalPrev).some(v => v > 0)
+    const diffByCur: Record<string, number> = {}
+    for (const c of new Set([...Object.keys(totalCurr), ...Object.keys(totalPrev)])) diffByCur[c] = (totalCurr[c] || 0) - (totalPrev[c] || 0)
+    const diffVals = Object.values(diffByCur).filter(v => v !== 0)
+    const diff = diffVals.length === 1 ? diffVals[0] : 0 // 색상용: 한 통화만 변동했을 때만 증감 색 표시
 
     const RED = 'CC1F1F'
     const DARK = '1A1A1A'
@@ -627,7 +636,7 @@ export default function Proposal() {
           new Paragraph({
             children: [
               new TextRun({ text: 'Expected Cost: ', bold: true, size: 22, font: 'Calibri' }),
-              new TextRun({ text: `KRW ${totalCurr.toLocaleString()}`, bold: true, size: 22, color: RED, font: 'Calibri' }),
+              new TextRun({ text: fmtTotals(totalCurr) || 'KRW 0', bold: true, size: 22, color: RED, font: 'Calibri' }),
             ],
             spacing: { before: 360, after: 200 },
           }),
@@ -661,10 +670,10 @@ export default function Proposal() {
                 children: [
                   cell('', { fill: HDRFILL, w: 6 }),
                   cell('Total Cost', { bold: true, fill: HDRFILL, w: 24 }),
-                  cell(totalPrev > 0 ? `KRW ${totalPrev.toLocaleString()}` : '-', { bold: true, align: AlignmentType.RIGHT, fill: HDRFILL, w: 18 }),
-                  cell(`KRW ${totalCurr.toLocaleString()}`, { bold: true, align: AlignmentType.RIGHT, fill: HDRFILL, w: 18 }),
+                  cell(hasPrev ? fmtTotals(totalPrev) : '-', { bold: true, align: AlignmentType.RIGHT, fill: HDRFILL, w: 18 }),
+                  cell(fmtTotals(totalCurr) || 'KRW 0', { bold: true, align: AlignmentType.RIGHT, fill: HDRFILL, w: 18 }),
                   cell(
-                    totalPrev > 0 ? (diff > 0 ? `+KRW ${diff.toLocaleString()}` : diff < 0 ? `-KRW ${Math.abs(diff).toLocaleString()}` : 'Same') : '',
+                    hasPrev ? (diffVals.length ? fmtTotals(diffByCur, true) : 'Same') : '',
                     { bold: true, align: AlignmentType.RIGHT, fill: HDRFILL, color: diff > 0 ? 'C00000' : diff < 0 ? '2E7D51' : DARK, w: 34 }
                   ),
                 ],

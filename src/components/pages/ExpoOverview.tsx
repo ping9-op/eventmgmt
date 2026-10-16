@@ -6,7 +6,7 @@ import LoadingSpinner from '../LoadingSpinner'
 import { Chart, ArcElement, Tooltip, DoughnutController } from 'chart.js'
 Chart.register(ArcElement, Tooltip, DoughnutController)
 import { supabase } from '../../lib/supabase'
-import { krw, exhColor, formatEventDate, isPastEvent, daysUntil, exhDisplayName, sortUpcomingFirst, fmtCur } from '../../lib/utils'
+import { krw, exhColor, formatEventDate, isPastEvent, daysUntil, exhDisplayName, sortUpcomingFirst, fmtCur, parseEventDate, dayDiffFromToday, sumByCurrency, fmtByCurrency } from '../../lib/utils'
 import type { Exhibition, BudgetItem } from '../../types/database'
 
 interface ExhEntry {
@@ -69,22 +69,13 @@ export default function ExpoOverview() {
     return () => { cancelled = true }
   }, [])
 
-  const today = new Date()
-
-  function parseEventDate(e: ExhEntry): Date | null {
-    const m = e.date.toLowerCase().match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/)
-    if (!m) return null
-    const months: Record<string, number> = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 }
-    const yr = parseInt(e.date.match(/\d{4}/)?.[0] || String(e.year))
-    const day = parseInt(e.date.match(/(?<!\d)\d{1,2}(?!\d{3})/g)?.find(n => parseInt(n) <= 31) || '1')
-    return new Date(yr, months[m[1]], day)
-  }
+  const entryDate = (e: ExhEntry) => parseEventDate(e.date, e.year)
 
   function getLatestSorted(): ExhEntry[] {
     const latest: Record<string, ExhEntry> = {}
     for (const e of entries) if (!latest[e.key] || e.year > latest[e.key].year) latest[e.key] = e
     return Object.values(latest).sort((a, b) => {
-      const da = parseEventDate(a), db = parseEventDate(b)
+      const da = entryDate(a), db = entryDate(b)
       return da && db ? da.getTime() - db.getTime() : a.name.localeCompare(b.name)
     })
   }
@@ -92,9 +83,9 @@ export default function ExpoOverview() {
   function getUpcoming(): UpcomingItem[] {
     const items: UpcomingItem[] = []
     for (const e of getLatestSorted()) {
-      const d = parseEventDate(e)
+      const d = entryDate(e)
       if (!d) continue
-      const diff = Math.round((d.getTime() - today.getTime()) / 86400000)
+      const diff = dayDiffFromToday(d)!
       if (diff >= -7 && diff <= 60) {
         items.push({ days: diff, kind: 'expo', name: exhDisplayName(e.name, e.key) + ' ' + e.year, date: formatEventDate(e.date, e.year), color: exhColor(e.name), detail: e.venue, icon: '📅' })
       }
@@ -109,10 +100,9 @@ export default function ExpoOverview() {
           ['final', p.final_due, p.final_amount, p.final_paid],
         ] as [string, string | null, number, boolean][]) {
           if (paid || !due) continue
-          const dueDate = new Date(due)
-          const diff = Math.round((dueDate.getTime() - today.getTime()) / 86400000)
-          if (diff >= -7 && diff <= 60) {
-            items.push({ days: diff, kind: type, name, date: due, color: diff < 0 ? '#D63031' : '#C47D1A', detail: `${p.item}  ₩${(amount || 0).toLocaleString()}`, icon: '💰', payKey: dbKey })
+          const diff = dayDiffFromToday(due)
+          if (diff != null && diff >= -7 && diff <= 60) {
+            items.push({ days: diff, kind: type, name, date: due, color: diff < 0 ? '#D63031' : '#C47D1A', detail: `${p.item}  ${fmtCur(amount || 0, p.currency || 'KRW')}`, icon: '💰', payKey: dbKey })
           }
         }
       }
@@ -126,9 +116,12 @@ export default function ExpoOverview() {
   const allE = entries
   const maxYear = allE.length ? Math.max(...allE.map(e => e.year)) : new Date().getFullYear()
   const yr2026 = allE.filter(e => e.year === maxYear)
-  const total2026 = yr2026.reduce((s, e) => s + e.total, 0)
-  const avg = allE.length ? Math.round(allE.reduce((s, e) => s + e.total, 0) / allE.length) : 0
-  const biggest = [...allE].sort((a, b) => b.total - a.total)[0]
+  // 예산은 통화별로 합산 (JPY 780,000을 ₩780,000으로 더하지 않도록)
+  const budgetByCur = (list: ExhEntry[]) => sumByCurrency(list.flatMap(e => e.budget), b => b.curr, b => b.currency)
+  const total2026 = budgetByCur(yr2026)
+  const avg = Object.fromEntries(Object.entries(budgetByCur(allE)).map(([c, v]) => [c, Math.round(v / allE.length)]))
+  // 통화가 다른 예산은 비교할 수 없으므로 원화 예산 기준 최고 비용
+  const biggest = [...allE].sort((a, b) => (budgetByCur([b]).KRW || 0) - (budgetByCur([a]).KRW || 0))[0]
   const uniqueExhs = new Set(allE.map(e => e.key)).size
 
   // 실 지출 순위 — 비용 결제 관리에서 '납부 완료' 체크된 선금/잔금 합계 기준, 완료된 행사만
@@ -202,18 +195,18 @@ export default function ExpoOverview() {
         </div>
         <div className="metric" onClick={() => navigate('/expo/payments')}>
           <div className="lbl">{maxYear} {t('budget_lbl')}</div>
-          <div className="val" style={{ color: 'var(--green)', fontSize: 18 }}>{krw(total2026)}</div>
+          <div className="val" style={{ color: 'var(--green)', fontSize: 18 }}>{fmtByCurrency(total2026)}</div>
           <div className="sub">{yr2026.length}{t('exh_sum')}</div>
         </div>
         <div className="metric" onClick={() => navigate('/expo/schedule')}>
           <div className="lbl">{t('avg_lbl')}</div>
-          <div className="val" style={{ color: 'var(--amber)', fontSize: 18 }}>{krw(avg)}</div>
+          <div className="val" style={{ color: 'var(--amber)', fontSize: 18 }}>{fmtByCurrency(avg)}</div>
           <div className="sub">{t('all_hist')}</div>
         </div>
         <div className="metric" onClick={() => biggest && navigate(`/expo/event/${biggest.key}/${biggest.year || maxYear}`)} style={{ cursor: 'pointer' }}>
           <div className="lbl">{t('top_lbl')}</div>
           <div className="val" style={{ color: 'var(--danger)', fontSize: 15 }}>{biggest ? exhDisplayName(biggest.name, biggest.key) : ''} {biggest?.year}</div>
-          <div className="sub">{krw(biggest?.total || 0)}</div>
+          <div className="sub">{biggest ? fmtByCurrency(budgetByCur([biggest])) : "-"}</div>
         </div>
       </div>
 

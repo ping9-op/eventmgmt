@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { exhColor, formatEventDate, isPastEvent, STAGE_ORDER, STAGE_COLORS, exhDisplayName, CUR_SYM, isActiveStage } from '../../lib/utils'
+import { exhColor, formatEventDate, isPastEvent, STAGE_ORDER, STAGE_COLORS, exhDisplayName, CUR_SYM, isActiveStage, parseEventDate, dayDiffFromToday, fmtCur as fmtMoney } from '../../lib/utils'
 import type { Exhibition, Payment, SalesLead, SalesTask, BudgetItem } from '../../types/database'
 import LeadDetailPanel from './LeadDetailPanel'
 import { useLang } from '../../contexts/LangContext'
@@ -83,15 +83,7 @@ export default function Dashboard() {
     const latest: Record<string, ExhEntry> = {}
     for (const e of entries) if (!latest[e.key] || e.year > latest[e.key].year) latest[e.key] = e
     return Object.values(latest).sort((a, b) => {
-      const parseD = (e: ExhEntry) => {
-        const m = e.date.toLowerCase().match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/)
-        const months: Record<string, number> = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 }
-        if (!m) return null
-        const yr = parseInt(e.date.match(/\d{4}/)?.[0] || String(e.year))
-        const day = parseInt(e.date.match(/(?<!\d)\d{1,2}(?!\d{3})/g)?.find(n => parseInt(n) <= 31) || '1')
-        return new Date(yr, months[m[1]], day)
-      }
-      const da = parseD(a), db = parseD(b)
+      const da = parseEventDate(a.date, a.year), db = parseEventDate(b.date, b.year)
       return da && db ? da.getTime() - db.getTime() : a.name.localeCompare(b.name)
     })
   }
@@ -99,13 +91,9 @@ export default function Dashboard() {
   function getUpcoming(): UpcomingItem[] {
     const items: UpcomingItem[] = []
     for (const e of getLatestSorted()) {
-      const m = e.date.toLowerCase().match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/)
-      if (!m) continue
-      const months: Record<string, number> = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 }
-      const yr = parseInt(e.date.match(/\d{4}/)?.[0] || String(e.year))
-      const day = parseInt(e.date.match(/(?<!\d)\d{1,2}(?!\d{3})/g)?.find(n => parseInt(n) <= 31) || '1')
-      const eventDate = new Date(yr, months[m[1]], day)
-      const diff = Math.round((eventDate.getTime() - today.getTime()) / 86400000)
+      const eventDate = parseEventDate(e.date, e.year)
+      if (!eventDate) continue
+      const diff = dayDiffFromToday(eventDate)!
       if (diff >= -7 && diff <= 60) {
         items.push({ days: diff, kind: 'expo', name: exhDisplayName(e.name, e.key) + ' ' + e.year, date: formatEventDate(e.date, e.year), color: exhColor(e.name), detail: e.venue, icon: '📅', path: '/expo/schedule' })
       }
@@ -120,10 +108,9 @@ export default function Dashboard() {
           ['final', p.final_due, p.final_amount, p.final_paid] as [string, string | null, number, boolean],
         ]) {
           if (paid || !due) continue
-          const dueDate = new Date(due)
-          const diff = Math.round((dueDate.getTime() - today.getTime()) / 86400000)
-          if (diff >= -7 && diff <= 60) {
-            items.push({ days: diff, kind: type, name, date: due, color: diff < 0 ? '#D63031' : '#C47D1A', detail: `${p.item}  ₩${(amount || 0).toLocaleString()}`, icon: '💰', path: '/expo/payments', payKey: dbKey })
+          const diff = dayDiffFromToday(due)
+          if (diff != null && diff >= -7 && diff <= 60) {
+            items.push({ days: diff, kind: type, name, date: due, color: diff < 0 ? '#D63031' : '#C47D1A', detail: `${p.item}  ${fmtMoney(amount || 0, p.currency || 'KRW')}`, icon: '💰', path: '/expo/payments', payKey: dbKey })
           }
         }
       }

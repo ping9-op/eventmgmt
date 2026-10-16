@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { STAGE_ORDER, STAGE_COLORS, priorityColor, isActiveStage } from '../../lib/utils'
 import { logStageChange } from '../../lib/stageHistory'
 import type { SalesLead, SalesProposal } from '../../types/database'
-import { loadSalesSettings } from '../../lib/settings'
+import { loadAllSettings } from '../../lib/settings'
 import LeadDetailPanel from './LeadDetailPanel'
 import LostReasonModal, { LeadContactMeta, type LostReasonInput } from '../LostReasonModal'
 import { useLang } from '../../contexts/LangContext'
@@ -27,7 +27,8 @@ export default function SalesFunnel() {
   const { showToast } = useToast()
   const location = useLocation()
   const isMobile = useIsMobile()
-  const { owners: OWNERS } = loadSalesSettings()
+  const [owners, setOwners] = useState<string[]>([])
+  useEffect(() => { loadAllSettings().then(s => setOwners(s.owners)) }, [])
 
   const KPI_CARDS = [
     { lbl: t('total'), stage: null as string | null, col: 'var(--text)' },
@@ -204,7 +205,7 @@ export default function SalesFunnel() {
         <div className="page-hdr-actions">
           <select value={filterOwner} onChange={e => setFilterOwner(e.target.value)} style={{ minWidth: 130, width: '100%' }}>
             <option value="">{t('all_owners')}</option>
-            {OWNERS.map(o => <option key={o}>{o}</option>)}
+            {owners.map(o => <option key={o}>{o}</option>)}
           </select>
         </div>
       </div>

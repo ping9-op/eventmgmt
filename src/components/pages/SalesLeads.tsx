@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { STAGE_ORDER, STAGE_COLORS, OUTREACH_CHANNELS, priorityColor, normalizeStage } from '../../lib/utils'
 import type { SalesLead } from '../../types/database'
-import { loadAllSettings, type SalesSettingsData } from '../../lib/settings'
+import { loadAllSettings, loadExpoEventNames, type SalesSettingsData } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
 import LeadDetailPanel from './LeadDetailPanel'
 import LostReasonModal, { LeadContactMeta, type LostReasonInput } from '../LostReasonModal'
@@ -164,25 +164,15 @@ export default function SalesLeads() {
     let cancelled = false
     async function run() {
       try {
-        const [{ data: leadsData }, { data: propData }, { data: exhData }, s] = await Promise.all([
+        const [{ data: leadsData }, expoNames, s] = await Promise.all([
           supabase.from('sales_leads').select('*').order('registered_date', { ascending: false }),
-          supabase.from('proposals').select('year, exhibition_id'),
-          supabase.from('exhibitions').select('id, name, key'),
+          loadExpoEventNames(),
           loadAllSettings(),
         ])
         if (!cancelled) {
           setLeads((leadsData || []) as SalesLead[])
           setSettings(s)
-
-          // 박람회 × 연도 조합으로 이벤트명 구성
-          const exhMap: Record<string, { name: string; key: string }> = {}
-          for (const e of (exhData || [])) exhMap[e.id] = { name: e.name, key: e.key }
-          const names = new Set<string>()
-          for (const p of (propData || [])) {
-            const exh = exhMap[p.exhibition_id]
-            if (exh) names.add(`${exh.name} ${p.year}`)
-          }
-          setExhEventNames([...names].sort().reverse())
+          setExhEventNames(expoNames)
         }
       } catch (e) {
         showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error')

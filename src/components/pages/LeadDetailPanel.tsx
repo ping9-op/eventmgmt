@@ -5,7 +5,7 @@ import LostReasonModal, { type LostReasonInput } from '../LostReasonModal'
 import DecimalInput from '../DecimalInput'
 import { useIsMobile } from '../../hooks/useBreakpoint'
 import { logStageChange } from '../../lib/stageHistory'
-import { loadAllSettings, CONTRACT_STATUSES as SYSTEM_CONTRACT_STATUSES, ONBOARD_STATUSES as SYSTEM_ONBOARD_STATUSES, type SalesSettingsData } from '../../lib/settings'
+import { loadAllSettings, loadExpoEventNames, CONTRACT_STATUSES as SYSTEM_CONTRACT_STATUSES, ONBOARD_STATUSES as SYSTEM_ONBOARD_STATUSES, type SalesSettingsData } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
 import type { SalesLead, SalesActivity, SalesTask, SalesProposal } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
@@ -21,6 +21,11 @@ const TASK_TYPE_MAP: Record<string, string> = {
   '제안서': 'Send Proposal', '기타': 'Other',
 }
 function taskTypeEn(type: string): string { return TASK_TYPE_MAP[type] || type }
+// 저장된 값이 설정 목록에 없으면(Excel 업로드 값, 설정에서 삭제된 값) 옵션에 추가 — 없으면 첫 옵션처럼 잘못 보임
+function withCurrent(list: string[] | undefined, current: string | null | undefined): string[] {
+  const l = list || []
+  return current && !l.includes(current) ? [current, ...l] : l
+}
 
 const ACTIVITY_ICONS: Record<string, { icon: string; color: string }> = {
   Email: { icon: '📧', color: '#4F46E5' },
@@ -78,8 +83,11 @@ export default function LeadDetailPanel({
   // Fee Rate는 입력 중인 문자열을 그대로 유지해야 "0." 같은 중간 입력(소수점)이 가능하다
   const [feeRateText, setFeeRateText] = useState<string | null>(null)
 
+  const [expoEventNames, setExpoEventNames] = useState<string[]>([])
+
   useEffect(() => {
     loadAllSettings().then(setSettings)
+    loadExpoEventNames().then(setExpoEventNames)
   }, [])
 
   useEffect(() => {
@@ -128,11 +136,12 @@ export default function LeadDetailPanel({
         phone: form.phone,
         email: form.email,
         lead_source: form.lead_source || lead.lead_source,
-        event_name: form.event_name || lead.event_name,
+        // 비울 수 있는 필드는 빈 값도 그대로 저장 (|| 로 이전 값으로 되돌리면 지울 방법이 없음)
+        event_name: form.event_name ?? lead.event_name,
         owner: form.owner || lead.owner,
         priority: form.priority || lead.priority,
-        country_corridor: form.country_corridor || lead.country_corridor,
-        business_type: form.business_type || lead.business_type,
+        country_corridor: form.country_corridor ?? lead.country_corridor,
+        business_type: form.business_type ?? lead.business_type,
         expected_monthly_volume: form.expected_monthly_volume ?? null,
         volume_currency: form.volume_currency || lead.volume_currency,
         address: form.address,
@@ -349,7 +358,7 @@ export default function LeadDetailPanel({
                 </Field>
                 <Field label="Lead Source">
                   <select value={form.lead_source || ''} onChange={e => setForm(f => ({ ...f, lead_source: e.target.value }))}>
-                    {(settings?.sources || []).map(s => <option key={s}>{s}</option>)}
+                    {withCurrent(settings?.sources, form.lead_source).map(s => <option key={s}>{s}</option>)}
                   </select>
                 </Field>
                 <Field label="Outreach Channel">
@@ -361,13 +370,14 @@ export default function LeadDetailPanel({
                 <Field label="Event Name">
                   <select value={form.event_name || ''} onChange={e => setForm(f => ({ ...f, event_name: e.target.value }))}>
                     <option value="">{t('select_placeholder')}</option>
-                    {(settings?.event_names || []).map(n => <option key={n}>{n}</option>)}
+                    {/* 등록 화면과 동일: 박람회 등록 이벤트 우선, 설정 이벤트 추가 */}
+                    {withCurrent([...expoEventNames, ...(settings?.event_names || []).filter(n => !expoEventNames.includes(n))], form.event_name).map(n => <option key={n}>{n}</option>)}
                   </select>
                 </Field>
                 <Field label="Owner">
                   {isAdmin ? (
                     <select value={form.owner || ''} onChange={e => setForm(f => ({ ...f, owner: e.target.value }))}>
-                      {(settings?.owners || []).map(o => <option key={o}>{o}</option>)}
+                      {withCurrent(settings?.owners, form.owner).map(o => <option key={o}>{o}</option>)}
                     </select>
                   ) : (
                     <input value={form.owner || ''} disabled style={{ background: 'var(--light)', color: 'var(--muted)' }} />
@@ -380,12 +390,14 @@ export default function LeadDetailPanel({
                 </Field>
                 <Field label="Corridor">
                   <select value={form.country_corridor || ''} onChange={e => setForm(f => ({ ...f, country_corridor: e.target.value }))}>
-                    {(settings?.corridors || []).map(c => <option key={c}>{c}</option>)}
+                    <option value="">—</option>
+                    {withCurrent(settings?.corridors, form.country_corridor).map(c => <option key={c}>{c}</option>)}
                   </select>
                 </Field>
                 <Field label="Business Type">
                   <select value={form.business_type || ''} onChange={e => setForm(f => ({ ...f, business_type: e.target.value }))}>
-                    {(settings?.business_types || []).map(b => <option key={b}>{b}</option>)}
+                    <option value="">—</option>
+                    {withCurrent(settings?.business_types, form.business_type).map(b => <option key={b}>{b}</option>)}
                   </select>
                 </Field>
                 <div style={{ gridColumn: '1 / -1' }}>
