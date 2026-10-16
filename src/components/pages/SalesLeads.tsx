@@ -381,14 +381,15 @@ export default function SalesLeads() {
     }
     const parsed: Partial<SalesLead>[] = rows.map(r => {
       const rawStage = get(r, 'current_stage')
-      const rawEvent = get(r, 'event_name')
+      const event = eventName || get(r, 'event_name')
       return {
         company_name: get(r, 'company_name'),
         contact_person: get(r, 'contact_person'),
         phone: get(r, 'phone') || null,
         email: get(r, 'email') || null,
-        lead_source: get(r, 'lead_source') || 'Expo',
-        event_name: eventName || rawEvent,
+        // 출처가 비어 있으면 행사명이 있는 행만 Expo로 간주 (박람회 외 리드를 Expo로 잘못 기록하지 않도록)
+        lead_source: get(r, 'lead_source') || (event ? 'Expo' : ''),
+        event_name: event,
         owner: get(r, 'owner') || 'Andrew',
         priority: get(r, 'priority') || 'Medium',
         current_stage: normalizeStage(rawStage),
@@ -401,6 +402,8 @@ export default function SalesLeads() {
       }
     }).filter(r => r.company_name)
     if (!parsed.length) { showToast('⚠️ 매핑한 회사명 컬럼에 값이 없습니다. 매핑을 다시 확인해주세요.'); return }
+    const noSource = parsed.filter(r => !r.lead_source).length
+    if (noSource) { showToast(`⚠️ 출처(Source)와 행사명이 모두 비어 있는 행이 ${noSource}개 있습니다. Source 컬럼을 매핑하거나 값을 채워주세요.`); return }
     setExcelPreview({ rows: parsed, fileName: mappingState.fileName, eventName })
     setMappingState(null)
   }
@@ -423,7 +426,7 @@ export default function SalesLeads() {
         contact_person: r.contact_person || '',
         phone: r.phone || null,
         email: r.email || null,
-        lead_source: r.lead_source || 'Expo',
+        lead_source: r.lead_source || '', // confirmMapping에서 빈 출처는 이미 걸러짐
         event_name: r.event_name || '',
         // 관리자가 아니면 Excel의 Owner 컬럼값과 무관하게 본인 계정으로 등록 (RLS와 일치)
         owner: isAdmin ? (r.owner || 'Andrew') : (salesOwner || r.owner || 'Andrew'),
