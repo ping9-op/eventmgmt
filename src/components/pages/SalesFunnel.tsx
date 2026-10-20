@@ -12,6 +12,7 @@ import { useToast } from '../../contexts/ToastContext'
 import { useIsMobile } from '../../hooks/useBreakpoint'
 import LoadingSpinner from '../LoadingSpinner'
 import { loadAllEventRefs, type EventRef } from '../../lib/events'
+import { decryptRows, PII_FIELDS } from '../../lib/pii'
 import { toEventRefMap, leadEventLabel } from '../../lib/leadEvents'
 
 type TabType = 'board' | 'table' | 'proposal'
@@ -98,10 +99,11 @@ export default function SalesFunnel() {
           supabase.from('sales_leads').select('*').is('archived_at', null),
           supabase.from('sales_proposals').select('*'),
         ])
-        if (cancelled) return
         if (le) throw le
         if (pe) throw pe
-        setLeads((leadData || []) as SalesLead[])
+        const plainLeads = await decryptRows('sales_leads', (leadData || []) as SalesLead[])
+        if (cancelled) return
+        setLeads(plainLeads)
         setProposals((propData || []) as SalesProposal[])
       } catch (err: any) {
         showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error')
@@ -126,7 +128,7 @@ export default function SalesFunnel() {
       ])
       if (le) throw le
       if (pe) throw pe
-      setLeads((leadData || []) as SalesLead[])
+      setLeads(await decryptRows('sales_leads', (leadData || []) as SalesLead[]))
       setProposals((propData || []) as SalesProposal[])
     } catch (err: any) {
       console.error('SalesFunnel load error:', err?.message)
@@ -141,7 +143,10 @@ export default function SalesFunnel() {
     // last_contact_date / lost_at_stage 는 DB 트리거가 채우므로 갱신된 행을 받아온다
     const { data, error } = await supabase.from('sales_leads').update({ current_stage: stage, ...lost }).eq('id', leadId).select().single()
     if (!error && data) {
-      setLeads(p => p.map(l => l.id === leadId ? data as SalesLead : l))
+      // DB가 돌려준 행의 개인정보 필드는 암호문이므로 화면의 복호화된 값을 유지
+      setLeads(p => p.map(l => l.id === leadId
+        ? { ...(data as SalesLead), ...Object.fromEntries(PII_FIELDS.sales_leads.map(f => [f, l[f]])) }
+        : l))
       logStageChange(leadId, prev, stage)
     } else if (error) showToast('단계 변경에 실패했습니다.', 'error')
   }

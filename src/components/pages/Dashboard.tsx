@@ -8,6 +8,7 @@ import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
 import LoadingSpinner from '../LoadingSpinner'
 import { eventLabel } from '../../lib/events'
+import { decryptRows } from '../../lib/pii'
 
 
 function fmtCur(amt: number, cur: string, lang: string): string {
@@ -70,7 +71,8 @@ export default function Dashboard() {
           payMap[p.proposal_id].push(p)
         }
         setPayments(payMap)
-        const activeLeads = (leadData || []) as SalesLead[]
+        const activeLeads = await decryptRows('sales_leads', (leadData || []) as SalesLead[])
+        if (cancelled) return
         const activeIds = new Set(activeLeads.map(l => l.id))
         setLeads(activeLeads)
         setTasks(((taskData || []) as SalesTask[]).filter(t => activeIds.has(t.lead_id))) // 보관된 리드의 Task 제외
@@ -353,7 +355,7 @@ export default function Dashboard() {
             if (!selectedLeadId) return
             try {
               const { data } = await supabase.from('sales_leads').select('*').is('archived_at', null)
-              if (data) setLeads(data as SalesLead[])
+              if (data) setLeads(await decryptRows('sales_leads', data as SalesLead[]))
             } catch (err: any) {
               showToast('새로고침 중 오류가 발생했습니다.', 'error')
             }

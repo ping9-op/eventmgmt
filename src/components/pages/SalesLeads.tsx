@@ -6,6 +6,7 @@ import { STAGE_ORDER, STAGE_COLORS, OUTREACH_CHANNELS, priorityColor, normalizeS
 import type { SalesLead } from '../../types/database'
 import { loadAllSettings, type SalesSettingsData } from '../../lib/settings'
 import { loadAllEventRefs, eventLabel, type EventRef } from '../../lib/events'
+import { encryptRows, decryptRows, PII_FIELDS } from '../../lib/pii'
 import { toEventRefMap, leadEventLabel, leadEventGroupKey, eventGroupLabel, isEventKey, isExpoKey, matchEventRef, eventSelectOptions, eventSelectToFields } from '../../lib/leadEvents'
 import { useToast } from '../../contexts/ToastContext'
 import LeadDetailPanel from './LeadDetailPanel'
@@ -201,8 +202,8 @@ export default function SalesLeads() {
           loadAllEventRefs(),
           loadAllSettings(),
         ])
+        const rows = await decryptRows('sales_leads', (leadsData || []) as LeadRow[])
         if (!cancelled) {
-          const rows = (leadsData || []) as LeadRow[]
           setLeads(rows as SalesLead[])
           setSettings(s)
           setEventRefs(refs)
@@ -237,7 +238,7 @@ export default function SalesLeads() {
   async function load() {
     try {
       const { data } = await supabase.from('sales_leads').select('*').is('archived_at', null).order('registered_date', { ascending: false })
-      setLeads((data || []) as SalesLead[])
+      setLeads(await decryptRows('sales_leads', (data || []) as SalesLead[]))
     } catch (e) {
       showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error')
     } finally {
@@ -246,10 +247,14 @@ export default function SalesLeads() {
   }
 
   // last_contact_date / lost_at_stage 는 DB 트리거가 채우므로 갱신된 행으로 state를 교체한다
+  // 단, DB가 돌려준 행의 개인정보 필드는 암호문이므로 화면의 복호화된 값을 유지
   function mergeUpdated(rows: SalesLead[] | null) {
     if (!rows?.length) return
     const byId = new Map(rows.map(r => [r.id, r]))
-    setLeads(p => p.map(l => byId.get(l.id) || l))
+    setLeads(p => p.map(l => {
+      const r = byId.get(l.id)
+      return r ? { ...r, ...Object.fromEntries(PII_FIELDS.sales_leads.map(f => [f, l[f]])) } : l
+    }))
   }
 
   async function updateStage(leadId: string, stage: string, lost?: LostReasonInput) {
@@ -300,7 +305,7 @@ export default function SalesLeads() {
     if (!form.lead_source) { showToast('⚠️ Source(출처)를 선택해주세요.'); return }
     const owner = isAdmin ? form.owner : (salesOwner || form.owner)
     if (!owner) { showToast('⚠️ 담당자(Owner)를 선택해주세요.'); return }
-    const { error } = await supabase.from('sales_leads').insert({
+    const plainRow = {
       company_name: form.company_name || '',
       contact_person: form.contact_person || '',
       lead_source: form.lead_source,
@@ -321,7 +326,12 @@ export default function SalesLeads() {
       remarks: form.remarks || null,
       outreach_channel: form.outreach_channel || null,
       last_contact_date: form.last_contact_date || null,
-    })
+    }
+    // 개인정보 필드는 암호화해서 저장 (암호문이 행 id에 묶이므로 id를 미리 생성)
+    let row
+    try { [row] = await encryptRows('sales_leads', [plainRow]) }
+    catch (e: any) { showToast('⚠️ 등록 실패 (암호화): ' + (e?.message || '알 수 없는 오류')); return }
+    const { error } = await supabase.from('sales_leads').insert(row)
     if (error) { showToast('⚠️ 등록 실패: ' + error.message); return }
     setShowRegister(false)
     resetForm()
@@ -469,7 +479,10 @@ export default function SalesLeads() {
         first_contact_done: false,
         registered_date: r.registered_date || localDateStr(),
       }))
-      const { error } = await supabase.from('sales_leads').insert(inserts)
+      let encrypted
+      try { encrypted = await encryptRows('sales_leads', inserts) }
+      catch (e: any) { showToast('⚠️ 등록 실패 (암호화): ' + (e?.message || '알 수 없는 오류')); return }
+      const { error } = await supabase.from('sales_leads').insert(encrypted)
       if (error) { showToast('⚠️ 등록 실패: ' + error.message); return }
       setExcelPreview(null)
       showToast(`✅ ${rows.length}개 리드가 등록되었습니다.`)

@@ -5,6 +5,7 @@ import { STAGE_COLORS, priorityColor, isActiveStage, localDateStr } from '../../
 import type { SalesTask, SalesLead } from '../../types/database'
 import { useToast } from '../../contexts/ToastContext'
 import LeadDetailPanel from './LeadDetailPanel'
+import { encryptRows, decryptRows } from '../../lib/pii'
 import { useLang } from '../../contexts/LangContext'
 
 const TASK_TYPES = ['Email', 'Call', 'SMS', 'Meeting', 'Send Proposal', 'Request Docs', 'Other']
@@ -68,7 +69,11 @@ export default function SalesFollowUp() {
         if (te) throw te
         if (le) throw le
         const activeIds = new Set((leadData || []).map(l => l.id))
-        const rawTasks = ((taskData || []) as SalesTask[]).filter(t => activeIds.has(t.lead_id)) // 보관된 리드의 Task 제외
+        const [rawTasks, plainLeads] = await Promise.all([
+          decryptRows('sales_tasks', ((taskData || []) as SalesTask[]).filter(t => activeIds.has(t.lead_id))), // 보관된 리드의 Task 제외
+          decryptRows('sales_leads', (leadData || []) as SalesLead[]),
+        ])
+        if (cancelled) return
         const processedTasks = rawTasks.map(t => {
           if (t.status === 'Done') return t
           if (t.due_date < today) return { ...t, status: 'Overdue' }
@@ -76,7 +81,7 @@ export default function SalesFollowUp() {
           return t
         })
         if (!cancelled) setTasks(processedTasks)
-        if (!cancelled) setLeads((leadData || []) as SalesLead[])
+        if (!cancelled) setLeads(plainLeads)
       } catch (err: any) {
         if (!cancelled) showToast('⚠️ 데이터 로드 실패: ' + (err?.message || '알 수 없는 오류'))
       } finally {
@@ -96,7 +101,10 @@ export default function SalesFollowUp() {
       if (te) throw te
       if (le) throw le
       const activeIds = new Set((leadData || []).map(l => l.id))
-      const rawTasks = ((taskData || []) as SalesTask[]).filter(t => activeIds.has(t.lead_id)) // 보관된 리드의 Task 제외
+      const [rawTasks, plainLeads] = await Promise.all([
+        decryptRows('sales_tasks', ((taskData || []) as SalesTask[]).filter(t => activeIds.has(t.lead_id))), // 보관된 리드의 Task 제외
+        decryptRows('sales_leads', (leadData || []) as SalesLead[]),
+      ])
       const processedTasks = rawTasks.map(t => {
         if (t.status === 'Done') return t
         if (t.due_date < today) return { ...t, status: 'Overdue' }
@@ -104,7 +112,7 @@ export default function SalesFollowUp() {
         return t
       })
       setTasks(processedTasks)
-      setLeads((leadData || []) as SalesLead[])
+      setLeads(plainLeads)
     } catch (err: any) {
       showToast('⚠️ 데이터 로드 실패: ' + (err?.message || '알 수 없는 오류'))
     } finally {
@@ -149,11 +157,16 @@ export default function SalesFollowUp() {
   async function addTask() {
     if (!form.lead_id || !form.task_title) { showToast('⚠️ Lead와 Task 제목은 필수입니다.'); return }
     // Task 담당자는 리드 담당자로 고정 (DB 트리거가 보장 — 리드 담당자가 바뀌면 함께 변경)
-    const { error } = await supabase.from('sales_tasks').insert({
-      lead_id: form.lead_id, task_title: form.task_title, task_type: form.task_type,
-      due_date: form.due_date, status: form.status, priority: form.priority,
-      owner: leads.find(l => l.id === form.lead_id)?.owner || '', note: form.note || null,
-    })
+    // 메모는 암호화해서 저장 (암호화 실패 시 저장하지 않음)
+    let task
+    try {
+      [task] = await encryptRows('sales_tasks', [{
+        lead_id: form.lead_id, task_title: form.task_title, task_type: form.task_type,
+        due_date: form.due_date, status: form.status, priority: form.priority,
+        owner: leads.find(l => l.id === form.lead_id)?.owner || '', note: form.note || null,
+      }])
+    } catch (e: any) { showToast('⚠️ Task 추가 실패 (암호화): ' + (e?.message || '알 수 없는 오류')); return }
+    const { error } = await supabase.from('sales_tasks').insert(task)
     if (error) { showToast('⚠️ Task 추가 실패: ' + error.message); return }
     setShowAddTask(false)
     setForm({ lead_id: '', task_title: '', task_type: 'Email', due_date: today, status: 'Pending', priority: 'Medium', note: '' })

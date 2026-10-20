@@ -5,6 +5,7 @@ import { useToast } from '../../contexts/ToastContext'
 import { useLang } from '../../contexts/LangContext'
 import { exhColor } from '../../lib/utils'
 import { eventLabel, eventPath } from '../../lib/events'
+import { decryptRows } from '../../lib/pii'
 import type { Exhibition, Proposal, SalesLead } from '../../types/database'
 import LoadingSpinner from '../LoadingSpinner'
 import EmptyState from '../EmptyState'
@@ -51,7 +52,9 @@ export default function Archive() {
       ])
       if (cancelled?.current) return
       if (exhErr || propErr || leadErr) { showToast('보관함 데이터 로드 중 오류가 발생했습니다.', 'error'); return }
-      setArchivedLeads((leadData || []) as SalesLead[])
+      const plainLeads = await decryptRows('sales_leads', (leadData || []) as SalesLead[])
+      if (cancelled?.current) return
+      setArchivedLeads(plainLeads)
 
       const exhs = (exhData || []) as Exhibition[]
       const props = ((propData || []) as unknown as Proposal[])

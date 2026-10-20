@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../contexts/ToastContext'
 import { loadAllEventRefs, eventLabel, type EventRef } from '../../lib/events'
+import { piiAdmin, type PiiStatus } from '../../lib/pii'
 import LoadingSpinner from '../LoadingSpinner'
 import EmptyState from '../EmptyState'
 
@@ -12,7 +13,7 @@ import EmptyState from '../EmptyState'
 // - 보기: 조회만 / 편집: 행사 정보·결제·체크리스트·보고서 수정 (박람회 전체 편집이면 회차 추가·박람회 보관도 가능)
 // 관리자는 권한 부여 없이 전체 접근. 새 박람회 등록은 관리자만.
 
-interface UserRow { id: string; email: string; sales_owner: string | null; is_admin: boolean; last_sign_in_at: string | null }
+interface UserRow { id: string; email: string; sales_owner: string | null; is_admin: boolean; last_sign_in_at: string | null; has_mfa: boolean }
 interface PermRow { id: string; user_id: string; exhibition_id: string | null; proposal_id: string | null; level: 'view' | 'edit'; granted_by: string | null; created_at: string }
 
 const LEVEL_LABEL: Record<string, string> = { view: '보기', edit: '편집' }
@@ -25,6 +26,9 @@ export default function Permissions() {
   const [perms, setPerms] = useState<PermRow[]>([])
   const [refs, setRefs] = useState<EventRef[]>([])
   const [saving, setSaving] = useState(false)
+  const [piiStatus, setPiiStatus] = useState<PiiStatus | null>(null)
+  const [piiBusy, setPiiBusy] = useState(false)
+  const [resetTarget, setResetTarget] = useState<UserRow | null>(null)
 
   // 부여 폼
   const [fUser, setFUser] = useState('')
@@ -48,7 +52,28 @@ export default function Permissions() {
     }
   }
 
-  useEffect(() => { if (isAdmin) load(); else setLoading(false) }, [isAdmin])
+  useEffect(() => { if (isAdmin) { load(); runPii('status') } else setLoading(false) }, [isAdmin])
+
+  // 개인정보 암호화 현황 확인 / 아직 평문인 기존 데이터 일괄 암호화
+  async function runPii(action: 'status' | 'migrate') {
+    setPiiBusy(true)
+    try {
+      setPiiStatus(await piiAdmin(action))
+      if (action === 'migrate') showToast('기존 데이터 암호화가 완료되었습니다.')
+    } catch (e: any) {
+      showToast('⚠️ 암호화 ' + (action === 'migrate' ? '실행' : '현황 확인') + ' 실패: ' + (e?.message || '알 수 없는 오류'))
+    } finally {
+      setPiiBusy(false)
+    }
+  }
+
+  async function resetMfa(u: UserRow) {
+    const { error } = await supabase.rpc('admin_reset_mfa', { p_user: u.id })
+    if (error) { showToast('⚠️ OTP 초기화 실패: ' + error.message); return }
+    setResetTarget(null)
+    showToast(`${u.sales_owner || u.email}의 OTP가 초기화되었습니다. 다음 로그인 때 다시 등록합니다.`)
+    load()
+  }
 
   if (!isAdmin) return <div className="view"><EmptyState icon="🔒" title="관리자만 접근할 수 있습니다" /></div>
   if (loading) return <div className="view"><LoadingSpinner /></div>
@@ -187,6 +212,66 @@ export default function Permissions() {
           )
         })}
       </div>
+
+      {/* 계정 보안: 2단계 인증 현황 / OTP 초기화 */}
+      <div className="card" style={{ marginTop: 24 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>2단계 인증 (OTP)</div>
+        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>모든 계정 필수. 휴대폰 변경·분실 시 초기화하면 다음 로그인 때 다시 등록합니다.</div>
+        {users.map(u => (
+          <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '8px 0', borderTop: '0.5px solid var(--border2)' }}>
+            <div style={{ flex: '1 1 220px', minWidth: 0, fontSize: 13 }}>{userLabel(u)}</div>
+            <span style={{ fontSize: 12, fontWeight: 600, color: u.has_mfa ? '#2E7D51' : '#D97706' }}>{u.has_mfa ? '등록됨' : '미등록 (다음 로그인 때 등록)'}</span>
+            {u.has_mfa && <button className="btn btn-muted btn-sm" onClick={() => setResetTarget(u)}>OTP 초기화</button>}
+          </div>
+        ))}
+      </div>
+
+      {/* 개인정보 암호화 현황 */}
+      <div className="card" style={{ marginTop: 16 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>개인정보 암호화</div>
+        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.6 }}>
+          리드 담당자명·전화·이메일·주소·비고, Activity·Task 메모는 DB에 암호문으로만 저장됩니다. 아래 수치는 아직 암호화되지 않은 기존 데이터 건수입니다.
+        </div>
+        {piiStatus ? (
+          <div style={{ fontSize: 13, lineHeight: 1.8 }}>
+            {Object.entries(piiStatus).map(([table, s]) => (
+              <div key={table}>
+                {{ sales_leads: '세일즈 리드', sales_activities: 'Activity', sales_tasks: 'Task' }[table] || table}: 미암호화 <b>{s.remaining}</b>건
+                {s.encrypted !== undefined && <span style={{ color: 'var(--muted)' }}> (이번에 {s.encrypted}건 암호화)</span>}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: 'var(--muted)' }}>{piiBusy ? '확인 중...' : '현황을 불러오지 못했습니다.'}</div>
+        )}
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+          <button className="btn btn-muted btn-sm" onClick={() => runPii('status')} disabled={piiBusy}>현황 새로고침</button>
+          {piiStatus && Object.values(piiStatus).some(s => s.remaining > 0) && (
+            <button className="btn btn-primary btn-sm" onClick={() => runPii('migrate')} disabled={piiBusy}>
+              {piiBusy ? '처리 중...' : '기존 데이터 암호화 실행'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {resetTarget && (
+        <div className="modal-bg open">
+          <div className="modal" style={{ maxWidth: 400 }}>
+            <div className="modal-hdr">
+              <h3>OTP 초기화</h3>
+              <button className="modal-close" onClick={() => setResetTarget(null)}>✕</button>
+            </div>
+            <p style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 20, lineHeight: 1.6 }}>
+              <b style={{ color: 'var(--text)' }}>{userLabel(resetTarget)}</b>의 등록된 OTP를 삭제합니다.
+              본인 확인 후 진행하세요. 해당 직원은 다음 로그인 때 새 휴대폰으로 다시 등록합니다.
+            </p>
+            <div className="modal-footer">
+              <button className="btn btn-muted" onClick={() => setResetTarget(null)}>취소</button>
+              <button className="btn btn-red" onClick={() => resetMfa(resetTarget)}>초기화</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 20, lineHeight: 1.7 }}>
         관리자({admins.map(a => a.sales_owner || a.email).join(', ')})는 권한 부여 없이 모든 박람회·행사에 접근합니다.<br />

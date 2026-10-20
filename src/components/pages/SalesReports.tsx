@@ -8,6 +8,7 @@ import { useToast } from '../../contexts/ToastContext'
 import LoadingSpinner from '../LoadingSpinner'
 import { computeAvgDaysPerStage, type StageHistoryRow } from '../../lib/stageHistory'
 import { loadAllEventRefs, type EventRef } from '../../lib/events'
+import { decryptRows } from '../../lib/pii'
 import { toEventRefMap, groupLeadsByEvent, eventGroupFilter } from '../../lib/leadEvents'
 
 type PeriodFilter = 'all' | 'month' | '3months' | 'year'
@@ -67,8 +68,8 @@ export default function SalesReports() {
           loadAllEventRefs(),
         ])
         if (le) { showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error') }
+        const activeLeads = await decryptRows('sales_leads', (leadData || []) as SalesLead[])
         if (!cancelled) {
-          const activeLeads = (leadData || []) as SalesLead[]
           const activeIds = new Set(activeLeads.map(l => l.id))
           setAllLeads(activeLeads)
           // 보관된 리드의 단계 이력은 집계에서 제외

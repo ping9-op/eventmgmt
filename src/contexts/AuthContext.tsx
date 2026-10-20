@@ -10,6 +10,15 @@ const IDLE_TIMEOUT_MS = 2 * 60 * 60 * 1000
 const LAST_ACTIVITY_KEY = 'gme_last_activity'
 const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart'] as const
 
+function jwtAal(token?: string): string | null {
+  try {
+    const p = (token || '').split('.')[1] || ''
+    return JSON.parse(atob(p.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (p.length % 4)) % 4))).aal ?? null
+  } catch {
+    return null
+  }
+}
+
 interface AuthContextType {
   user: User | null
   session: Session | null
@@ -17,7 +26,8 @@ interface AuthContextType {
   isAdmin: boolean
   salesOwner: string | null
   mustChangePassword: boolean
-  signIn:(email: string, password: string) => Promise<{ error: string | null }>
+  mfaVerified: boolean
+  signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
 }
 
@@ -90,6 +100,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // 해제는 change_initial_password RPC(현재 비밀번호 검증 + 변경)에서만 가능
   const mustChangePassword = (user?.app_metadata as any)?.must_change_password === true
 
+  // 2단계 인증(OTP) 완료 여부 — 세션 토큰의 aal 클레임이 aal2여야 함
+  // DB 정책(RLS)과 암호화 함수도 aal2 세션만 허용하므로, 여기서는 화면 분기용
+  const mfaVerified = jwtAal(session?.access_token) === 'aal2'
+
   async function signIn(email: string, password: string) {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) return { error: error.message }
@@ -103,7 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, isAdmin, salesOwner, mustChangePassword, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, isAdmin, salesOwner, mustChangePassword, mfaVerified, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   )

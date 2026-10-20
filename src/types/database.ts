@@ -126,7 +126,7 @@ export type Database = {
           proposal_id: string | null; archived_at: string | null
         }
         Insert: {
-          serial_no?: string; registered_date: string; event_name: string
+          id?: string; serial_no?: string; registered_date: string; event_name: string
           company_name: string; contact_person: string; phone?: string | null; email?: string | null
           lead_source: string; address?: string | null; business_type: string; country_corridor: string
           expected_monthly_volume?: number | null; volume_currency?: string; priority?: string
@@ -155,7 +155,7 @@ export type Database = {
           activity_date: string; note: string | null; created_by: string; created_at: string
         }
         Insert: {
-          lead_id: string; activity_type: string; activity_result?: string | null
+          id?: string; lead_id: string; activity_type: string; activity_result?: string | null
           activity_date: string; note?: string | null; created_by: string
         }
         Update: {
@@ -171,7 +171,7 @@ export type Database = {
           completed_at: string | null; note: string | null; created_at: string
         }
         Insert: {
-          lead_id: string; task_title: string; task_type: string
+          id?: string; lead_id: string; task_title: string; task_type: string
           due_date: string; status?: string; priority?: string; owner: string
           completed_at?: string | null; note?: string | null
         }
@@ -245,7 +245,11 @@ export type Database = {
       }
       admin_list_users: {
         Args: Record<string, never>
-        Returns: { id: string; email: string; sales_owner: string | null; is_admin: boolean; last_sign_in_at: string | null }[]
+        Returns: { id: string; email: string; sales_owner: string | null; is_admin: boolean; last_sign_in_at: string | null; has_mfa: boolean }[]
+      }
+      admin_reset_mfa: {
+        Args: { p_user: string }
+        Returns: undefined
       }
     }
     Enums: {

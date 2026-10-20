@@ -6,6 +6,7 @@ import DecimalInput from '../DecimalInput'
 import { useIsMobile } from '../../hooks/useBreakpoint'
 import { logStageChange } from '../../lib/stageHistory'
 import { loadAllEventRefs, type EventRef } from '../../lib/events'
+import { encryptRows, decryptRows } from '../../lib/pii'
 import { toEventRefMap, leadEventLabel, eventSelectOptions, leadEventSelectValue, eventSelectToFields } from '../../lib/leadEvents'
 import { loadAllSettings, CONTRACT_STATUSES as SYSTEM_CONTRACT_STATUSES, ONBOARD_STATUSES as SYSTEM_ONBOARD_STATUSES, type SalesSettingsData } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
@@ -111,10 +112,15 @@ export default function LeadDetailPanel({
           supabase.from('sales_tasks').select('*').eq('lead_id', leadId).order('due_date'),
           supabase.from('sales_proposals').select('*').eq('lead_id', leadId).single(),
         ])
+        const [leadRows, acts, tsks] = await Promise.all([
+          decryptRows('sales_leads', lData ? [lData as SalesLead] : []),
+          decryptRows('sales_activities', (aData || []) as SalesActivity[]),
+          decryptRows('sales_tasks', (tData || []) as SalesTask[]),
+        ])
         if (cancelled) return
-        if (lData) applyLoadedLead(lData as SalesLead)
-        setActivities((aData || []) as SalesActivity[])
-        setTasks((tData || []) as SalesTask[])
+        if (leadRows[0]) applyLoadedLead(leadRows[0])
+        setActivities(acts)
+        setTasks(tsks)
         if (pData) {
           setProposal(pData as SalesProposal)
           setPropForm(pData as SalesProposal)
@@ -167,7 +173,10 @@ export default function LeadDetailPanel({
         lost_reason_note: form.lost_reason_note || null,
         outreach_channel: form.outreach_channel || null,
       }
-      const { error: leadErr } = await supabase.from('sales_leads').update(updates as never).eq('id', leadId)
+      // 개인정보 필드는 암호화해서 저장 (암호화 실패 시 저장하지 않음)
+      const [encUpdates] = await encryptRows('sales_leads', [{ ...updates, id: leadId }])
+      const { id: _id, ...encFields } = encUpdates
+      const { error: leadErr } = await supabase.from('sales_leads').update(encFields as never).eq('id', leadId)
       if (leadErr) throw leadErr
 
       // 스테이지 변경 시 이력 기록
@@ -200,7 +209,7 @@ export default function LeadDetailPanel({
       showToast(t('saved_ok'))
       onRefresh()
       const { data } = await supabase.from('sales_leads').select('*').eq('id', leadId).single()
-      if (data) applyLoadedLead(data as SalesLead)
+      if (data) applyLoadedLead((await decryptRows('sales_leads', [data as SalesLead]))[0])
     } catch (err: any) {
       showToast('⚠️ 저장 실패: ' + (err?.message || '알 수 없는 오류'))
     } finally {
@@ -228,22 +237,24 @@ export default function LeadDetailPanel({
 
   async function addActivity() {
     try {
-      const { error } = await supabase.from('sales_activities').insert({
+      // 메모는 암호화해서 저장 (암호화 실패 시 저장하지 않음)
+      const [act] = await encryptRows('sales_activities', [{
         lead_id: leadId,
         activity_type: actType,
         activity_result: actResult,
         activity_date: actDate,
         note: actNote,
         created_by: '', // DB 트리거(set_actor)가 실제 작업자로 채움
-      })
+      }])
+      const { error } = await supabase.from('sales_activities').insert(act)
       if (error) { showToast('⚠️ Activity 저장 실패: ' + error.message); return }
       setActNote(''); setShowActForm(false); setActDate(localDateStr())
       const [{ data: aData }, { data: tData }] = await Promise.all([
         supabase.from('sales_activities').select('*').eq('lead_id', leadId).order('activity_date', { ascending: false }),
         supabase.from('sales_tasks').select('*').eq('lead_id', leadId).order('due_date'),
       ])
-      setActivities((aData || []) as SalesActivity[])
-      setTasks((tData || []) as SalesTask[])
+      setActivities(await decryptRows('sales_activities', (aData || []) as SalesActivity[]))
+      setTasks(await decryptRows('sales_tasks', (tData || []) as SalesTask[]))
       onRefresh()
     } catch (err: any) {
       showToast('⚠️ Activity 저장 실패: ' + (err?.message || '알 수 없는 오류'))
@@ -254,7 +265,7 @@ export default function LeadDetailPanel({
     const { error } = await supabase.from('sales_tasks').update({ status: 'Done', completed_at: localDateStr() }).eq('id', taskId)
     if (error) { showToast('⚠️ 완료 처리 실패: ' + error.message); return }
     const { data } = await supabase.from('sales_tasks').select('*').eq('lead_id', leadId).order('due_date')
-    setTasks((data || []) as SalesTask[])
+    setTasks(await decryptRows('sales_tasks', (data || []) as SalesTask[]))
     onRefresh()
   }
 
@@ -267,7 +278,7 @@ export default function LeadDetailPanel({
       if (error) throw error
       logStageChange(leadId, prev, stage)
       const { data } = await supabase.from('sales_leads').select('*').eq('id', leadId).single()
-      if (data) applyLoadedLead(data as SalesLead)
+      if (data) applyLoadedLead((await decryptRows('sales_leads', [data as SalesLead]))[0])
       onRefresh()
     } catch (err: any) {
       setForm(f => ({ ...f, current_stage: prev || undefined }))

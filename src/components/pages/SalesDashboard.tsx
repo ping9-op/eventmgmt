@@ -9,6 +9,7 @@ import { useToast } from '../../contexts/ToastContext'
 import { useIsMobile } from '../../hooks/useBreakpoint'
 import LoadingSpinner from '../LoadingSpinner'
 import { loadAllEventRefs, type EventRef } from '../../lib/events'
+import { decryptRows } from '../../lib/pii'
 import { toEventRefMap, groupLeadsByEvent, eventGroupFilter } from '../../lib/leadEvents'
 
 function krwusd(vol: number | null, cur: string): string {
@@ -50,11 +51,13 @@ export default function SalesDashboard() {
         if (le) throw le
         if (te) throw te
         if (!cancelled) {
-          const activeLeads = (leadData || []) as SalesLead[]
+          const activeLeads = await decryptRows('sales_leads', (leadData || []) as SalesLead[])
           const activeIds = new Set(activeLeads.map(l => l.id))
-          setLeads(activeLeads)
           // 보관된 리드의 Task는 제외
-          setTasks(((taskData || []) as SalesTask[]).filter(t => activeIds.has(t.lead_id)))
+          const activeTasks = await decryptRows('sales_tasks', ((taskData || []) as SalesTask[]).filter(t => activeIds.has(t.lead_id)))
+          if (cancelled) return
+          setLeads(activeLeads)
+          setTasks(activeTasks)
           setEventRefs(refs)
         }
       } catch (err: any) {
@@ -320,7 +323,7 @@ export default function SalesDashboard() {
             try {
               const { data, error } = await supabase.from('sales_leads').select('*').is('archived_at', null)
               if (error) throw error
-              setLeads((data || []) as SalesLead[])
+              setLeads(await decryptRows('sales_leads', (data || []) as SalesLead[]))
             } catch (err: any) {
               showToast('새로고침 중 오류가 발생했습니다.', 'error')
             }
