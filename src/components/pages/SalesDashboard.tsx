@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { STAGE_ORDER, STAGE_COLORS, isActiveStage, localDateStr } from '../../lib/utils'
+import { STAGE_ORDER, STAGE_COLORS, isActiveStage, localDateStr, dayDiffFromToday, priorityColor } from '../../lib/utils'
 import type { SalesLead, SalesTask } from '../../types/database'
 import LeadDetailPanel from './LeadDetailPanel'
 import { useLang } from '../../contexts/LangContext'
@@ -11,6 +11,18 @@ import LoadingSpinner from '../LoadingSpinner'
 import { loadAllEventRefs, type EventRef } from '../../lib/events'
 import { decryptRows } from '../../lib/pii'
 import { toEventRefMap, groupLeadsByEvent, eventGroupFilter } from '../../lib/leadEvents'
+
+const UPCOMING_DAYS = 14   // 다가오는 일정: 오늘부터 며칠 뒤까지 (지연된 Task는 기간과 무관하게 모두 표시)
+const UPCOMING_MAX = 8     // 대시보드에 표시할 최대 개수 (나머지는 팔로우업 관리에서)
+const PRIORITY_RANK: Record<string, number> = { High: 0, Medium: 1, Low: 2 }
+const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
+
+/** '2026-10-21' → '10/21 (수)' */
+function fmtDue(d: string): string {
+  const dt = new Date(`${d}T00:00:00`)
+  if (isNaN(dt.getTime())) return d
+  return `${dt.getMonth() + 1}/${dt.getDate()} (${WEEKDAYS[dt.getDay()]})`
+}
 
 function krwusd(vol: number | null, cur: string): string {
   if (!vol) return '-'
@@ -70,6 +82,27 @@ export default function SalesDashboard() {
     return () => { cancelled = true }
   }, [])
 
+  // 리드 상세에서 Task를 완료/추가할 수 있으므로 리드와 Task를 함께 다시 읽는다
+  async function reload() {
+    const [{ data: leadData, error: le }, { data: taskData, error: te }] = await Promise.all([
+      supabase.from('sales_leads').select('*').is('archived_at', null),
+      supabase.from('sales_tasks').select('*'),
+    ])
+    if (le) throw le
+    if (te) throw te
+    const activeLeads = await decryptRows('sales_leads', (leadData || []) as SalesLead[])
+    const activeIds = new Set(activeLeads.map(l => l.id))
+    setLeads(activeLeads)
+    setTasks(await decryptRows('sales_tasks', ((taskData || []) as SalesTask[]).filter(t => activeIds.has(t.lead_id))))
+  }
+
+  async function completeTask(taskId: string) {
+    const { error } = await supabase.from('sales_tasks').update({ status: 'Done', completed_at: today }).eq('id', taskId)
+    if (error) { showToast('⚠️ 완료 처리 실패: ' + error.message); return }
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'Done', completed_at: today } : t))
+    showToast('Task 완료!')
+  }
+
   if (loading) return <div className="view wide"><LoadingSpinner /></div>
 
   const total = leads.length
@@ -80,6 +113,15 @@ export default function SalesDashboard() {
   const overdueCount = tasks.filter(t => t.due_date < today && t.status !== 'Done').length
   const todayTaskCount = tasks.filter(t => t.due_date === today && t.status !== 'Done').length
   const onboardingCount = byStage('Onboarding')
+
+  // 다가오는 팔로우업 일정: 미완료 Task 중 기한 지난 것 전부 + 향후 14일, 기한 빠른 순
+  const leadById = new Map(leads.map(l => [l.id, l]))
+  const upcomingTasks = tasks
+    .filter(tk => tk.status !== 'Done')
+    .map(tk => ({ task: tk, days: dayDiffFromToday(tk.due_date) ?? 0 }))
+    .filter(u => u.days <= UPCOMING_DAYS)
+    .sort((a, b) => a.days - b.days || (PRIORITY_RANK[a.task.priority] ?? 9) - (PRIORITY_RANK[b.task.priority] ?? 9))
+  const shownTasks = upcomingTasks.slice(0, UPCOMING_MAX)
 
   const toUSD = (l: SalesLead) => l.volume_currency === 'KRW'
     ? (l.expected_monthly_volume || 0) / 1350
@@ -128,6 +170,52 @@ export default function SalesDashboard() {
             {k.fn && <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>{t('click_to_view')}</div>}
           </div>
         ))}
+      </div>
+
+      {/* 다가오는 일정 — 팔로우업 Task 기한 (지연 포함 · 향후 14일) */}
+      <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px', marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+          <div>
+            <span style={{ fontSize: 14, fontWeight: 700 }}>📅 다가오는 일정</span>
+            <span style={{ fontSize: 12, color: 'var(--muted)', marginLeft: 8 }}>팔로우업 기한 · 지연 포함, 향후 {UPCOMING_DAYS}일</span>
+          </div>
+          <button onClick={() => navigate('/sales/followup')}
+            style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }}>
+            {upcomingTasks.length > shownTasks.length ? `+${upcomingTasks.length - shownTasks.length}건 더 · ` : ''}팔로우업 관리 →
+          </button>
+        </div>
+        {shownTasks.length === 0 ? (
+          <div style={{ textAlign: 'center', color: 'var(--muted)', padding: 20, fontSize: 13 }}>
+            예정된 팔로우업이 없습니다. 팔로우업 관리에서 Task를 추가하면 여기에 기한순으로 표시됩니다.
+          </div>
+        ) : (
+          <div className="upcoming-row">
+            {shownTasks.map(({ task: tk, days: d }) => {
+              const lead = leadById.get(tk.lead_id)
+              const dc = d <= 0 ? 'var(--danger)' : d <= 3 ? 'var(--amber)' : 'var(--accent)'
+              const bg = d < 0 ? '#FFF1F0' : d <= 3 ? '#FFF8E6' : 'white'
+              const dt = d < 0 ? `${Math.abs(d)}일 지연` : d === 0 ? '오늘' : d === 1 ? '내일' : `D-${d}`
+              return (
+                <div key={tk.id} className="ucard" style={{ borderColor: priorityColor(tk.priority), background: bg }}
+                  onClick={() => setSelectedLeadId(tk.lead_id)} title="클릭하면 리드 상세가 열립니다">
+                  <div className="uc-top">
+                    <span className="uc-kind">{tk.task_type} · <span style={{ color: priorityColor(tk.priority), fontWeight: 700 }}>{tk.priority}</span></span>
+                    <span className="uc-d" style={{ color: dc }}>{dt}</span>
+                  </div>
+                  <div className="uc-name">{tk.task_title}</div>
+                  <div className="uc-date">{fmtDue(tk.due_date)} · {lead?.company_name || '-'}</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                    <span style={{ fontSize: 11, color: 'var(--muted)' }}>👤 {tk.owner}</span>
+                    <button onClick={e => { e.stopPropagation(); completeTask(tk.id) }}
+                      style={{ background: 'white', border: '1px solid #A7F3D0', color: '#059669', borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                      ✓ 완료
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Funnel 단계별 현황 — 풀폭 */}
@@ -321,9 +409,7 @@ export default function SalesDashboard() {
           onClose={() => setSelectedLeadId(null)}
           onRefresh={async () => {
             try {
-              const { data, error } = await supabase.from('sales_leads').select('*').is('archived_at', null)
-              if (error) throw error
-              setLeads(await decryptRows('sales_leads', (data || []) as SalesLead[]))
+              await reload()
             } catch (err: any) {
               showToast('새로고침 중 오류가 발생했습니다.', 'error')
             }
