@@ -23,6 +23,7 @@ const SalesFollowUp = lazy(() => import('./components/pages/SalesFollowUp'))
 const SalesReports = lazy(() => import('./components/pages/SalesReports'))
 const SalesSettings = lazy(() => import('./components/pages/SalesSettings'))
 const Archive = lazy(() => import('./components/pages/Archive'))
+const Permissions = lazy(() => import('./components/pages/Permissions'))
 const EventDetail = lazy(() => import('./components/pages/EventDetail'))
 const LegacyEventRedirect = lazy(() => import('./components/pages/EventDetail').then(m => ({ default: m.LegacyEventRedirect })))
 
@@ -38,10 +39,11 @@ export default function App() {
   const { user, loading } = useAuth()
 
   // 앱 시작 시 박람회 색상을 DB에서 로드해 동적 색상 캐시 초기화
+  // 박람회 조회 권한이 없어도 세일즈 화면의 행사 색상은 보여야 하므로 list_event_refs RPC 사용
   useEffect(() => {
     if (!user) return
-    supabase.from('exhibitions').select('name, color').then(({ data }) => {
-      if (data) initExhColors(data as { name: string; color?: string | null }[])
+    supabase.rpc('list_event_refs').then(({ data }) => {
+      if (data) initExhColors([...new Map(data.map(r => [r.name, { name: r.name, color: r.color }])).values()])
     })
   }, [user])
 
@@ -66,6 +68,7 @@ export default function App() {
         <Route path="sales/followup" element={<Suspense fallback={<LoadingSpinner />}><SalesFollowUp /></Suspense>} />
         <Route path="sales/reports" element={<Suspense fallback={<LoadingSpinner />}><SalesReports /></Suspense>} />
         <Route path="sales/settings" element={<Suspense fallback={<LoadingSpinner />}><SalesSettings /></Suspense>} />
+        <Route path="admin/permissions" element={<Suspense fallback={<LoadingSpinner />}><Permissions /></Suspense>} />
         <Route path="settings" element={<Suspense fallback={<LoadingSpinner />}><SalesSettings /></Suspense>} />
         <Route path="expo/event/:proposalId" element={<Suspense fallback={<LoadingSpinner />}><EventDetail /></Suspense>} />
         {/* 이전 주소(/expo/event/KIF/2026) 호환 — proposal_id 경로로 대체 이동 */}

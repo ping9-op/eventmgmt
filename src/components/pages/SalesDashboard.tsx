@@ -8,7 +8,7 @@ import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
 import { useIsMobile } from '../../hooks/useBreakpoint'
 import LoadingSpinner from '../LoadingSpinner'
-import { loadEventRefs, type EventRef } from '../../lib/events'
+import { loadAllEventRefs, type EventRef } from '../../lib/events'
 import { toEventRefMap, groupLeadsByEvent, eventGroupFilter } from '../../lib/leadEvents'
 
 function krwusd(vol: number | null, cur: string): string {
@@ -43,15 +43,18 @@ export default function SalesDashboard() {
     async function load() {
       try {
         const [{ data: leadData, error: le }, { data: taskData, error: te }, refs] = await Promise.all([
-          supabase.from('sales_leads').select('*'),
+          supabase.from('sales_leads').select('*').is('archived_at', null),
           supabase.from('sales_tasks').select('*'),
-          loadEventRefs(),
+          loadAllEventRefs(),
         ])
         if (le) throw le
         if (te) throw te
         if (!cancelled) {
-          setLeads((leadData || []) as SalesLead[])
-          setTasks((taskData || []) as SalesTask[])
+          const activeLeads = (leadData || []) as SalesLead[]
+          const activeIds = new Set(activeLeads.map(l => l.id))
+          setLeads(activeLeads)
+          // 보관된 리드의 Task는 제외
+          setTasks(((taskData || []) as SalesTask[]).filter(t => activeIds.has(t.lead_id)))
           setEventRefs(refs)
         }
       } catch (err: any) {
@@ -315,7 +318,7 @@ export default function SalesDashboard() {
           onClose={() => setSelectedLeadId(null)}
           onRefresh={async () => {
             try {
-              const { data, error } = await supabase.from('sales_leads').select('*')
+              const { data, error } = await supabase.from('sales_leads').select('*').is('archived_at', null)
               if (error) throw error
               setLeads((data || []) as SalesLead[])
             } catch (err: any) {

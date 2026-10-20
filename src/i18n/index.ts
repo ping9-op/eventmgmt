@@ -20,6 +20,7 @@ const translations: Record<Lang, Record<string, string>> = {
     sales_reports: '📈  Sales 리포트',
     sales_settings: '⚙️  Sales 설정',
     settings: '⚙️  설정',
+    permissions_nav: '🔐  권한 관리',
 
     // ── Common ───────────────────────────────────────────────────────────────
     save: '저장',
@@ -577,6 +578,7 @@ const translations: Record<Lang, Record<string, string>> = {
     sales_reports: '📈  Sales Reports',
     sales_settings: '⚙️  Sales Settings',
     settings: '⚙️  Settings',
+    permissions_nav: '🔐  Permissions',
 
     // ── Common ───────────────────────────────────────────────────────────────
     save: 'Save',
@@ -1134,6 +1136,7 @@ const translations: Record<Lang, Record<string, string>> = {
     sales_reports: '📈  セールスレポート',
     sales_settings: '⚙️  セールス設定',
     settings: '⚙️  設定',
+    permissions_nav: '🔐  権限管理',
     // ── 共通 ────────────────────────────────────────────────────────────
     loading: '読み込み中...',
     save: '保存',

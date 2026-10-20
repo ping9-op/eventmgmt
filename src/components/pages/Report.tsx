@@ -6,6 +6,7 @@ import DecimalInput from '../DecimalInput'
 import type { Proposal, Result, ActualCost, MarketingActivity, Payment } from '../../types/database'
 import { loadEventRefs, eventLabel, legacyKey, type EventRef } from '../../lib/events'
 import { useToast } from '../../contexts/ToastContext'
+import { useAuth } from '../../contexts/AuthContext'
 import pptxgen from 'pptxgenjs'
 import { useLang } from '../../contexts/LangContext'
 import LoadingSpinner from '../LoadingSpinner'
@@ -58,6 +59,7 @@ function buildDefaultFromProposal(ev: EventRef, prop: Proposal, pays?: Payment[]
 
 export default function Report() {
   const { showToast } = useToast()
+  const { isAdmin } = useAuth()
   const { t } = useLang()
   const navigate = useNavigate()
   const location = useLocation()
@@ -186,12 +188,14 @@ export default function Report() {
   }
 
   async function deletePhoto(url: string) {
+    if (!isAdmin) { showToast('⚠️ 사진 삭제는 관리자만 할 수 있습니다.'); return }
     // Storage URL에서 path 추출
     const marker = `/object/public/${PHOTO_BUCKET}/`
     const idx = url.indexOf(marker)
     if (idx >= 0) {
       const path = url.slice(idx + marker.length)
-      await supabase.storage.from(PHOTO_BUCKET).remove([path])
+      const { error } = await supabase.storage.from(PHOTO_BUCKET).remove([path])
+      if (error) { showToast('⚠️ 사진 삭제 실패: ' + error.message); return }
     }
     const arr = (report?.marketing_photos || []).filter(p => p !== url)
     updateField('marketing_photos', arr)
@@ -817,8 +821,11 @@ export default function Report() {
                   <div key={i} style={{ position: 'relative', width: 'calc(50% - 5px)', maxWidth: 160, height: 120, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border2)' }}>
                     <img src={photo} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={`Photo ${i + 1}`}
                       onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
-                    <button onClick={() => deletePhoto(photo)}
-                      style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,.6)', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>✕</button>
+                    {/* 사진 삭제는 관리자만 (Storage 정책으로도 차단) */}
+                    {isAdmin && (
+                      <button onClick={() => deletePhoto(photo)}
+                        style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,.6)', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>✕</button>
+                    )}
                     <div style={{ position: 'absolute', bottom: 4, left: 4, background: 'rgba(0,0,0,.5)', color: 'white', fontSize: 10, padding: '1px 5px', borderRadius: 3 }}>{i + 1}</div>
                   </div>
                 ))}

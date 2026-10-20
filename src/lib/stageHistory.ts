@@ -1,17 +1,17 @@
 import { supabase } from './supabase'
 
+// changed_by(변경자)는 DB 트리거(set_actor)가 로그인 사용자로 채움 — 클라이언트에서 지정하지 않음
+// 이력은 추가만 가능 (수정·삭제는 DB 정책으로 차단)
 export async function logStageChange(
   leadId: string,
   fromStage: string | null,
   toStage: string,
-  changedBy?: string,
 ): Promise<void> {
   if (fromStage === toStage) return
   await supabase.from('sales_stage_history').insert({
     lead_id: leadId,
     from_stage: fromStage || null,
     to_stage: toStage,
-    changed_by: changedBy || null,
   })
 }
 
@@ -19,11 +19,10 @@ export async function logStageChange(
 export async function logStageChanges(
   changes: { leadId: string; fromStage: string | null }[],
   toStage: string,
-  changedBy?: string,
 ): Promise<void> {
   const rows = changes
     .filter(c => c.fromStage !== toStage)
-    .map(c => ({ lead_id: c.leadId, from_stage: c.fromStage || null, to_stage: toStage, changed_by: changedBy || null }))
+    .map(c => ({ lead_id: c.leadId, from_stage: c.fromStage || null, to_stage: toStage }))
   if (!rows.length) return
   await supabase.from('sales_stage_history').insert(rows)
 }

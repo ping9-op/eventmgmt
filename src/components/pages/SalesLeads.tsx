@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { STAGE_ORDER, STAGE_COLORS, OUTREACH_CHANNELS, priorityColor, normalizeStage, localDateStr, reachedStage, reachedOutreach } from '../../lib/utils'
 import type { SalesLead } from '../../types/database'
 import { loadAllSettings, type SalesSettingsData } from '../../lib/settings'
-import { loadEventRefs, eventLabel, type EventRef } from '../../lib/events'
+import { loadAllEventRefs, eventLabel, type EventRef } from '../../lib/events'
 import { toEventRefMap, leadEventLabel, leadEventGroupKey, eventGroupLabel, isEventKey, isExpoKey, matchEventRef, eventSelectOptions, eventSelectToFields } from '../../lib/leadEvents'
 import { useToast } from '../../contexts/ToastContext'
 import LeadDetailPanel from './LeadDetailPanel'
@@ -197,8 +197,8 @@ export default function SalesLeads() {
     async function run() {
       try {
         const [{ data: leadsData }, refs, s] = await Promise.all([
-          supabase.from('sales_leads').select('*').order('registered_date', { ascending: false }),
-          loadEventRefs(),
+          supabase.from('sales_leads').select('*').is('archived_at', null).order('registered_date', { ascending: false }),
+          loadAllEventRefs(),
           loadAllSettings(),
         ])
         if (!cancelled) {
@@ -236,7 +236,7 @@ export default function SalesLeads() {
 
   async function load() {
     try {
-      const { data } = await supabase.from('sales_leads').select('*').order('registered_date', { ascending: false })
+      const { data } = await supabase.from('sales_leads').select('*').is('archived_at', null).order('registered_date', { ascending: false })
       setLeads((data || []) as SalesLead[])
     } catch (e) {
       showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error')
@@ -279,23 +279,17 @@ export default function SalesLeads() {
     }
   }
 
-  async function bulkDeleteLeads(ids: string[]) {
+  // 리드는 삭제하지 않고 보관 — 기록은 모두 보존, 보관함에서 복원 가능 (DB에서 실제 삭제 차단)
+  async function bulkArchiveLeads(ids: string[]) {
     if (!ids.length) return
-    if (!window.confirm(`선택한 ${ids.length}개 리드를 정말 삭제하시겠습니까?\n관련된 Activity/Task/Proposal 기록도 함께 삭제되며 복구할 수 없습니다.`)) return
+    if (!window.confirm(`선택한 ${ids.length}개 리드를 보관하시겠습니까?\n목록에서 사라지며, 기록은 모두 보존되고 보관함에서 복원할 수 있습니다.`)) return
     setBulkDeleting(true)
     try {
-      // sales_activities/sales_tasks/sales_proposals는 lead_id FK가 CASCADE가 아니므로 먼저 삭제해야 함
-      const [{ error: actErr }, { error: taskErr }, { error: propErr }] = await Promise.all([
-        supabase.from('sales_activities').delete().in('lead_id', ids),
-        supabase.from('sales_tasks').delete().in('lead_id', ids),
-        supabase.from('sales_proposals').delete().in('lead_id', ids),
-      ])
-      if (actErr || taskErr || propErr) { showToast('⚠️ 일괄 삭제 실패: ' + (actErr || taskErr || propErr)?.message); return }
-      const { error: leadErr } = await supabase.from('sales_leads').delete().in('id', ids)
-      if (leadErr) { showToast('⚠️ 일괄 삭제 실패: ' + leadErr.message); return }
+      const { error } = await supabase.from('sales_leads').update({ archived_at: new Date().toISOString() }).in('id', ids)
+      if (error) { showToast('⚠️ 일괄 보관 실패: ' + error.message); return }
       setLeads(p => p.filter(l => !ids.includes(l.id)))
       setChecked(new Set())
-      showToast(`🗑️ ${ids.length}개 리드가 삭제되었습니다.`)
+      showToast(`🗄️ ${ids.length}개 리드가 보관되었습니다.`)
     } finally {
       setBulkDeleting(false)
     }
@@ -848,11 +842,11 @@ export default function SalesLeads() {
                 </div>
               )}
 
-              {/* 선택 삭제 */}
+              {/* 선택 보관 */}
               {checked.size > 0 && (
-                <button disabled={bulkDeleting} onClick={() => bulkDeleteLeads([...checked])}
-                  style={{ padding: '6px 12px', borderRadius: 7, background: 'rgba(220,38,38,.1)', border: '1.5px solid #DC2626', color: '#DC2626', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: bulkDeleting ? 0.5 : 1 }}>
-                  {bulkDeleting ? '삭제 중...' : `🗑️ 선택 삭제 (${checked.size})`}
+                <button disabled={bulkDeleting} onClick={() => bulkArchiveLeads([...checked])}
+                  style={{ padding: '6px 12px', borderRadius: 7, background: 'var(--light)', border: '1.5px solid var(--border2)', color: 'var(--text)', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: bulkDeleting ? 0.5 : 1 }}>
+                  {bulkDeleting ? '보관 중...' : `🗄️ 선택 보관 (${checked.size})`}
                 </button>
               )}
 

@@ -7,7 +7,7 @@ import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
 import LoadingSpinner from '../LoadingSpinner'
 import { computeAvgDaysPerStage, type StageHistoryRow } from '../../lib/stageHistory'
-import { loadEventRefs, type EventRef } from '../../lib/events'
+import { loadAllEventRefs, type EventRef } from '../../lib/events'
 import { toEventRefMap, groupLeadsByEvent, eventGroupFilter } from '../../lib/leadEvents'
 
 type PeriodFilter = 'all' | 'month' | '3months' | 'year'
@@ -62,14 +62,17 @@ export default function SalesReports() {
     async function load() {
       try {
         const [{ data: leadData, error: le }, { data: histData }, refs] = await Promise.all([
-          supabase.from('sales_leads').select('*'),
+          supabase.from('sales_leads').select('*').is('archived_at', null),
           supabase.from('sales_stage_history').select('*').order('changed_at'),
-          loadEventRefs(),
+          loadAllEventRefs(),
         ])
         if (le) { showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error') }
         if (!cancelled) {
-          setAllLeads((leadData || []) as SalesLead[])
-          setStageHistory((histData || []) as StageHistoryRow[])
+          const activeLeads = (leadData || []) as SalesLead[]
+          const activeIds = new Set(activeLeads.map(l => l.id))
+          setAllLeads(activeLeads)
+          // 보관된 리드의 단계 이력은 집계에서 제외
+          setStageHistory(((histData || []) as StageHistoryRow[]).filter(h => activeIds.has(h.lead_id)))
           setEventRefs(refs)
         }
       } catch (e) {

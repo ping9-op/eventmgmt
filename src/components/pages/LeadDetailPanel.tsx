@@ -5,7 +5,7 @@ import LostReasonModal, { type LostReasonInput } from '../LostReasonModal'
 import DecimalInput from '../DecimalInput'
 import { useIsMobile } from '../../hooks/useBreakpoint'
 import { logStageChange } from '../../lib/stageHistory'
-import { loadEventRefs, type EventRef } from '../../lib/events'
+import { loadAllEventRefs, type EventRef } from '../../lib/events'
 import { toEventRefMap, leadEventLabel, eventSelectOptions, leadEventSelectValue, eventSelectToFields } from '../../lib/leadEvents'
 import { loadAllSettings, CONTRACT_STATUSES as SYSTEM_CONTRACT_STATUSES, ONBOARD_STATUSES as SYSTEM_ONBOARD_STATUSES, type SalesSettingsData } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
@@ -92,7 +92,7 @@ export default function LeadDetailPanel({
 
   useEffect(() => {
     loadAllSettings().then(setSettings)
-    loadEventRefs().then(setEventRefs)
+    loadAllEventRefs().then(setEventRefs)
   }, [])
 
   function applyLoadedLead(l: SalesLead) {
@@ -172,7 +172,7 @@ export default function LeadDetailPanel({
 
       // 스테이지 변경 시 이력 기록
       if (stageChanged) {
-        logStageChange(leadId, lead.current_stage, newStage, form.owner || lead.owner || undefined)
+        logStageChange(leadId, lead.current_stage, newStage)
       }
 
       // Save proposal
@@ -208,25 +208,19 @@ export default function LeadDetailPanel({
     }
   }
 
-  async function deleteLead() {
+  // 리드는 삭제하지 않고 보관 — Activity/Task/단계 이력 모두 보존, 보관함에서 복원 가능 (DB에서 실제 삭제 차단)
+  async function archiveLead() {
     if (!lead) return
-    if (!window.confirm(`"${lead.company_name}" 리드를 정말 삭제하시겠습니까?\n관련된 Activity/Task/Proposal 기록도 함께 삭제되며 복구할 수 없습니다.`)) return
+    if (!window.confirm(`"${lead.company_name}" 리드를 보관하시겠습니까?\n목록에서 사라지며, 기록은 모두 보존되고 보관함에서 복원할 수 있습니다.`)) return
     setDeleting(true)
     try {
-      // sales_activities/sales_tasks/sales_proposals는 lead_id FK가 CASCADE가 아니므로 먼저 삭제해야 함
-      const [{ error: actErr }, { error: taskErr }, { error: propErr }] = await Promise.all([
-        supabase.from('sales_activities').delete().eq('lead_id', leadId),
-        supabase.from('sales_tasks').delete().eq('lead_id', leadId),
-        supabase.from('sales_proposals').delete().eq('lead_id', leadId),
-      ])
-      if (actErr || taskErr || propErr) throw (actErr || taskErr || propErr)
-      const { error: leadErr } = await supabase.from('sales_leads').delete().eq('id', leadId)
-      if (leadErr) throw leadErr
-      showToast('🗑️ 리드가 삭제되었습니다.')
+      const { error } = await supabase.from('sales_leads').update({ archived_at: new Date().toISOString() }).eq('id', leadId)
+      if (error) throw error
+      showToast('🗄️ 리드가 보관되었습니다.')
       onRefresh()
       onClose()
     } catch (err: any) {
-      showToast('⚠️ 삭제 실패: ' + (err?.message || '알 수 없는 오류'))
+      showToast('⚠️ 보관 실패: ' + (err?.message || '알 수 없는 오류'))
     } finally {
       setDeleting(false)
     }
@@ -240,7 +234,7 @@ export default function LeadDetailPanel({
         activity_result: actResult,
         activity_date: actDate,
         note: actNote,
-        created_by: form.owner || lead?.owner || '',
+        created_by: '', // DB 트리거(set_actor)가 실제 작업자로 채움
       })
       if (error) { showToast('⚠️ Activity 저장 실패: ' + error.message); return }
       setActNote(''); setShowActForm(false); setActDate(localDateStr())
@@ -254,12 +248,6 @@ export default function LeadDetailPanel({
     } catch (err: any) {
       showToast('⚠️ Activity 저장 실패: ' + (err?.message || '알 수 없는 오류'))
     }
-  }
-
-  async function deleteActivity(actId: string) {
-    const { error } = await supabase.from('sales_activities').delete().eq('id', actId)
-    if (error) { showToast('⚠️ 삭제 실패: ' + error.message); return }
-    setActivities(prev => prev.filter(a => a.id !== actId))
   }
 
   async function markTaskDone(taskId: string) {
@@ -277,7 +265,7 @@ export default function LeadDetailPanel({
     try {
       const { error } = await supabase.from('sales_leads').update({ current_stage: stage, ...lost }).eq('id', leadId)
       if (error) throw error
-      logStageChange(leadId, prev, stage, lead?.owner || undefined)
+      logStageChange(leadId, prev, stage)
       const { data } = await supabase.from('sales_leads').select('*').eq('id', leadId).single()
       if (data) applyLoadedLead(data as SalesLead)
       onRefresh()
@@ -334,9 +322,9 @@ export default function LeadDetailPanel({
                 style={{ background: 'var(--accent)', border: 'none', color: 'white', padding: isMobile ? '10px 10px' : '6px 14px', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 700, minHeight: 44 }}>
                 {saving ? t('saving') : isMobile ? '💾' : `💾 ${t('save')}`}
               </button>
-              <button onClick={deleteLead} disabled={deleting} title="리드 삭제"
-                style={{ background: 'rgba(220,38,38,.2)', border: '1px solid rgba(220,38,38,.5)', color: '#FCA5A5', padding: isMobile ? '10px 10px' : '6px 14px', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 700, minHeight: 44 }}>
-                {deleting ? '삭제 중...' : isMobile ? '🗑' : '🗑 삭제'}
+              <button onClick={archiveLead} disabled={deleting} title="리드 보관"
+                style={{ background: 'rgba(255,255,255,.15)', border: '1px solid rgba(255,255,255,.35)', color: 'white', padding: isMobile ? '10px 10px' : '6px 14px', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 700, minHeight: 44 }}>
+                {deleting ? '보관 중...' : isMobile ? '🗄️' : '🗄️ 보관'}
               </button>
               <button onClick={onClose}
                 style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: 'white', width: 44, height: 44, borderRadius: '50%', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>
@@ -609,12 +597,8 @@ export default function LeadDetailPanel({
                                 {a.activity_result}
                               </span>
                             )}
+                            {/* Activity는 추가만 가능 — 수정·삭제 없음 (DB 정책으로도 차단) */}
                             <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 'auto' }}>{a.activity_date} · {a.created_by}</span>
-                            <button onClick={() => deleteActivity(a.id)}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ccc', fontSize: 14, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}
-                              onMouseOver={e => (e.currentTarget as HTMLButtonElement).style.color = '#DC2626'}
-                              onMouseOut={e => (e.currentTarget as HTMLButtonElement).style.color = '#ccc'}
-                              title="Activity 삭제">✕</button>
                           </div>
                           {a.note && (
                             <div style={{ fontSize: 12, color: 'var(--text)', lineHeight: 1.6, background: '#FAFAFA', borderRadius: 7, padding: '8px 10px', whiteSpace: 'pre-wrap' }}>

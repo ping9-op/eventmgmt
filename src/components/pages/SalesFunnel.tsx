@@ -11,7 +11,7 @@ import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
 import { useIsMobile } from '../../hooks/useBreakpoint'
 import LoadingSpinner from '../LoadingSpinner'
-import { loadEventRefs, type EventRef } from '../../lib/events'
+import { loadAllEventRefs, type EventRef } from '../../lib/events'
 import { toEventRefMap, leadEventLabel } from '../../lib/leadEvents'
 
 type TabType = 'board' | 'table' | 'proposal'
@@ -33,7 +33,7 @@ export default function SalesFunnel() {
   useEffect(() => { loadAllSettings().then(s => setOwners(s.owners)) }, [])
   // 리드 행사 표시명 (박람회 행사는 proposal_id 기준 현재 이름)
   const [eventRefs, setEventRefs] = useState<EventRef[]>([])
-  useEffect(() => { loadEventRefs().then(setEventRefs).catch(() => {}) }, [])
+  useEffect(() => { loadAllEventRefs().then(setEventRefs).catch(() => {}) }, [])
   const refMap = toEventRefMap(eventRefs)
   const evLabel = (l: SalesLead) => leadEventLabel(l, refMap)
 
@@ -95,7 +95,7 @@ export default function SalesFunnel() {
     async function loadOnMount() {
       try {
         const [{ data: leadData, error: le }, { data: propData, error: pe }] = await Promise.all([
-          supabase.from('sales_leads').select('*'),
+          supabase.from('sales_leads').select('*').is('archived_at', null),
           supabase.from('sales_proposals').select('*'),
         ])
         if (cancelled) return
@@ -121,7 +121,7 @@ export default function SalesFunnel() {
   async function load() {
     try {
       const [{ data: leadData, error: le }, { data: propData, error: pe }] = await Promise.all([
-        supabase.from('sales_leads').select('*'),
+        supabase.from('sales_leads').select('*').is('archived_at', null),
         supabase.from('sales_proposals').select('*'),
       ])
       if (le) throw le

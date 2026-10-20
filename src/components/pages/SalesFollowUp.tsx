@@ -3,8 +3,6 @@ import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { STAGE_COLORS, priorityColor, isActiveStage, localDateStr } from '../../lib/utils'
 import type { SalesTask, SalesLead } from '../../types/database'
-import { loadAllSettings } from '../../lib/settings'
-import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../contexts/ToastContext'
 import LeadDetailPanel from './LeadDetailPanel'
 import { useLang } from '../../contexts/LangContext'
@@ -39,9 +37,6 @@ export default function SalesFollowUp() {
   const { t, lang } = useLang()
   const location = useLocation()
   const { showToast } = useToast()
-  const { salesOwner } = useAuth()
-  const [owners, setOwners] = useState<string[]>([])
-  useEffect(() => { loadAllSettings().then(s => setOwners(s.owners)) }, [])
   const [tasks, setTasks] = useState<SalesTask[]>([])
   const [leads, setLeads] = useState<SalesLead[]>([])
   const [loading, setLoading] = useState(true)
@@ -56,7 +51,7 @@ export default function SalesFollowUp() {
   // Add task form
   const [form, setForm] = useState({
     lead_id: '', task_title: '', task_type: 'Email', due_date: today,
-    status: 'Pending', priority: 'Medium', owner: salesOwner || '', note: '',
+    status: 'Pending', priority: 'Medium', note: '',
   })
 
   useEffect(() => {
@@ -67,12 +62,13 @@ export default function SalesFollowUp() {
       try {
         const [{ data: taskData, error: te }, { data: leadData, error: le }] = await Promise.all([
           supabase.from('sales_tasks').select('*').order('due_date'),
-          supabase.from('sales_leads').select('*'),
+          supabase.from('sales_leads').select('*').is('archived_at', null),
         ])
         if (cancelled) return
         if (te) throw te
         if (le) throw le
-        const rawTasks = (taskData || []) as SalesTask[]
+        const activeIds = new Set((leadData || []).map(l => l.id))
+        const rawTasks = ((taskData || []) as SalesTask[]).filter(t => activeIds.has(t.lead_id)) // 보관된 리드의 Task 제외
         const processedTasks = rawTasks.map(t => {
           if (t.status === 'Done') return t
           if (t.due_date < today) return { ...t, status: 'Overdue' }
@@ -95,11 +91,12 @@ export default function SalesFollowUp() {
     try {
       const [{ data: taskData, error: te }, { data: leadData, error: le }] = await Promise.all([
         supabase.from('sales_tasks').select('*').order('due_date'),
-        supabase.from('sales_leads').select('*'),
+        supabase.from('sales_leads').select('*').is('archived_at', null),
       ])
       if (te) throw te
       if (le) throw le
-      const rawTasks = (taskData || []) as SalesTask[]
+      const activeIds = new Set((leadData || []).map(l => l.id))
+      const rawTasks = ((taskData || []) as SalesTask[]).filter(t => activeIds.has(t.lead_id)) // 보관된 리드의 Task 제외
       const processedTasks = rawTasks.map(t => {
         if (t.status === 'Done') return t
         if (t.due_date < today) return { ...t, status: 'Overdue' }
@@ -151,15 +148,15 @@ export default function SalesFollowUp() {
 
   async function addTask() {
     if (!form.lead_id || !form.task_title) { showToast('⚠️ Lead와 Task 제목은 필수입니다.'); return }
-    if (!form.owner) { showToast('⚠️ Task 담당자(Owner)를 선택해주세요.'); return }
+    // Task 담당자는 리드 담당자로 고정 (DB 트리거가 보장 — 리드 담당자가 바뀌면 함께 변경)
     const { error } = await supabase.from('sales_tasks').insert({
       lead_id: form.lead_id, task_title: form.task_title, task_type: form.task_type,
       due_date: form.due_date, status: form.status, priority: form.priority,
-      owner: form.owner, note: form.note || null,
+      owner: leads.find(l => l.id === form.lead_id)?.owner || '', note: form.note || null,
     })
     if (error) { showToast('⚠️ Task 추가 실패: ' + error.message); return }
     setShowAddTask(false)
-    setForm({ lead_id: '', task_title: '', task_type: 'Email', due_date: today, status: 'Pending', priority: 'Medium', owner: salesOwner || '', note: '' })
+    setForm({ lead_id: '', task_title: '', task_type: 'Email', due_date: today, status: 'Pending', priority: 'Medium', note: '' })
     showToast('Task가 추가되었습니다.')
     load()
   }
@@ -359,10 +356,9 @@ export default function SalesFollowUp() {
             <div className="form-row cols2" style={{ marginTop: 14 }}>
               <div>
                 <label style={{ marginTop: 0 }}>Owner</label>
-                <select value={form.owner} onChange={e => setForm(f => ({ ...f, owner: e.target.value }))}>
-                  <option value="">-- 선택 --</option>
-                  {owners.map(o => <option key={o}>{o}</option>)}
-                </select>
+                {/* Task 담당자 = 리드 담당자 (선택 불가) */}
+                <input value={leads.find(l => l.id === form.lead_id)?.owner || '리드를 선택하면 자동 지정'} disabled
+                  style={{ background: 'var(--light)', color: 'var(--muted)' }} />
               </div>
               <div>
                 <label style={{ marginTop: 0 }}>{t('status_lbl')}</label>

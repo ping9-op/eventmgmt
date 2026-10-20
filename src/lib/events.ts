@@ -36,7 +36,20 @@ export function eventPath(proposalId: string): string {
   return `/expo/event/${proposalId}`
 }
 
-/** 보관되지 않은 전체 행사 목록 (연도 → 이름 → 회차 순) */
+/**
+ * 세일즈 화면용 전체 행사 이름 목록 (연도 → 이름 → 회차 순)
+ * 박람회/행사 조회 권한(expo_permissions)과 무관하게 리드의 행사명을 표시·선택할 수 있도록 list_event_refs RPC 사용
+ * (이름/연도/회차/색상만 노출 — 결제·보고서 등 행사 상세는 권한이 있어야 조회 가능)
+ */
+export async function loadAllEventRefs(opts: { includeArchived?: boolean } = {}): Promise<EventRef[]> {
+  const { data } = await supabase.rpc('list_event_refs')
+  return (data || [])
+    .filter(r => opts.includeArchived || !r.archived)
+    .map(r => ({ proposalId: r.proposal_id, exhId: r.exhibition_id, key: r.key, name: r.name, year: r.year, session: r.session }))
+    .sort((a, b) => b.year - a.year || a.name.localeCompare(b.name) || (a.session || '').localeCompare(b.session || ''))
+}
+
+/** 보관되지 않은 전체 행사 목록 (연도 → 이름 → 회차 순) — 박람회 화면용, 조회 권한이 있는 행사만 */
 export async function loadEventRefs(opts: { includeArchived?: boolean } = {}): Promise<EventRef[]> {
   let pq = supabase.from('proposals').select('id, exhibition_id, year, session, archived_at')
   let eq = supabase.from('exhibitions').select('id, key, name, archived_at')

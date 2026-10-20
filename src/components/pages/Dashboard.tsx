@@ -48,8 +48,8 @@ export default function Dashboard() {
           supabase.from('exhibitions').select('*').is('archived_at', null),
           supabase.from('proposals').select('*').is('archived_at', null).order('year', { ascending: true }),
           supabase.from('payments').select('*'),
-          supabase.from('sales_leads').select('*'),
-          supabase.from('sales_tasks').select('id,due_date,status,owner').neq('status', 'Done'),
+          supabase.from('sales_leads').select('*').is('archived_at', null),
+          supabase.from('sales_tasks').select('id,lead_id,due_date,status,owner').neq('status', 'Done'),
         ])
         if (cancelled) return
         const exhMap: Record<string, Exhibition> = {}
@@ -70,8 +70,10 @@ export default function Dashboard() {
           payMap[p.proposal_id].push(p)
         }
         setPayments(payMap)
-        setLeads((leadData || []) as SalesLead[])
-        setTasks((taskData || []) as SalesTask[])
+        const activeLeads = (leadData || []) as SalesLead[]
+        const activeIds = new Set(activeLeads.map(l => l.id))
+        setLeads(activeLeads)
+        setTasks(((taskData || []) as SalesTask[]).filter(t => activeIds.has(t.lead_id))) // 보관된 리드의 Task 제외
       } catch (err: any) {
         showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error')
       } finally {
@@ -350,7 +352,7 @@ export default function Dashboard() {
           onRefresh={async () => {
             if (!selectedLeadId) return
             try {
-              const { data } = await supabase.from('sales_leads').select('*')
+              const { data } = await supabase.from('sales_leads').select('*').is('archived_at', null)
               if (data) setLeads(data as SalesLead[])
             } catch (err: any) {
               showToast('새로고침 중 오류가 발생했습니다.', 'error')

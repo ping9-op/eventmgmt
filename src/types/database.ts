@@ -123,7 +123,7 @@ export type Database = {
           last_contact_date: string | null; next_action: string | null; next_follow_up_date: string | null
           lost_reason: string | null; remarks: string | null; created_at: string
           outreach_channel: string | null; lost_reason_note: string | null; lost_at_stage: string | null
-          proposal_id: string | null
+          proposal_id: string | null; archived_at: string | null
         }
         Insert: {
           serial_no?: string; registered_date: string; event_name: string
@@ -134,7 +134,7 @@ export type Database = {
           last_contact_date?: string | null; next_action?: string | null; next_follow_up_date?: string | null
           lost_reason?: string | null; remarks?: string | null
           outreach_channel?: string | null; lost_reason_note?: string | null; lost_at_stage?: string | null
-          proposal_id?: string | null
+          proposal_id?: string | null; archived_at?: string | null
         }
         Update: {
           serial_no?: string; registered_date?: string; event_name?: string
@@ -145,7 +145,7 @@ export type Database = {
           last_contact_date?: string | null; next_action?: string | null; next_follow_up_date?: string | null
           lost_reason?: string | null; remarks?: string | null
           outreach_channel?: string | null; lost_reason_note?: string | null; lost_at_stage?: string | null
-          proposal_id?: string | null
+          proposal_id?: string | null; archived_at?: string | null
         }
         Relationships: []
       }
@@ -180,6 +180,12 @@ export type Database = {
           due_date?: string; status?: string; priority?: string; owner?: string
           completed_at?: string | null; note?: string | null
         }
+        Relationships: []
+      }
+      expo_permissions: {
+        Row: { id: string; user_id: string; exhibition_id: string | null; proposal_id: string | null; level: 'view' | 'edit'; granted_by: string | null; created_at: string }
+        Insert: { user_id: string; exhibition_id?: string | null; proposal_id?: string | null; level: 'view' | 'edit'; granted_by?: string | null }
+        Update: { level?: 'view' | 'edit' }
         Relationships: []
       }
       sales_settings: {
@@ -232,6 +238,14 @@ export type Database = {
       change_initial_password: {
         Args: { current_password: string; new_password: string }
         Returns: undefined
+      }
+      list_event_refs: {
+        Args: Record<string, never>
+        Returns: { proposal_id: string; exhibition_id: string; key: string; name: string; color: string | null; year: number; session: string | null; archived: boolean }[]
+      }
+      admin_list_users: {
+        Args: Record<string, never>
+        Returns: { id: string; email: string; sales_owner: string | null; is_admin: boolean; last_sign_in_at: string | null }[]
       }
     }
     Enums: {
@@ -343,7 +357,7 @@ export interface SalesLead {
   last_contact_date: string | null; next_action: string | null; next_follow_up_date: string | null
   lost_reason: string | null; remarks: string | null
   outreach_channel?: string | null; lost_reason_note?: string | null; lost_at_stage?: string | null
-  proposal_id?: string | null
+  proposal_id?: string | null; archived_at?: string | null
 }
 
 export interface SalesActivity {

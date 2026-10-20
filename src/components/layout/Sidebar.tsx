@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useLang } from '../../contexts/LangContext'
+import { useAuth } from '../../contexts/AuthContext'
 
 // NavItem은 Sidebar 함수 외부에서 정의합니다.
 // 내부에 정의하면 Sidebar 리렌더링 시마다 새 컴포넌트 참조가 생성되어
@@ -36,6 +37,7 @@ export default function Sidebar({ open, onClose }: { open?: boolean; onClose?: (
   const navigate = useNavigate()
   const location = useLocation()
   const { t } = useLang()
+  const { isAdmin } = useAuth()
   const [expoOpen, setExpoOpen] = useState(true)
   const [salesOpen, setSalesOpen] = useState(true)
 
@@ -86,6 +88,7 @@ export default function Sidebar({ open, onClose }: { open?: boolean; onClose?: (
       </div>
 
       <NavItem path="/settings" label={t('settings')} locationPathname={location.pathname} onNavigate={handleNavigate} />
+      {isAdmin && <NavItem path="/admin/permissions" label={t('permissions_nav')} locationPathname={location.pathname} onNavigate={handleNavigate} />}
 
       <div className="sb-ver">v3.0 · GME Event Management</div>
     </div>

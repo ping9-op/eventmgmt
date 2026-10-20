@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { exhColor, initExhColors, costColor, formatEventDate, isPastEvent, exhDisplayName, CUR_SYM, CURRENCIES, COST_ITEMS, MON, fmtCur, formatDateRange, parseDateRange, localDateStr } from '../../lib/utils'
 import { useToast } from '../../contexts/ToastContext'
+import { useAuth } from '../../contexts/AuthContext'
 import type { Exhibition, Proposal, BudgetItem } from '../../types/database'
 import LoadingSpinner from '../LoadingSpinner'
 import ProposalEditModal from '../ProposalEditModal'
@@ -37,6 +38,7 @@ export default function Exhibitions() {
   const navigate = useNavigate()
   const { showToast } = useToast()
   const { t } = useLang()
+  const { isAdmin } = useAuth()
   const [data, setData] = useState<ExhEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
@@ -329,7 +331,8 @@ export default function Exhibitions() {
           <div className="sub">{t('exh_sub')}</div>
         </div>
         <div className="page-hdr-actions">
-          <button className="btn btn-primary btn-sm" onClick={() => setShowNewExh(true)}>{t('add_exh_btn')}</button>
+          {/* 새 박람회 등록은 관리자만 (DB에서도 차단) */}
+          {isAdmin && <button className="btn btn-primary btn-sm" onClick={() => setShowNewExh(true)}>{t('add_exh_btn')}</button>}
           <button className="btn btn-primary btn-sm" onClick={() => setShowAddModal(true)}>{t('add_past')}</button>
           <button className="btn btn-outline btn-sm" onClick={() => { setLoading(true); load() }}>{t('refresh')}</button>
         </div>
