@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { STAGE_ORDER, STAGE_COLORS, isActiveStage, isInProgressStage, localDateStr, dayDiffFromToday, priorityColor } from '../../lib/utils'
+import { STAGE_ORDER, STAGE_COLORS, isInProgressStage, localDateStr, dayDiffFromToday, priorityColor } from '../../lib/utils'
 import type { SalesLead, SalesTask } from '../../types/database'
 import LeadDetailPanel from './LeadDetailPanel'
 import { useLang } from '../../contexts/LangContext'
@@ -16,6 +16,7 @@ const UPCOMING_DAYS = 14   // 다가오는 일정: 오늘부터 며칠 뒤까지
 const UPCOMING_MAX = 8     // 대시보드에 표시할 최대 개수 (나머지는 팔로우업 관리에서)
 const PRIORITY_RANK: Record<string, number> = { High: 0, Medium: 1, Low: 2 }
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
+const ONBOARDING_COLOR = STAGE_COLORS['Onboarding']?.bg || '#16A085'
 
 /** '2026-10-21' → '10/21 (수)' */
 function fmtDue(d: string): string {
@@ -134,14 +135,15 @@ export default function SalesDashboard() {
     owner: o,
     total: leads.filter(l => l.owner === o).length,
     won: leads.filter(l => l.owner === o && l.current_stage === 'Won').length,
-    active: leads.filter(l => l.owner === o && isActiveStage(l.current_stage)).length,
+    active: leads.filter(l => l.owner === o && isInProgressStage(l.current_stage)).length,
+    onboarding: leads.filter(l => l.owner === o && l.current_stage === 'Onboarding').length,
   }))
 
   const kpiCards = [
     { lbl: t('s_total'), val: total, col: 'var(--accent)', fn: () => navigate('/sales/funnel', { state: { filter: null, view: 'table' } }) },
     { lbl: t('s_active'), val: active, col: '#4F46E5', fn: () => navigate('/sales/funnel', { state: { filter: '__active__', view: 'table' } }) },
     // 퍼널 흐름 순서: 진행중 → 온보딩 → Won / Lost → 전환율
-    { lbl: t('onboarding_lbl'), val: onboardingCount, col: '#059669', fn: () => navigate('/sales/funnel', { state: { filter: 'Onboarding', view: 'board' } }) },
+    { lbl: t('onboarding_lbl'), val: onboardingCount, col: ONBOARDING_COLOR, fn: () => navigate('/sales/funnel', { state: { filter: 'Onboarding', view: 'board' } }) },
     { lbl: t('s_won'), val: won, col: '#065F46', fn: () => navigate('/sales/funnel', { state: { filter: 'Won', view: 'board' } }) },
     { lbl: t('s_lost'), val: byStage('Lost'), col: '#DC2626', fn: () => navigate('/sales/funnel', { state: { filter: 'Lost', view: 'board' } }) },
     { lbl: t('s_conv'), val: convRate + '%', col: '#059669', fn: null },
@@ -297,6 +299,7 @@ export default function SalesDashboard() {
                 <th style={{ padding: '8px', textAlign: 'left', fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>{t('s_owner_col')}</th>
                 <th style={{ padding: '8px', textAlign: 'center', fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>{t('s_total_col')}</th>
                 <th style={{ padding: '8px', textAlign: 'center', fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>{t('s_active_col')}</th>
+                <th style={{ padding: '8px', textAlign: 'center', fontSize: 12, color: ONBOARDING_COLOR, fontWeight: 600 }}>{t('onboarding_lbl')}</th>
                 <th style={{ padding: '8px', textAlign: 'center', fontSize: 12, color: '#065F46', fontWeight: 600 }}>{t('s_won_col')}</th>
               </tr>
             </thead>
@@ -316,6 +319,10 @@ export default function SalesDashboard() {
                   <td style={{ padding: '9px 8px', textAlign: 'center', color: '#4F46E5', fontWeight: 600, cursor: 'pointer' }}
                     onClick={() => navigate('/sales/leads', { state: { filter: { owner: o.owner } } })}>
                     {o.active}
+                  </td>
+                  <td style={{ padding: '9px 8px', textAlign: 'center', color: ONBOARDING_COLOR, fontWeight: 600, cursor: 'pointer' }}
+                    onClick={() => navigate('/sales/leads', { state: { filter: { owner: o.owner, stage: 'Onboarding' } } })}>
+                    {o.onboarding}
                   </td>
                   <td style={{ padding: '9px 8px', textAlign: 'center', color: '#065F46', fontWeight: 700, cursor: 'pointer' }}
                     onClick={() => navigate('/sales/leads', { state: { filter: { owner: o.owner, stage: 'Won' } } })}>
@@ -344,12 +351,13 @@ export default function SalesDashboard() {
               </button>
             </div>
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse', minWidth: 600 }}>
+              <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse', minWidth: 680 }}>
                 <thead>
                   <tr style={{ background: 'var(--accent)', color: 'white' }}>
                     <th style={{ padding: '9px 14px', textAlign: 'left', fontWeight: 600 }}>행사</th>
                     <th style={{ padding: '9px 10px', textAlign: 'center', fontWeight: 600 }}>Total</th>
                     <th style={{ padding: '9px 10px', textAlign: 'center', fontWeight: 600, color: '#FDE68A' }}>Active</th>
+                    <th style={{ padding: '9px 10px', textAlign: 'center', fontWeight: 600, color: '#99F6E4' }}>Onboarding</th>
                     <th style={{ padding: '9px 10px', textAlign: 'center', fontWeight: 600, color: '#A7F3D0' }}>Won ✅</th>
                     <th style={{ padding: '9px 10px', textAlign: 'center', fontWeight: 600, color: '#FCA5A5' }}>Lost</th>
                     <th style={{ padding: '9px 14px', textAlign: 'left', fontWeight: 600 }}>파이프라인</th>
@@ -360,10 +368,12 @@ export default function SalesDashboard() {
                     const el = ev.leads
                     const eWon = el.filter(l => l.current_stage === 'Won').length
                     const eLost = el.filter(l => l.current_stage === 'Lost').length
-                    const eActive = el.filter(l => isActiveStage(l.current_stage)).length
+                    const eActive = el.filter(l => isInProgressStage(l.current_stage)).length
+                    const eOnb = el.filter(l => l.current_stage === 'Onboarding').length
                     const eTotal = el.length
                     const wonPct = eTotal ? Math.round(eWon / eTotal * 100) : 0
                     const activePct = eTotal ? Math.round(eActive / eTotal * 100) : 0
+                    const onbPct = eTotal ? Math.round(eOnb / eTotal * 100) : 0
                     const lostPct = eTotal ? Math.round(eLost / eTotal * 100) : 0
                     return (
                       <tr key={ev.key} style={{ borderBottom: '0.5px solid var(--border)', cursor: 'pointer', transition: 'background .1s' }}
@@ -373,11 +383,13 @@ export default function SalesDashboard() {
                         <td style={{ padding: '9px 14px', fontWeight: 600, fontSize: 12, color: ev.key.startsWith('s:') ? 'var(--muted)' : undefined }}>{ev.label}</td>
                         <td style={{ padding: '9px 10px', textAlign: 'center', fontWeight: 700 }}>{eTotal}</td>
                         <td style={{ padding: '9px 10px', textAlign: 'center', color: '#4F46E5', fontWeight: 600 }}>{eActive}</td>
+                        <td style={{ padding: '9px 10px', textAlign: 'center', color: ONBOARDING_COLOR, fontWeight: 600 }}>{eOnb}</td>
                         <td style={{ padding: '9px 10px', textAlign: 'center', color: '#065F46', fontWeight: 700 }}>{eWon}</td>
                         <td style={{ padding: '9px 10px', textAlign: 'center', color: '#DC2626', fontWeight: 600 }}>{eLost}</td>
                         <td style={{ padding: '9px 14px' }}>
                           <div style={{ height: 8, background: '#EEE', borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
                             <div style={{ width: `${activePct}%`, background: '#4F46E5' }} />
+                            <div style={{ width: `${onbPct}%`, background: ONBOARDING_COLOR }} />
                             <div style={{ width: `${wonPct}%`, background: '#065F46' }} />
                             <div style={{ width: `${lostPct}%`, background: '#DC2626' }} />
                           </div>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { STAGE_ORDER, STAGE_COLORS, isActiveStage, reachedProposal, reachedOutreach, localDateStr } from '../../lib/utils'
+import { STAGE_ORDER, STAGE_COLORS, isInProgressStage, reachedProposal, reachedOutreach, localDateStr } from '../../lib/utils'
 import type { SalesLead } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
@@ -179,8 +179,9 @@ export default function SalesReports() {
     const cl = leads.filter(l => l.country_corridor === c)
     const cWon = cl.filter(l => l.current_stage === 'Won').length
     const cLost = cl.filter(l => l.current_stage === 'Lost').length
-    const cActive = cl.filter(l => isActiveStage(l.current_stage)).length
-    return { corridor: c, total: cl.length, won: cWon, lost: cLost, active: cActive }
+    const cActive = cl.filter(l => isInProgressStage(l.current_stage)).length // 온보딩은 별도 칸
+    const cOnb = cl.filter(l => l.current_stage === 'Onboarding').length
+    return { corridor: c, total: cl.length, won: cWon, lost: cLost, active: cActive, onboarding: cOnb }
   }).sort((a, b) => b.total - a.total)
 
   const kpiCards = [
@@ -382,6 +383,7 @@ export default function SalesReports() {
                     <th style={{ padding: '6px 7px', textAlign: 'left', color: 'var(--muted)', fontWeight: 600 }}>Corridor</th>
                     <th style={{ padding: '6px 7px', textAlign: 'center', color: 'var(--muted)', fontWeight: 600 }}>Total</th>
                     <th style={{ padding: '6px 7px', textAlign: 'center', color: '#4F46E5', fontWeight: 600 }}>Active</th>
+                    <th style={{ padding: '6px 7px', textAlign: 'center', color: STAGE_COLORS['Onboarding']?.bg, fontWeight: 600 }} title="Onboarding">Onb.</th>
                     <th style={{ padding: '6px 7px', textAlign: 'center', color: '#065F46', fontWeight: 600 }}>Won</th>
                     <th style={{ padding: '6px 7px', textAlign: 'center', color: '#DC2626', fontWeight: 600 }}>Lost</th>
                   </tr>
@@ -396,6 +398,7 @@ export default function SalesReports() {
                       <td style={{ padding: '7px', fontSize: 11, fontWeight: 600, maxWidth: '30vw', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.corridor}>{c.corridor}</td>
                       <td style={{ padding: '7px', textAlign: 'center', fontWeight: 700 }}>{c.total}</td>
                       <td style={{ padding: '7px', textAlign: 'center', color: '#4F46E5', fontWeight: 600 }}>{c.active}</td>
+                      <td style={{ padding: '7px', textAlign: 'center', color: STAGE_COLORS['Onboarding']?.bg, fontWeight: 600 }}>{c.onboarding}</td>
                       <td style={{ padding: '7px', textAlign: 'center', color: '#065F46', fontWeight: 700 }}>{c.won}</td>
                       <td style={{ padding: '7px', textAlign: 'center', color: '#DC2626', fontWeight: 600 }}>{c.lost}</td>
                     </tr>
