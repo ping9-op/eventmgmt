@@ -210,11 +210,11 @@ export default function Proposal() {
       if (editingProposalId) {
         // 기존 제안서 수정 — payments는 그대로 유지
         const { error } = await supabase.from('proposals').update(proposalData).eq('id', editingProposalId)
-        if (error) throw new Error(error.code === '23505' ? `${eventLabel({ name: '', year, session }).trim()} 제안서가 이미 있습니다.` : error.message)
+        if (error) throw new Error(error.code === '23505' ? `${eventLabel({ name: '', year, session }).trim()} 제안서가 이미 있습니다. (보관함에 있는 경우 보관함에서 복원하세요)` : error.message)
       } else {
         // 신규 또는 복사 — 제안서 + 결제 항목 모두 새로 생성
         const { data: newProp, error } = await supabase.from('proposals').insert(proposalData).select().single()
-        if (error || !newProp) throw new Error(error?.code === '23505' ? `${eventLabel({ name: '', year, session }).trim()} 제안서가 이미 있습니다.` : (error?.message || '제안서 저장 실패'))
+        if (error || !newProp) throw new Error(error?.code === '23505' ? `${eventLabel({ name: '', year, session }).trim()} 제안서가 이미 있습니다. (보관함에 있는 경우 보관함에서 복원하세요)` : (error?.message || '제안서 저장 실패'))
         const dbKey = legacyKey({ key: finalExhKey, year, session })
         for (const b of budget.filter(b => b.curr > 0)) {
           const { error: payErr } = await supabase.from('payments').insert({

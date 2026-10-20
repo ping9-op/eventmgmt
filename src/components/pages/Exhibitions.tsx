@@ -175,11 +175,14 @@ export default function Exhibitions() {
 
       // 같은 연도·회차 Proposal이 이미 있는지 확인 (보관된 것 포함 — DB UNIQUE 제약과 동일 기준)
       const session = apSession || null
-      let dupQ = supabase.from('proposals').select('id').eq('exhibition_id', exhId).eq('year', parseInt(apYear))
+      let dupQ = supabase.from('proposals').select('id, archived_at').eq('exhibition_id', exhId).eq('year', parseInt(apYear))
       dupQ = session ? dupQ.eq('session', session) : dupQ.is('session', null)
       const { data: existing } = await dupQ.limit(1)
       if (existing && existing.length > 0) {
-        showToast(`⚠️ ${eventLabel({ name: apName, year: parseInt(apYear), session })} Proposal이 이미 존재합니다.`)
+        const label = eventLabel({ name: apName, year: parseInt(apYear), session })
+        showToast(existing[0].archived_at
+          ? `⚠️ ${label} Proposal이 보관함에 있습니다. 보관함에서 복원해주세요.`
+          : `⚠️ ${label} Proposal이 이미 존재합니다.`)
         return
       }
 

@@ -22,6 +22,7 @@ const SalesFunnel = lazy(() => import('./components/pages/SalesFunnel'))
 const SalesFollowUp = lazy(() => import('./components/pages/SalesFollowUp'))
 const SalesReports = lazy(() => import('./components/pages/SalesReports'))
 const SalesSettings = lazy(() => import('./components/pages/SalesSettings'))
+const Archive = lazy(() => import('./components/pages/Archive'))
 const EventDetail = lazy(() => import('./components/pages/EventDetail'))
 const LegacyEventRedirect = lazy(() => import('./components/pages/EventDetail').then(m => ({ default: m.LegacyEventRedirect })))
 
@@ -58,6 +59,7 @@ export default function App() {
         <Route path="expo/payments" element={<Suspense fallback={<LoadingSpinner />}><Payments /></Suspense>} />
         <Route path="expo/create" element={<Suspense fallback={<LoadingSpinner />}><Proposal /></Suspense>} />
         <Route path="expo/report" element={<Suspense fallback={<LoadingSpinner />}><Report /></Suspense>} />
+        <Route path="expo/archive" element={<Suspense fallback={<LoadingSpinner />}><Archive /></Suspense>} />
         <Route path="sales/dashboard" element={<Suspense fallback={<LoadingSpinner />}><SalesDashboard /></Suspense>} />
         <Route path="sales/leads" element={<Suspense fallback={<LoadingSpinner />}><SalesLeads /></Suspense>} />
         <Route path="sales/funnel" element={<Suspense fallback={<LoadingSpinner />}><SalesFunnel /></Suspense>} />

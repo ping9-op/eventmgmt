@@ -66,6 +66,7 @@ export default function Sidebar({ open, onClose }: { open?: boolean; onClose?: (
           <NavItem path="/expo/payments" label={t('payments')} sub locationPathname={location.pathname} onNavigate={handleNavigate} />
           <NavItem path="/expo/create" label={t('create')} sub locationPathname={location.pathname} onNavigate={handleNavigate} />
           <NavItem path="/expo/report" label={t('report')} sub locationPathname={location.pathname} onNavigate={handleNavigate} />
+          <NavItem path="/expo/archive" label={t('archive_box')} sub locationPathname={location.pathname} onNavigate={handleNavigate} />
         </div>
       </div>
 
