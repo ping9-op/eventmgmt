@@ -302,6 +302,8 @@ label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px;margin-t
 .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
 .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
 .g5{display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
+.g6{display:grid;grid-template-columns:repeat(6,1fr);gap:14px}
+@media (max-width:1200px){.g6{grid-template-columns:repeat(3,1fr)}}
 .g2-kpi{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
 .g3-kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
 
@@ -366,6 +368,7 @@ label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px;margin-t
   /* 4열/5열 → 2열 */
   .g4{grid-template-columns:1fr 1fr!important;gap:10px!important}
   .g5{grid-template-columns:1fr 1fr!important;gap:10px!important}
+  .g6{grid-template-columns:1fr 1fr!important;gap:10px!important}
   /* KPI 그리드: 카드 내부 통계 — 풀폭 카드 안에서 2열 유지 */
   .g2-kpi{grid-template-columns:1fr 1fr!important;gap:8px!important}
   .g3-kpi{grid-template-columns:repeat(3,1fr)!important;gap:8px!important}

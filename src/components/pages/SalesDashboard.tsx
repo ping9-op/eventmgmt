@@ -143,6 +143,7 @@ export default function SalesDashboard() {
     { lbl: t('s_won'), val: won, col: '#065F46', fn: () => navigate('/sales/funnel', { state: { filter: 'Won', view: 'board' } }) },
     { lbl: t('s_lost'), val: byStage('Lost'), col: '#DC2626', fn: () => navigate('/sales/funnel', { state: { filter: 'Lost', view: 'board' } }) },
     { lbl: t('s_conv'), val: convRate + '%', col: '#059669', fn: null },
+    { lbl: t('onboarding_lbl'), val: onboardingCount, col: '#059669', fn: () => navigate('/sales/funnel', { state: { filter: 'Onboarding', view: 'board' } }) },
   ]
 
   return (
@@ -153,8 +154,8 @@ export default function SalesDashboard() {
         <div className="sub">{t('s_dashboard_sub')}</div>
       </div>
 
-      {/* KPI 카드 5개 */}
-      <div className="g5" style={{ marginBottom: 28 }}>
+      {/* KPI 카드 6개 (온보딩 포함) */}
+      <div className="g6" style={{ marginBottom: 28 }}>
         {kpiCards.map((k, i) => (
           <div key={i}
             onClick={k.fn || undefined}
@@ -175,9 +176,18 @@ export default function SalesDashboard() {
       {/* 다가오는 일정 — 팔로우업 Task 기한 (지연 포함 · 향후 14일) */}
       <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px', marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
-          <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 14, fontWeight: 700 }}>📅 다가오는 일정</span>
-            <span style={{ fontSize: 12, color: 'var(--muted)', marginLeft: 8 }}>팔로우업 기한 · 지연 포함, 향후 {UPCOMING_DAYS}일</span>
+            {/* 지연·오늘 마감 건수 — 누르면 팔로우업 관리에서 해당 필터로 */}
+            <button onClick={() => navigate('/sales/followup', { state: { filter: 'overdue' } })}
+              style={{ background: overdueCount ? '#FEF2F2' : 'var(--light)', border: `1px solid ${overdueCount ? '#FECACA' : 'var(--border2)'}`, color: overdueCount ? '#DC2626' : 'var(--muted)', borderRadius: 99, padding: '3px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+              지연 {overdueCount}
+            </button>
+            <button onClick={() => navigate('/sales/followup', { state: { filter: 'today' } })}
+              style={{ background: todayTaskCount ? '#FFFBEB' : 'var(--light)', border: `1px solid ${todayTaskCount ? '#FDE68A' : 'var(--border2)'}`, color: todayTaskCount ? '#D97706' : 'var(--muted)', borderRadius: 99, padding: '3px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+              오늘 {todayTaskCount}
+            </button>
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>팔로우업 기한 · 지연 포함, 향후 {UPCOMING_DAYS}일</span>
           </div>
           <button onClick={() => navigate('/sales/followup')}
             style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }}>
@@ -219,7 +229,7 @@ export default function SalesDashboard() {
       </div>
 
       {/* Funnel 단계별 현황 — 풀폭 */}
-      <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px', marginBottom: 16 }}>
+      <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, padding: '20px 24px', marginBottom: 28 }}>
         <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 16 }}>{t('funnel_stage_status')}</div>
         {STAGE_ORDER.map(s => {
           const c = STAGE_COLORS[s] || { bg: '#6B7280' }
@@ -240,28 +250,6 @@ export default function SalesDashboard() {
             </div>
           )
         })}
-      </div>
-
-      {/* 알림 카드 3개 — 가로 3열 */}
-      <div className="g3" style={{ marginBottom: 28 }}>
-        <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 12, padding: '18px 20px', cursor: 'pointer' }}
-          onClick={() => navigate('/sales/followup', { state: { filter: 'overdue' } })}>
-          <div style={{ fontSize: 12, color: '#DC2626', fontWeight: 600, marginBottom: 4 }}>{t('overdue_tasks_lbl')}</div>
-          <div style={{ fontSize: 32, fontWeight: 800, color: '#DC2626' }}>{overdueCount}</div>
-          <div style={{ fontSize: 12, color: '#DC2626', marginTop: 4 }}>{t('action_required')}</div>
-        </div>
-        <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 12, padding: '18px 20px', cursor: 'pointer' }}
-          onClick={() => navigate('/sales/followup', { state: { filter: 'today' } })}>
-          <div style={{ fontSize: 12, color: '#D97706', fontWeight: 600, marginBottom: 4 }}>{t('today_tasks_lbl')}</div>
-          <div style={{ fontSize: 32, fontWeight: 800, color: '#D97706' }}>{todayTaskCount}</div>
-          <div style={{ fontSize: 12, color: '#D97706', marginTop: 4 }}>{t('due_today_desc')}</div>
-        </div>
-        <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 12, padding: '18px 20px', cursor: 'pointer' }}
-          onClick={() => navigate('/sales/funnel', { state: { filter: 'Onboarding', view: 'board' } })}>
-          <div style={{ fontSize: 12, color: '#059669', fontWeight: 600, marginBottom: 4 }}>{t('onboarding_lbl')}</div>
-          <div style={{ fontSize: 32, fontWeight: 800, color: '#059669' }}>{onboardingCount}</div>
-          <div style={{ fontSize: 12, color: '#059669', marginTop: 4 }}>{t('onboarding_in_progress_desc')}</div>
-        </div>
       </div>
 
       {/* Top Leads + Owner 성과 */}
