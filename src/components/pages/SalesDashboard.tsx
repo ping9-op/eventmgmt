@@ -140,10 +140,11 @@ export default function SalesDashboard() {
   const kpiCards = [
     { lbl: t('s_total'), val: total, col: 'var(--accent)', fn: () => navigate('/sales/funnel', { state: { filter: null, view: 'table' } }) },
     { lbl: t('s_active'), val: active, col: '#4F46E5', fn: () => navigate('/sales/funnel', { state: { filter: '__active__', view: 'table' } }) },
+    // 퍼널 흐름 순서: 진행중 → 온보딩 → Won / Lost → 전환율
+    { lbl: t('onboarding_lbl'), val: onboardingCount, col: '#059669', fn: () => navigate('/sales/funnel', { state: { filter: 'Onboarding', view: 'board' } }) },
     { lbl: t('s_won'), val: won, col: '#065F46', fn: () => navigate('/sales/funnel', { state: { filter: 'Won', view: 'board' } }) },
     { lbl: t('s_lost'), val: byStage('Lost'), col: '#DC2626', fn: () => navigate('/sales/funnel', { state: { filter: 'Lost', view: 'board' } }) },
     { lbl: t('s_conv'), val: convRate + '%', col: '#059669', fn: null },
-    { lbl: t('onboarding_lbl'), val: onboardingCount, col: '#059669', fn: () => navigate('/sales/funnel', { state: { filter: 'Onboarding', view: 'board' } }) },
   ]
 
   return (
