@@ -223,6 +223,8 @@ export function normalizeStage(raw: string | null | undefined): string {
 
 /** 활성 리드 = Won/Lost가 아닌 리드 */
 export const isActiveStage = (stage: string) => stage !== 'Won' && stage !== 'Lost'
+/** 대시보드 '진행중' 집계 기준: 종결(Won/Lost)되지 않았고 온보딩 단계도 아닌 리드 (온보딩은 별도 집계) */
+export const isInProgressStage = (stage: string) => isActiveStage(stage) && stage !== 'Onboarding'
 
 /** Proposal Sent 이상 도달 여부. Lost는 직전 단계(lost_at_stage) 기준 */
 /** 해당 단계에 한 번이라도 도달했는지 (Lost는 잃기 직전 단계 기준) */

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { STAGE_ORDER, STAGE_COLORS, priorityColor, isActiveStage, localDateStr, reachedProposal } from '../../lib/utils'
+import { STAGE_ORDER, STAGE_COLORS, priorityColor, isInProgressStage, localDateStr, reachedProposal } from '../../lib/utils'
 import { logStageChange } from '../../lib/stageHistory'
 import type { SalesLead, SalesProposal } from '../../types/database'
 import { loadAllSettings } from '../../lib/settings'
@@ -191,7 +191,7 @@ export default function SalesFunnel() {
   const baseFiltered = filterOwner ? leads.filter(l => l.owner === filterOwner) : leads
   const filtered = filterStage
     ? filterStage === '__active__'
-      ? baseFiltered.filter(l => isActiveStage(l.current_stage))
+      ? baseFiltered.filter(l => isInProgressStage(l.current_stage)) // 대시보드 '진행중' 카드와 같은 기준 (온보딩 제외)
       : baseFiltered.filter(l => l.current_stage === filterStage)
     : baseFiltered
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { STAGE_ORDER, STAGE_COLORS, isActiveStage, localDateStr, dayDiffFromToday, priorityColor } from '../../lib/utils'
+import { STAGE_ORDER, STAGE_COLORS, isActiveStage, isInProgressStage, localDateStr, dayDiffFromToday, priorityColor } from '../../lib/utils'
 import type { SalesLead, SalesTask } from '../../types/database'
 import LeadDetailPanel from './LeadDetailPanel'
 import { useLang } from '../../contexts/LangContext'
@@ -108,7 +108,7 @@ export default function SalesDashboard() {
   const total = leads.length
   const byStage = (s: string) => leads.filter(l => l.current_stage === s).length
   const won = byStage('Won')
-  const active = leads.filter(l => isActiveStage(l.current_stage)).length
+  const active = leads.filter(l => isInProgressStage(l.current_stage)).length // 온보딩은 별도 카드로 집계
   const convRate = total ? Math.round(won / total * 100) : 0
   const overdueCount = tasks.filter(t => t.due_date < today && t.status !== 'Done').length
   const todayTaskCount = tasks.filter(t => t.due_date === today && t.status !== 'Done').length
