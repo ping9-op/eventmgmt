@@ -8,13 +8,15 @@ import LoadingSpinner from '../LoadingSpinner'
 import EmptyState from '../EmptyState'
 
 // 박람회/행사별 권한 관리 (관리자 전용)
-// - 박람회 전체: 그 박람회의 모든 행사(이후 추가되는 회차 포함)
+// - 모든 박람회: 전체 박람회·행사 (이후 새로 등록되는 박람회 포함)
+// - 특정 박람회: 그 박람회의 모든 행사(이후 추가되는 회차 포함)
 // - 특정 행사: 해당 연도·회차 행사만
 // - 보기: 조회만 / 편집: 행사 정보·결제·체크리스트·보고서 수정 (박람회 전체 편집이면 회차 추가·박람회 보관도 가능)
 // 관리자는 권한 부여 없이 전체 접근. 새 박람회 등록은 관리자만.
 
 interface UserRow { id: string; email: string; sales_owner: string | null; is_admin: boolean; last_sign_in_at: string | null; has_mfa: boolean }
-interface PermRow { id: string; user_id: string; exhibition_id: string | null; proposal_id: string | null; level: 'view' | 'edit'; granted_by: string | null; created_at: string }
+interface PermRow { id: string; user_id: string; all_exhibitions: boolean; exhibition_id: string | null; proposal_id: string | null; level: 'view' | 'edit'; granted_by: string | null; created_at: string }
+type Scope = 'all' | 'exh' | 'prop'
 
 const LEVEL_LABEL: Record<string, string> = { view: '보기', edit: '편집' }
 
@@ -32,7 +34,7 @@ export default function Permissions() {
 
   // 부여 폼
   const [fUser, setFUser] = useState('')
-  const [fScope, setFScope] = useState<'exh' | 'prop'>('exh')
+  const [fScope, setFScope] = useState<Scope>('all')
   const [fTarget, setFTarget] = useState('')
   const [fLevel, setFLevel] = useState<'view' | 'edit'>('view')
 
@@ -87,21 +89,25 @@ export default function Permissions() {
   const admins = users.filter(u => u.is_admin)
 
   function targetLabel(p: PermRow): string {
+    if (p.all_exhibitions) return '모든 박람회 (이후 추가되는 박람회 포함)'
     if (p.exhibition_id) return `${exhById.get(p.exhibition_id)?.name || '(알 수 없는 박람회)'} — 박람회 전체`
     const r = p.proposal_id ? refById.get(p.proposal_id) : undefined
     return r ? eventLabel(r) : '(알 수 없는 행사)'
   }
 
   async function grant() {
-    if (!fUser || !fTarget) { showToast('⚠️ 사용자와 대상을 선택하세요.'); return }
+    if (!fUser) { showToast('⚠️ 직원을 선택하세요.'); return }
+    if (fScope !== 'all' && !fTarget) { showToast(fScope === 'exh' ? '⚠️ 박람회를 선택하세요.' : '⚠️ 행사를 선택하세요.'); return }
     // 같은 대상에 이미 권한이 있으면 수준만 변경
-    const existing = perms.find(p => p.user_id === fUser && (fScope === 'exh' ? p.exhibition_id === fTarget : p.proposal_id === fTarget))
+    const existing = perms.find(p => p.user_id === fUser && (
+      fScope === 'all' ? p.all_exhibitions : fScope === 'exh' ? p.exhibition_id === fTarget : p.proposal_id === fTarget))
     setSaving(true)
     try {
       const { error } = existing
         ? await supabase.from('expo_permissions').update({ level: fLevel }).eq('id', existing.id)
         : await supabase.from('expo_permissions').insert({
             user_id: fUser,
+            all_exhibitions: fScope === 'all',
             exhibition_id: fScope === 'exh' ? fTarget : null,
             proposal_id: fScope === 'prop' ? fTarget : null,
             level: fLevel,
@@ -154,20 +160,23 @@ export default function Permissions() {
           </div>
           <div>
             <label style={{ marginTop: 0 }}>범위</label>
-            <select value={fScope} onChange={e => { setFScope(e.target.value as 'exh' | 'prop'); setFTarget('') }}>
-              <option value="exh">박람회 전체</option>
+            <select value={fScope} onChange={e => { setFScope(e.target.value as Scope); setFTarget('') }}>
+              <option value="all">모든 박람회 (이후 추가분 포함)</option>
+              <option value="exh">특정 박람회 (모든 회차)</option>
               <option value="prop">특정 행사 (연도·회차)</option>
             </select>
           </div>
-          <div>
-            <label style={{ marginTop: 0 }}>{fScope === 'exh' ? '박람회' : '행사'}</label>
-            <select value={fTarget} onChange={e => setFTarget(e.target.value)}>
-              <option value="">-- 선택 --</option>
-              {fScope === 'exh'
-                ? exhibitions.map(e => <option key={e.id} value={e.id}>{e.name}</option>)
-                : refs.map(r => <option key={r.proposalId} value={r.proposalId}>{eventLabel(r)}</option>)}
-            </select>
-          </div>
+          {fScope !== 'all' && (
+            <div>
+              <label style={{ marginTop: 0 }}>{fScope === 'exh' ? '박람회' : '행사'}</label>
+              <select value={fTarget} onChange={e => setFTarget(e.target.value)}>
+                <option value="">-- 선택 --</option>
+                {fScope === 'exh'
+                  ? exhibitions.map(e => <option key={e.id} value={e.id}>{e.name}</option>)
+                  : refs.map(r => <option key={r.proposalId} value={r.proposalId}>{eventLabel(r)}</option>)}
+              </select>
+            </div>
+          )}
           <div>
             <label style={{ marginTop: 0 }}>수준</label>
             <select value={fLevel} onChange={e => setFLevel(e.target.value as 'view' | 'edit')}>
@@ -175,7 +184,8 @@ export default function Permissions() {
               <option value="edit">편집</option>
             </select>
           </div>
-          <button className="btn btn-primary" onClick={grant} disabled={saving || !fUser || !fTarget}>
+          {/* 비활성화 대신 누르면 빠진 항목을 안내 */}
+          <button className="btn btn-primary" onClick={grant} disabled={saving}>
             {saving ? '저장 중...' : '부여'}
           </button>
         </div>

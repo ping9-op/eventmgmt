@@ -183,8 +183,8 @@ export type Database = {
         Relationships: []
       }
       expo_permissions: {
-        Row: { id: string; user_id: string; exhibition_id: string | null; proposal_id: string | null; level: 'view' | 'edit'; granted_by: string | null; created_at: string }
-        Insert: { user_id: string; exhibition_id?: string | null; proposal_id?: string | null; level: 'view' | 'edit'; granted_by?: string | null }
+        Row: { id: string; user_id: string; all_exhibitions: boolean; exhibition_id: string | null; proposal_id: string | null; level: 'view' | 'edit'; granted_by: string | null; created_at: string }
+        Insert: { user_id: string; all_exhibitions?: boolean; exhibition_id?: string | null; proposal_id?: string | null; level: 'view' | 'edit'; granted_by?: string | null }
         Update: { level?: 'view' | 'edit' }
         Relationships: []
       }
