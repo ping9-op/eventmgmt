@@ -6,6 +6,7 @@ import { supabase } from './lib/supabase'
 import { initExhColors } from './lib/utils'
 import Layout from './components/layout/Layout'
 import LoginPage from './components/auth/LoginPage'
+import ChangePasswordPage from './components/auth/ChangePasswordPage'
 import LoadingSpinner from './components/LoadingSpinner'
 
 const Dashboard = lazy(() => import('./components/pages/Dashboard'))
@@ -25,9 +26,10 @@ const EventDetail = lazy(() => import('./components/pages/EventDetail'))
 const LegacyEventRedirect = lazy(() => import('./components/pages/EventDetail').then(m => ({ default: m.LegacyEventRedirect })))
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth()
+  const { user, loading, mustChangePassword } = useAuth()
   if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: 'var(--muted)' }}>로딩 중...</div>
   if (!user) return <Navigate to="/login" replace />
+  if (mustChangePassword) return <ChangePasswordPage />
   return <>{children}</>
 }
 

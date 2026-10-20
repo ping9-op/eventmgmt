@@ -229,7 +229,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      change_initial_password: {
+        Args: { current_password: string; new_password: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

@@ -16,7 +16,8 @@ interface AuthContextType {
   loading: boolean
   isAdmin: boolean
   salesOwner: string | null
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>
+  mustChangePassword: boolean
+  signIn:(email: string, password: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
 }
 
@@ -85,6 +86,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // sales_leads.owner를 이 값과 매칭해 RLS가 자기 리드만 노출/수정 가능하도록 함
   const salesOwner = (user?.app_metadata as any)?.sales_owner || null
 
+  // 첫 로그인 비밀번호 변경 대상 — 관리자가 계정 생성 시 app_metadata.must_change_password = true 설정
+  // 해제는 change_initial_password RPC(현재 비밀번호 검증 + 변경)에서만 가능
+  const mustChangePassword = (user?.app_metadata as any)?.must_change_password === true
+
   async function signIn(email: string, password: string) {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) return { error: error.message }
@@ -98,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, isAdmin, salesOwner, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, isAdmin, salesOwner, mustChangePassword, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   )
