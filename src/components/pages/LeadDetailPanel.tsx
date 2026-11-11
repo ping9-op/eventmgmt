@@ -157,6 +157,8 @@ export default function LeadDetailPanel({
         // 비울 수 있는 필드는 빈 값도 그대로 저장 (|| 로 이전 값으로 되돌리면 지울 방법이 없음)
         ...eventFields,
         owner: form.owner || lead.owner,
+        // 발굴자는 관리자만 변경 (DB 트리거도 매니저의 변경은 무시)
+        ...(isAdmin ? { sourced_by: form.sourced_by || lead.sourced_by } : {}),
         priority: form.priority || lead.priority,
         country_corridor: form.country_corridor ?? lead.country_corridor,
         business_type: form.business_type ?? lead.business_type,
@@ -324,6 +326,10 @@ export default function LeadDetailPanel({
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.company_name}</div>
               <div style={{ fontSize: 12, color: '#B0A0A0' }}>{[lead.contact_person, leadLabel].filter(Boolean).join(' · ')}</div>
+              <div style={{ fontSize: 11, color: '#D8CCCC', marginTop: 2 }}>
+                👤 담당 <b style={{ color: 'white' }}>{lead.owner || '—'}</b>
+                {lead.sourced_by && lead.sourced_by !== lead.owner && <> · 🔎 발굴 <b style={{ color: 'white' }}>{lead.sourced_by}</b></>}
+              </div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
               <span style={{ display: 'inline-block', padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 700, color: 'white', background: stageBg, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -400,6 +406,15 @@ export default function LeadDetailPanel({
                     </select>
                   ) : (
                     <input value={form.owner || ''} disabled style={{ background: 'var(--light)', color: 'var(--muted)' }} />
+                  )}
+                </Field>
+                <Field label="발굴자">
+                  {isAdmin ? (
+                    <select value={form.sourced_by || ''} onChange={e => setForm(f => ({ ...f, sourced_by: e.target.value }))}>
+                      {withCurrent(settings?.owners, form.sourced_by).map(o => <option key={o}>{o}</option>)}
+                    </select>
+                  ) : (
+                    <input value={form.sourced_by || ''} disabled style={{ background: 'var(--light)', color: 'var(--muted)' }} />
                   )}
                 </Field>
                 <Field label="Priority">

@@ -45,6 +45,7 @@ const FIELD_DEFS: { key: string; label: string; required?: boolean; aliases: str
   { key: 'email', label: '이메일', aliases: ['email', '이메일', 'e-mail', '이메일주소'] },
   { key: 'event_name', label: '행사명', aliases: ['event_name', 'event', '행사명'] },
   { key: 'owner', label: 'Owner', aliases: ['owner', '담당매니저', '매니저'] },
+  { key: 'sourced_by', label: '발굴자', aliases: ['sourced_by', 'sourced by', '발굴자', '발굴'] },
   { key: 'priority', label: 'Priority', aliases: ['priority', '우선순위'] },
   { key: 'current_stage', label: 'Stage', aliases: ['current_stage', 'stage', '스테이지', '단계'] },
   { key: 'country_corridor', label: 'Corridor', aliases: ['country_corridor', 'corridor', '송금국가', '국가'] },
@@ -56,6 +57,20 @@ const FIELD_DEFS: { key: string; label: string; required?: boolean; aliases: str
   { key: 'lead_source', label: 'Source', aliases: ['lead_source', 'source', '유입경로', '채널'] },
   { key: 'registered_date', label: '등록일', aliases: ['registered_date', 'date', '등록일', '날짜', '일자', '접수일'] },
 ]
+
+// 담당 세일즈 표시 (고객 담당자 contact_person과 구분되도록 배지로)
+function OwnerBadge({ owner }: { owner: string }) {
+  return (
+    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 99, background: '#EEF2FF', color: '#4F46E5', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
+      👤 {owner || '—'}
+    </span>
+  )
+}
+
+// 담당자 필터 목록: 설정의 담당자 + 실제 리드에 있는 담당자(설정에서 빠진 사람) + 현재 선택값
+function withCurrentOwner(owners: string[] | undefined, leads: SalesLead[], current: string | null): string[] {
+  return [...new Set([...(owners || []), ...leads.map(l => l.owner), ...(current ? [current] : [])].filter(Boolean))]
+}
 
 function guessMapping(headers: string[]): Record<string, string> {
   const norm = headers.map(h => ({ raw: h, norm: h.trim().toLowerCase() }))
@@ -115,7 +130,8 @@ export default function SalesLeads() {
   const [eventRefs, setEventRefs] = useState<EventRef[]>([]) // 박람회 행사 목록 (보관 제외)
   const refMap = toEventRefMap(eventRefs)
   const [loading, setLoading] = useState(true)
-  const [viewMode, setViewMode] = useState<ViewMode>('group')
+  // 첫 화면은 전체 리드 목록 (담당자가 바로 보이도록) — 행사·일자·출처별 요약은 '그룹별 보기'
+  const [viewMode, setViewMode] = useState<ViewMode>('detail')
   const [groupBy, setGroupBy] = useState<GroupBy>('event')
   const [groupKey, setGroupKey] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -225,10 +241,10 @@ export default function SalesLeads() {
     return () => { cancelled = true }
   }, [])
 
-  // 사이드바에서 같은 메뉴 재클릭 시 그룹뷰로 리셋
+  // 사이드바에서 같은 메뉴 재클릭 시 전체 목록으로 리셋
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return }
-    setViewMode('group')
+    setViewMode('detail')
     setGroupKey(null)
     setStageFilter(null)
     setSearch('')
@@ -314,6 +330,8 @@ export default function SalesLeads() {
       priority: form.priority || 'Medium',
       // 관리자가 아니면 owner를 임의로 지정할 수 없음 — 항상 본인 계정으로 등록 (RLS와 일치)
       owner,
+      // 발굴자는 관리자만 지정 (비우면 DB에서 등록자 본인으로 채움)
+      sourced_by: isAdmin ? (form.sourced_by || null) : null,
       current_stage: 'New Lead',
       volume_currency: form.volume_currency || 'USD',
       first_contact_done: false,
@@ -426,6 +444,7 @@ export default function SalesLeads() {
         lead_source: get(r, 'lead_source') || (event ? 'Expo' : ''),
         event_name: event,
         owner: get(r, 'owner'),
+        sourced_by: get(r, 'sourced_by') || null,
         priority: get(r, 'priority') || 'Medium',
         current_stage: normalizeStage(rawStage),
         country_corridor: get(r, 'country_corridor'),
@@ -468,6 +487,8 @@ export default function SalesLeads() {
         proposal_id: r.proposal_id ?? null,
         // 관리자가 아니면 Excel의 Owner 컬럼값과 무관하게 본인 계정으로 등록 (RLS와 일치)
         owner: isAdmin ? (r.owner || '') : (salesOwner || r.owner || ''), // confirmMapping에서 관리자 빈 Owner는 걸러짐
+        // 발굴자: 관리자 업로드만 Excel 값 사용, 비어 있으면 DB에서 업로드한 본인으로 채움
+        sourced_by: isAdmin ? (r.sourced_by || null) : null,
         priority: r.priority || 'Medium',
         current_stage: normalizeStage(r.current_stage),
         country_corridor: r.country_corridor || '',
@@ -495,8 +516,8 @@ export default function SalesLeads() {
   function exportCSV(ids?: string[]) {
     const toExport = ids && ids.length > 0 ? leads.filter(l => ids.includes(l.id)) : (checked.size > 0 ? leads.filter(l => checked.has(l.id)) : leads)
     if (!toExport.length) { showToast('⚠️ 내보낼 리드가 없습니다.'); return }
-    const H = ['SN', '등록일', '행사명', 'Company', '담당자', 'Phone', 'Email', 'Source', '주소', 'Owner', 'Stage', '첫연락', '마지막연락', '다음팔로업', '예상Volume', '통화', 'Priority', 'LostReason', 'Remarks']
-    const rows = toExport.map(l => [l.serial_no, l.registered_date, leadEventLabel(l, refMap), l.company_name, l.contact_person, l.phone || '', l.email || '', l.lead_source, l.address || '', l.owner, l.current_stage, l.first_contact_done ? 'Y' : 'N', l.last_contact_date || '', l.next_follow_up_date || '', l.expected_monthly_volume || '', l.volume_currency, l.priority, l.lost_reason || '', l.remarks || ''])
+    const H = ['SN', '등록일', '행사명', 'Company', '담당자', 'Phone', 'Email', 'Source', '주소', 'Owner', '발굴자', 'Stage', '첫연락', '마지막연락', '다음팔로업', '예상Volume', '통화', 'Priority', 'LostReason', 'Remarks']
+    const rows = toExport.map(l => [l.serial_no, l.registered_date, leadEventLabel(l, refMap), l.company_name, l.contact_person, l.phone || '', l.email || '', l.lead_source, l.address || '', l.owner, l.sourced_by || '', l.current_stage, l.first_contact_done ? 'Y' : 'N', l.last_contact_date || '', l.next_follow_up_date || '', l.expected_monthly_volume || '', l.volume_currency, l.priority, l.lost_reason || '', l.remarks || ''])
     const csv = [H, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
     const a = Object.assign(document.createElement('a'), { href: 'data:text/csv;charset=utf-8,﻿' + encodeURIComponent(csv), download: `GME_Leads_${localDateStr()}.csv` })
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
@@ -604,6 +625,7 @@ export default function SalesLeads() {
 
           {/* 액션 버튼 */}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+            <button className="btn btn-outline btn-sm" onClick={() => { setViewMode('detail'); setGroupKey(null); setDetailPage(0) }}>📋 전체 목록</button>
             <button className="btn btn-primary" onClick={() => setShowRegister(true)}>{t('s_register')}</button>
             <button className="btn btn-outline btn-sm" onClick={() => document.getElementById('pdf-input')?.click()}
               style={pdfFileName ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : {}}>
@@ -729,12 +751,24 @@ export default function SalesLeads() {
         /* Detail View */
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
-            <button className="btn btn-outline btn-sm" onClick={() => { setViewMode('group'); setGroupKey(null); setStageFilter(null); setSearch('') }}>{t('back_to_list')}</button>
+            {groupKey ? (
+              <button className="btn btn-outline btn-sm" onClick={() => { setViewMode('group'); setGroupKey(null); setStageFilter(null); setSearch('') }}>← 그룹별 보기</button>
+            ) : (
+              <button className="btn btn-outline btn-sm" onClick={() => { setViewMode('group'); setStageFilter(null); setSearch('') }}>🗂 그룹별 보기</button>
+            )}
             <div className="sec-hdr" style={{ margin: 0, flex: 1 }}>
               <div className="bar" />
-              <span className="txt">👥 {groupKeyLabel}{filterReached ? ` · ${filterReached} 이상 도달` : ''}{filterLostReason ? ` · Lost: ${filterLostReason}` : ''}</span>
+              <span className="txt">👥 {groupKey ? groupKeyLabel : t('s_leads_title')}{filterReached ? ` · ${filterReached} 이상 도달` : ''}{filterLostReason ? ` · Lost: ${filterLostReason}` : ''}</span>
               <span className="sub">{detailLeads.length}개</span>
             </div>
+            {/* 담당자 필터 — 매니저는 본인 리드만 보이므로 관리자에게만 표시 */}
+            {isAdmin && (
+              <select value={filterOwner || ''} onChange={e => { setFilterOwner(e.target.value || null); setDetailPage(0) }}
+                style={{ padding: '7px 10px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13 }}>
+                <option value="">👤 전체 담당자</option>
+                {withCurrentOwner(settings?.owners, leads, filterOwner).map(o => <option key={o}>{o}</option>)}
+              </select>
+            )}
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('search_short')}
               style={{ padding: '7px 12px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, flex: 1, minWidth: 140, maxWidth: 200 }} />
             <button className="btn btn-primary btn-sm" onClick={() => setShowRegister(true)}>+ 등록</button>
@@ -903,7 +937,7 @@ export default function SalesLeads() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                       <div>
                         <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{l.company_name}</div>
-                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{l.contact_person} · {l.owner}</div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}><OwnerBadge owner={l.owner} />{l.contact_person}</div>
                       </div>
                       <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, color: 'white', background: stageColor, whiteSpace: 'nowrap', flexShrink: 0, marginLeft: 8 }}>
                         {l.current_stage}
@@ -938,9 +972,9 @@ export default function SalesLeads() {
                       <th style={{ padding: '9px 12px' }}>{t('s_event')}</th>
                       <th style={{ padding: '9px 12px', textAlign: 'left' }}>Company</th>
                       <th style={{ padding: '9px 12px' }}>{t('owner_lbl')}</th>
+                      <th style={{ padding: '9px 12px' }}>Contact</th>
                       <th style={{ padding: '9px 12px' }}>Phone/Email</th>
                       <th style={{ padding: '9px 12px' }}>Source</th>
-                      <th style={{ padding: '9px 12px' }}>Owner</th>
                       <th style={{ padding: '9px 12px' }}>Stage</th>
                       <th style={{ padding: '9px 12px' }}>Last Contact</th>
                       <th style={{ padding: '9px 12px' }}>Next Action</th>
@@ -960,10 +994,10 @@ export default function SalesLeads() {
                         <td style={{ padding: '9px 12px' }}>{l.registered_date}</td>
                         <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--muted)' }}>{leadEventLabel(l, refMap) || '—'}</td>
                         <td style={{ padding: '9px 12px', fontWeight: 700 }}>{l.company_name}</td>
+                        <td style={{ padding: '9px 12px' }}><OwnerBadge owner={l.owner} /></td>
                         <td style={{ padding: '9px 12px' }}>{l.contact_person}</td>
                         <td style={{ padding: '9px 12px', fontSize: 11 }}>{l.phone || '—'}<br /><span style={{ color: 'var(--muted)' }}>{l.email || '—'}</span></td>
                         <td style={{ padding: '9px 12px', fontSize: 12 }}>{l.lead_source}</td>
-                        <td style={{ padding: '9px 12px' }}>{l.owner}</td>
                         <td style={{ padding: '9px 12px' }} onClick={e => e.stopPropagation()}>
                           <InlineStageSelect lead={l} onUpdate={updateStage} />
                         </td>
@@ -1178,6 +1212,16 @@ export default function SalesLeads() {
                   <input value={salesOwner || ''} disabled style={{ background: 'var(--light)', color: 'var(--muted)' }} />
                 )}
               </div>
+              {/* 발굴자: 관리자가 리드를 넘겨줄 때 담당자와 다르게 지정 (매니저는 DB에서 본인으로 고정) */}
+              {isAdmin && (
+                <div>
+                  <label style={{ marginTop: 0 }}>발굴자</label>
+                  <select value={form.sourced_by || ''} onChange={e => setForm(f => ({ ...f, sourced_by: e.target.value }))}>
+                    <option value="">-- 본인 --</option>
+                    {(settings?.owners || []).map(o => <option key={o}>{o}</option>)}
+                  </select>
+                </div>
+              )}
               <div>
                 <label style={{ marginTop: 0 }}>{t('priority_lbl')}</label>
                 <select value={form.priority || 'Medium'} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
