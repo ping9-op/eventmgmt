@@ -19,7 +19,7 @@ import LoadingSpinner from '../LoadingSpinner'
 import EventSelect from '../EventSelect'
 import OwnerBadge from '../OwnerBadge'
 import RadioGroup from '../RadioGroup'
-import { parseCorridor, composeCorridor, normalizeCorridor, TX_TYPES, type TxType } from '../../lib/corridor'
+import { parseCorridor, composeCorridor, normalizeCorridor, canonicalCountry, COUNTRIES, TX_TYPES, type TxType } from '../../lib/corridor'
 
 type GroupBy = 'event' | 'date' | 'source'
 type ViewMode = 'group' | 'detail'
@@ -157,6 +157,8 @@ export default function SalesLeads() {
   const [leads, setLeads] = useState<SalesLead[]>([])
   const [eventRefs, setEventRefs] = useState<EventRef[]>([]) // 박람회 행사 목록 (보관 제외)
   const refMap = toEventRefMap(eventRefs)
+  // 이미 저장된 송금 국가 — 자동완성 목록과 표기 통일(대소문자 무시 일치)에 사용
+  const knownCountries = [...new Set(leads.map(l => parseCorridor(l.country_corridor).country).filter(Boolean))]
   const [loading, setLoading] = useState(true)
   // 첫 화면은 전체 리드 목록 (담당자가 바로 보이도록) — 행사·일자·출처별 요약은 '그룹별 보기'
   const [viewMode, setViewMode] = useState<ViewMode>('detail')
@@ -368,7 +370,7 @@ export default function SalesLeads() {
       lead_source: form.lead_source,
       business_type: form.business_type || '',
       industry: form.industry || '',
-      country_corridor: composeCorridor(formTx, formCountry),
+      country_corridor: composeCorridor(formTx, canonicalCountry(formCountry, knownCountries)),
       priority: 'Medium', // 우선순위는 화면에서 제거 — DB 칸만 유지
       // 관리자가 아니면 owner를 임의로 지정할 수 없음 — 항상 본인 계정으로 등록 (RLS와 일치)
       owner,
@@ -488,7 +490,7 @@ export default function SalesLeads() {
         owner: get(r, 'owner'),
         sourced_by: get(r, 'sourced_by') || null,
         current_stage: normalizeStage(rawStage),
-        country_corridor: normalizeCorridor(get(r, 'country_corridor')),
+        country_corridor: normalizeCorridor(get(r, 'country_corridor'), knownCountries),
         business_type: normalizeBusinessType(get(r, 'business_type')),
         // 예전 양식의 Business Type 칸에 업종(Korean Restaurant 등)이 있으면 산업군으로 옮김 (DB 이전 규칙과 동일)
         industry: get(r, 'industry') || (normalizeBusinessType(get(r, 'business_type')) ? '' : legacyIndustry(get(r, 'business_type'))),
@@ -1208,7 +1210,7 @@ export default function SalesLeads() {
                 <label style={{ marginTop: 0 }}>{t('remit_country_lbl')}</label>
                 <input value={formCountry} onChange={e => setFormCountry(e.target.value)} list="remit-countries" placeholder="예: Japan, Vietnam" />
                 <datalist id="remit-countries">
-                  {[...new Set(leads.map(l => parseCorridor(l.country_corridor).country).filter(Boolean))].map(c => <option key={c} value={c} />)}
+                  {[...new Set([...COUNTRIES, ...knownCountries])].map(c => <option key={c} value={c} />)}
                 </datalist>
               </div>
               <div>

@@ -13,7 +13,7 @@ import CompleteTaskModal from '../CompleteTaskModal'
 import AutoBadge from '../AutoBadge'
 import { ACTIVITY_RESULTS, TASK_TYPES, addLeadTask, daysFromToday } from '../../lib/tasks'
 import RadioGroup from '../RadioGroup'
-import { parseCorridor, composeCorridor, TX_TYPES, type TxType } from '../../lib/corridor'
+import { parseCorridor, composeCorridor, normalizeCorridor, COUNTRIES, TX_TYPES, type TxType } from '../../lib/corridor'
 import { loadAllSettings, BUSINESS_TYPES, type SalesSettingsData } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
 import type { SalesLead, SalesActivity, SalesTask } from '../../types/database'
@@ -163,7 +163,8 @@ export default function LeadDetailPanel({
         owner: form.owner || lead.owner,
         // 발굴자는 관리자만 변경 (DB 트리거도 매니저의 변경은 무시)
         ...(isAdmin ? { sourced_by: form.sourced_by || lead.sourced_by } : {}),
-        country_corridor: form.country_corridor ?? lead.country_corridor,
+        // 송금 국가는 표준 이름으로 통일해서 저장 ('japan'·'일본' → 'Japan')
+        country_corridor: normalizeCorridor(form.country_corridor ?? lead.country_corridor),
         business_type: form.business_type ?? lead.business_type,
         industry: form.industry ?? lead.industry,
         expected_monthly_volume: form.expected_monthly_volume ?? null,
@@ -457,8 +458,11 @@ export default function LeadDetailPanel({
                     options={TX_TYPES.map(x => ({ value: x, label: x }))} />
                 </Field>
                 <Field label="Remittance Country">
-                  <input value={corrCountry} placeholder="예: Japan, Vietnam"
+                  <input value={corrCountry} placeholder="예: Japan, Vietnam" list="panel-countries"
                     onChange={e => { setCorrCountry(e.target.value); setForm(f => ({ ...f, country_corridor: composeCorridor(corrTx, e.target.value) })) }} />
+                  <datalist id="panel-countries">
+                    {COUNTRIES.map(c => <option key={c} value={c} />)}
+                  </datalist>
                 </Field>
                 <Field label="Business Type">
                   <RadioGroup value={form.business_type || ''} onChange={v => setForm(f => ({ ...f, business_type: v }))}
