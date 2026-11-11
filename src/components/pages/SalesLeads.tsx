@@ -17,6 +17,7 @@ import { logStageChange, logStageChanges } from '../../lib/stageHistory'
 import { useIsMobile } from '../../hooks/useBreakpoint'
 import LoadingSpinner from '../LoadingSpinner'
 import EventSelect from '../EventSelect'
+import OwnerBadge from '../OwnerBadge'
 import RadioGroup from '../RadioGroup'
 import { parseCorridor, composeCorridor, TX_TYPES, type TxType } from '../../lib/corridor'
 
@@ -73,15 +74,6 @@ function normalizeBusinessType(v: string): string {
 // 필수 입력 라벨 — 번역 문구 끝의 '*'를 빨간 별표로 표시
 function ReqLabel({ text }: { text: string }) {
   return <label style={{ marginTop: 0 }}>{text.replace(/\s*\*$/, '')} <span style={{ color: '#DC2626', fontWeight: 800 }}>*</span></label>
-}
-
-// 담당 세일즈 표시 (고객 담당자 contact_person과 구분되도록 배지로)
-function OwnerBadge({ owner }: { owner: string }) {
-  return (
-    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 99, background: '#EEF2FF', color: '#4F46E5', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
-      👤 {owner || '—'}
-    </span>
-  )
 }
 
 // 적용 중인 필터 표시 (✕로 해제)

@@ -6,6 +6,7 @@ import { logStageChange } from '../../lib/stageHistory'
 import type { SalesLead, SalesProposal } from '../../types/database'
 import { loadAllSettings } from '../../lib/settings'
 import LeadDetailPanel from './LeadDetailPanel'
+import OwnerBadge from '../OwnerBadge'
 import LostReasonModal, { LeadContactMeta, type LostReasonInput } from '../LostReasonModal'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
@@ -305,7 +306,7 @@ export default function SalesFunnel() {
                           onMouseOver={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 14px rgba(0,0,0,.12)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)' }}
                           onMouseOut={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = ''; (e.currentTarget as HTMLDivElement).style.transform = '' }}>
                           <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 2 }}>{l.company_name}</div>
-                          <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>{l.contact_person} · {l.owner}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}><OwnerBadge owner={l.owner} /><span style={{ fontSize: 11, color: 'var(--muted)' }}>{l.contact_person}</span></div>
                           {evLabel(l) && <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 5 }}>{evLabel(l)}</div>}
                           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)', marginBottom: 6 }}>
                             {l.volume_currency === 'KRW' ? `₩${(l.expected_monthly_volume || 0).toLocaleString()}` : `$${(l.expected_monthly_volume || 0).toLocaleString()}`}
@@ -353,7 +354,7 @@ export default function SalesFunnel() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                         <div>
                           <div style={{ fontSize: 14, fontWeight: 700 }}>{l.company_name}</div>
-                          <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{l.contact_person} · {l.owner}</div>
+                          <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}><OwnerBadge owner={l.owner} />{l.contact_person}</div>
                         </div>
                         <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, color: 'white', background: stageColor, flexShrink: 0, marginLeft: 8 }}>
                           {l.current_stage}
@@ -419,7 +420,7 @@ export default function SalesFunnel() {
                           </td>
                           <td style={{ padding: '9px 12px', fontWeight: 700 }}>{l.company_name}<br /><span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 400 }}>{l.contact_person}</span></td>
                           <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--muted)' }}>{evLabel(l) || '—'}</td>
-                          <td style={{ padding: '9px 12px' }}>{l.owner}</td>
+                          <td style={{ padding: '9px 12px' }}><OwnerBadge owner={l.owner} /></td>
                           <td style={{ padding: '9px 12px', textAlign: 'center' }}>{l.first_contact_done ? '✅' : '—'}</td>
                           <td style={{ padding: '9px 12px' }} onClick={e => e.stopPropagation()}>
                             <select value={l.current_stage} onChange={e => { e.stopPropagation(); moveStage(l.id, e.target.value) }} onClick={e => e.stopPropagation()}
@@ -548,7 +549,7 @@ function ProposalContractView({ leads, proposals, onUpdate, onOpenLead }: {
                         </select>
                       ) : <span style={{ fontSize: 12, color: 'var(--muted)' }}>—</span>}
                     </td>
-                    <td style={{ padding: '9px 14px' }}>{l.owner}</td>
+                    <td style={{ padding: '9px 14px' }}><OwnerBadge owner={l.owner} /></td>
                     <td style={{ padding: '9px 14px', fontSize: 11, color: 'var(--muted)' }}>{p?.remarks || '—'}</td>
                   </tr>
                 )

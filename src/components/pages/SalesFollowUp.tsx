@@ -5,6 +5,7 @@ import { STAGE_COLORS, isActiveStage, localDateStr } from '../../lib/utils'
 import type { SalesTask, SalesLead } from '../../types/database'
 import { useToast } from '../../contexts/ToastContext'
 import LeadDetailPanel from './LeadDetailPanel'
+import OwnerBadge from '../OwnerBadge'
 import { encryptRows, decryptRows } from '../../lib/pii'
 import { useLang } from '../../contexts/LangContext'
 import CompleteTaskModal from '../CompleteTaskModal'
@@ -291,7 +292,7 @@ export default function SalesFollowUp() {
                     </td>
                     <td style={{ padding: '9px 14px', fontSize: 12 }}>{lang === 'en' ? taskTypeEn(task.task_type) : task.task_type}</td>
                     <td style={{ padding: '9px 14px', fontSize: 12, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.note || '—'}</td>
-                    <td style={{ padding: '9px 14px' }}>{task.owner}</td>
+                    <td style={{ padding: '9px 14px' }}><OwnerBadge owner={task.owner} /></td>
                     <td style={{ padding: '9px 14px' }}><StatusBadge s={task.status} /></td>
                     <td style={{ padding: '9px 14px' }}>
                       <div style={{ display: 'flex', gap: 5 }}>
