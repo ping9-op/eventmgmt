@@ -117,7 +117,7 @@ export type Database = {
         Row: {
           id: string; serial_no: string; registered_date: string; event_name: string
           company_name: string; contact_person: string; phone: string | null; email: string | null
-          lead_source: string; address: string | null; business_type: string; country_corridor: string
+          lead_source: string; address: string | null; business_type: string; industry: string; country_corridor: string
           expected_monthly_volume: number | null; volume_currency: string; priority: string
           owner: string; current_stage: string; first_contact_done: boolean
           last_contact_date: string | null; next_action: string | null; next_follow_up_date: string | null
@@ -128,7 +128,7 @@ export type Database = {
         Insert: {
           id?: string; serial_no?: string; registered_date: string; event_name: string
           company_name: string; contact_person: string; phone?: string | null; email?: string | null
-          lead_source: string; address?: string | null; business_type: string; country_corridor: string
+          lead_source: string; address?: string | null; business_type: string; industry?: string; country_corridor: string
           expected_monthly_volume?: number | null; volume_currency?: string; priority?: string
           owner: string; current_stage?: string; first_contact_done?: boolean
           last_contact_date?: string | null; next_action?: string | null; next_follow_up_date?: string | null
@@ -139,7 +139,7 @@ export type Database = {
         Update: {
           serial_no?: string; registered_date?: string; event_name?: string
           company_name?: string; contact_person?: string; phone?: string | null; email?: string | null
-          lead_source?: string; address?: string | null; business_type?: string; country_corridor?: string
+          lead_source?: string; address?: string | null; business_type?: string; industry?: string; country_corridor?: string
           expected_monthly_volume?: number | null; volume_currency?: string; priority?: string
           owner?: string; current_stage?: string; first_contact_done?: boolean
           last_contact_date?: string | null; next_action?: string | null; next_follow_up_date?: string | null
@@ -355,7 +355,7 @@ export interface EventData {
 export interface SalesLead {
   id: string; serial_no: string; registered_date: string; event_name: string
   company_name: string; contact_person: string; phone: string | null; email: string | null
-  lead_source: string; address: string | null; business_type: string; country_corridor: string
+  lead_source: string; address: string | null; business_type: string; industry: string; country_corridor: string
   expected_monthly_volume: number | null; volume_currency: string; priority: string
   owner: string; current_stage: string; first_contact_done: boolean
   last_contact_date: string | null; next_action: string | null; next_follow_up_date: string | null

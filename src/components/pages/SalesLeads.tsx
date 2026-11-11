@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { STAGE_ORDER, STAGE_COLORS, OUTREACH_CHANNELS, priorityColor, normalizeStage, localDateStr, reachedStage, reachedOutreach } from '../../lib/utils'
 import type { SalesLead } from '../../types/database'
-import { loadAllSettings, type SalesSettingsData } from '../../lib/settings'
+import { loadAllSettings, BUSINESS_TYPES, type SalesSettingsData } from '../../lib/settings'
 import { loadAllEventRefs, eventLabel, type EventRef } from '../../lib/events'
 import { encryptRows, decryptRows, PII_FIELDS } from '../../lib/pii'
 import { toEventRefMap, leadEventLabel, leadEventGroupKey, eventGroupLabel, isEventKey, isExpoKey, matchEventRef, eventSelectOptions, eventSelectToFields } from '../../lib/leadEvents'
@@ -16,6 +16,7 @@ import { useLang } from '../../contexts/LangContext'
 import { logStageChange, logStageChanges } from '../../lib/stageHistory'
 import { useIsMobile } from '../../hooks/useBreakpoint'
 import LoadingSpinner from '../LoadingSpinner'
+import EventSelect from '../EventSelect'
 
 type GroupBy = 'event' | 'date' | 'source'
 type ViewMode = 'group' | 'detail'
@@ -49,7 +50,8 @@ const FIELD_DEFS: { key: string; label: string; required?: boolean; aliases: str
   { key: 'priority', label: 'Priority', aliases: ['priority', '우선순위'] },
   { key: 'current_stage', label: 'Stage', aliases: ['current_stage', 'stage', '스테이지', '단계'] },
   { key: 'country_corridor', label: 'Corridor', aliases: ['country_corridor', 'corridor', '송금국가', '국가'] },
-  { key: 'business_type', label: 'Business Type', aliases: ['business_type', 'business type', '업종'] },
+  { key: 'business_type', label: 'Business Type', aliases: ['business_type', 'business type', '사업자구분', '사업자 구분', '사업자유형'] },
+  { key: 'industry', label: '산업군', aliases: ['industry', '산업군', '산업', '업종'] },
   { key: 'expected_monthly_volume', label: 'Volume', aliases: ['expected_monthly_volume', 'volume', '예상거래량', '월예상금액'] },
   { key: 'volume_currency', label: 'Currency', aliases: ['volume_currency', 'currency', '통화'] },
   { key: 'address', label: '주소', aliases: ['address', '주소'] },
@@ -57,6 +59,20 @@ const FIELD_DEFS: { key: string; label: string; required?: boolean; aliases: str
   { key: 'lead_source', label: 'Source', aliases: ['lead_source', 'source', '유입경로', '채널'] },
   { key: 'registered_date', label: '등록일', aliases: ['registered_date', 'date', '등록일', '날짜', '일자', '접수일'] },
 ]
+
+// 엑셀의 사업자 구분 값 → '법인' / '개인사업자' (알 수 없으면 빈 값 — DB CHECK 제약)
+function normalizeBusinessType(v: string): string {
+  const s = v.trim().toLowerCase()
+  if (!s) return ''
+  if (s.includes('개인') || s.includes('sole') || s.includes('individual')) return '개인사업자'
+  if (s.includes('법인') || s.includes('corp') || s.includes('company') || s.includes('주식회사')) return '법인'
+  return ''
+}
+
+// 필수 입력 라벨 — 번역 문구 끝의 '*'를 빨간 별표로 표시
+function ReqLabel({ text }: { text: string }) {
+  return <label style={{ marginTop: 0 }}>{text.replace(/\s*\*$/, '')} <span style={{ color: '#DC2626', fontWeight: 800 }}>*</span></label>
+}
 
 // 담당 세일즈 표시 (고객 담당자 contact_person과 구분되도록 배지로)
 function OwnerBadge({ owner }: { owner: string }) {
@@ -326,6 +342,7 @@ export default function SalesLeads() {
       contact_person: form.contact_person || '',
       lead_source: form.lead_source,
       business_type: form.business_type || '',
+      industry: form.industry || '',
       country_corridor: form.country_corridor || '',
       priority: form.priority || 'Medium',
       // 관리자가 아니면 owner를 임의로 지정할 수 없음 — 항상 본인 계정으로 등록 (RLS와 일치)
@@ -364,8 +381,8 @@ export default function SalesLeads() {
 
   async function downloadTemplate() {
     const XLSX = await import('xlsx')
-    const headers = ['회사명', '담당자', '연락처', '이메일', 'Source', '행사명', '등록일', 'Owner', 'Stage', 'Priority', 'Corridor', 'Business Type', 'Volume', 'Currency', 'Address', 'Remarks']
-    const sample  = ['Sample Co.', '김철수', '+81-90-1234-5678', 'john@sample.com', 'Expo', 'KIF 2026', '2026-10-16', 'Andrew', 'New Lead', 'Medium', 'Korea → Japan', 'Korean Restaurant', '10000', 'USD', 'Tokyo, Japan', 'Booth에서 만남']
+    const headers = ['회사명', '담당자', '연락처', '이메일', 'Source', '행사명', '등록일', 'Owner', 'Stage', 'Priority', 'Corridor', 'Business Type', '산업군', 'Volume', 'Currency', 'Address', 'Remarks']
+    const sample  = ['Sample Co.', '김철수', '+81-90-1234-5678', 'john@sample.com', 'Expo', 'KIF 2026', '2026-10-16', 'Andrew', 'New Lead', 'Medium', 'Korea → Japan', '법인', '요식업', '10000', 'USD', 'Tokyo, Japan', 'Booth에서 만남']
     const stageNote = ['※ Stage 유효값 →', ...STAGE_ORDER, ...Array(headers.length - 1 - STAGE_ORDER.length).fill('')]
     const ws = XLSX.utils.aoa_to_sheet([headers, sample, stageNote])
     ws['!cols'] = [22, 16, 18, 24, 16, 12, 22, 10, 18, 18, 10, 10, 18, 20].map(wch => ({ wch }))
@@ -448,7 +465,8 @@ export default function SalesLeads() {
         priority: get(r, 'priority') || 'Medium',
         current_stage: normalizeStage(rawStage),
         country_corridor: get(r, 'country_corridor'),
-        business_type: get(r, 'business_type'),
+        business_type: normalizeBusinessType(get(r, 'business_type')),
+        industry: get(r, 'industry'),
         expected_monthly_volume: parseAmount(get(r, 'expected_monthly_volume')),
         volume_currency: get(r, 'volume_currency').toUpperCase(),
         address: get(r, 'address') || null,
@@ -493,6 +511,7 @@ export default function SalesLeads() {
         current_stage: normalizeStage(r.current_stage),
         country_corridor: r.country_corridor || '',
         business_type: r.business_type || '',
+        industry: r.industry || '',
         expected_monthly_volume: r.expected_monthly_volume || null,
         volume_currency: r.volume_currency || 'USD', // 금액 없는 행만 해당 (금액+통화 누락은 confirmMapping에서 차단)
         address: r.address || null,
@@ -971,7 +990,7 @@ export default function SalesLeads() {
                       <th style={{ padding: '9px 12px' }}>{t('registered_date_lbl')}</th>
                       <th style={{ padding: '9px 12px' }}>{t('s_event')}</th>
                       <th style={{ padding: '9px 12px', textAlign: 'left' }}>Company</th>
-                      <th style={{ padding: '9px 12px' }}>{t('owner_lbl')}</th>
+                      <th style={{ padding: '9px 12px' }}>Owner</th>
                       <th style={{ padding: '9px 12px' }}>Contact</th>
                       <th style={{ padding: '9px 12px' }}>Phone/Email</th>
                       <th style={{ padding: '9px 12px' }}>Source</th>
@@ -1182,12 +1201,12 @@ export default function SalesLeads() {
               <button className="modal-close" onClick={() => { setShowRegister(false); resetForm() }}>✕</button>
             </div>
             <div className="form-row cols2">
-              <div><label style={{ marginTop: 0 }}>{t('company_name_lbl')}</label><input value={form.company_name || ''} onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))} placeholder="회사명" /></div>
+              <div><ReqLabel text={t('company_name_lbl')} /><input value={form.company_name || ''} onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))} placeholder="회사명" /></div>
               <div><label style={{ marginTop: 0 }}>{t('contact_person_lbl')}</label><input value={form.contact_person || ''} onChange={e => setForm(f => ({ ...f, contact_person: e.target.value }))} placeholder="담당자명" /></div>
               <div><label style={{ marginTop: 0 }}>{t('phone_lbl')}</label><input value={form.phone || ''} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="전화번호" /></div>
               <div><label style={{ marginTop: 0 }}>{t('email_lbl')}</label><input type="email" value={form.email || ''} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="이메일" /></div>
               <div>
-                <label style={{ marginTop: 0 }}>{t('lead_source_lbl')}</label>
+                <ReqLabel text={t('lead_source_lbl')} />
                 <select value={form.lead_source || ''} onChange={e => setForm(f => ({ ...f, lead_source: e.target.value }))}>
                   <option value="">-- 선택 --</option>
                   {(settings?.sources || []).map(s => <option key={s}>{s}</option>)}
@@ -1195,14 +1214,12 @@ export default function SalesLeads() {
               </div>
               <div>
                 <label style={{ marginTop: 0 }}>{t('event_name_lbl')}</label>
-                <select value={formEvent} onChange={e => setFormEvent(e.target.value)}>
-                  <option value="">{t('select_event')}</option>
-                  {/* 박람회 행사 우선, 설정의 박람회 외 행사 추가 */}
-                  {eventSelectOptions(eventRefs, settings?.event_names || []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
+                {/* 박람회 행사 우선, 설정의 박람회 외 행사 + 다른 리드에 직접 입력된 행사명 추가 */}
+                <EventSelect value={formEvent} onChange={setFormEvent} placeholder={t('select_event')}
+                  options={eventSelectOptions(eventRefs, [...(settings?.event_names || []), ...leads.filter(l => !l.proposal_id && l.event_name).map(l => l.event_name)])} />
               </div>
               <div>
-                <label style={{ marginTop: 0 }}>{t('owner_lbl')}</label>
+                <ReqLabel text={t('owner_lbl')} />
                 {isAdmin ? (
                   <select value={form.owner || ''} onChange={e => setForm(f => ({ ...f, owner: e.target.value }))}>
                     <option value="">-- 선택 --</option>
@@ -1239,7 +1256,14 @@ export default function SalesLeads() {
                 <label style={{ marginTop: 0 }}>{t('biz_type_lbl')}</label>
                 <select value={form.business_type || ''} onChange={e => setForm(f => ({ ...f, business_type: e.target.value }))}>
                   <option value="">—</option>
-                  {(settings?.business_types || []).map(b => <option key={b}>{b}</option>)}
+                  {BUSINESS_TYPES.map(b => <option key={b}>{b}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ marginTop: 0 }}>{t('industry_lbl')}</label>
+                <select value={form.industry || ''} onChange={e => setForm(f => ({ ...f, industry: e.target.value }))}>
+                  <option value="">—</option>
+                  {(settings?.industries || []).map(b => <option key={b}>{b}</option>)}
                 </select>
               </div>
               <div>

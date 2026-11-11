@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   loadAllSettings, saveSetting,
-  STAGE_ORDER, PRIORITY_OPTS, CONTRACT_STATUSES, ONBOARD_STATUSES,
+  STAGE_ORDER, PRIORITY_OPTS, BUSINESS_TYPES, CONTRACT_STATUSES, ONBOARD_STATUSES,
   type SalesSettingsData,
 } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
@@ -137,7 +137,7 @@ export default function SalesSettings() {
     { key: 'event_names',     label: t('event_names_label'),    desc: t('event_names_desc'),    icon: '🏛' },
     { key: 'sources',         label: t('sources_label'),        desc: t('sources_desc'),        icon: '📥' },
     { key: 'corridors',       label: t('corridors_label'),      desc: t('corridors_desc'),      icon: '🌏' },
-    { key: 'business_types',  label: t('biz_types_label'),      desc: t('biz_types_desc'),      icon: '🏢' },
+    { key: 'industries',      label: t('biz_types_label'),      desc: t('biz_types_desc'),      icon: '🏭' },
     { key: 'contact_methods', label: t('contact_methods_label'),desc: t('contact_methods_desc'),icon: '📞' },
     { key: 'lost_reasons',    label: t('lost_reasons_label'),   desc: t('lost_reasons_desc'),   icon: '❌' },
   ]
@@ -145,6 +145,7 @@ export default function SalesSettings() {
   const READONLY_GROUPS = [
     { label: t('funnel_stage_label'), items: STAGE_ORDER,       icon: '🔀', desc: t('funnel_stage_desc') },
     { label: t('priority_label'),     items: PRIORITY_OPTS,     icon: '⚡', desc: t('priority_desc') },
+    { label: t('biz_entity_label'),   items: BUSINESS_TYPES,    icon: '🏢', desc: t('biz_entity_desc') },
     { label: t('contract_label'),     items: CONTRACT_STATUSES, icon: '📄', desc: t('contract_desc') },
     { label: t('onboard_label'),      items: ONBOARD_STATUSES,  icon: '✅', desc: t('onboard_desc') },
   ]

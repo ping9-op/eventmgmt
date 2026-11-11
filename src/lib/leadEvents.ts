@@ -112,6 +112,6 @@ export function eventSelectToFields(value: string, map: EventRefMap, fallbackNam
     const ref = map.get(value.slice(2))
     return { proposal_id: value.slice(2), event_name: ref ? eventLabel(ref) : fallbackName }
   }
-  if (value.startsWith('t:')) return { proposal_id: null, event_name: value.slice(2) }
+  if (value.startsWith('t:')) return { proposal_id: null, event_name: value.slice(2).trim() }
   return { proposal_id: null, event_name: '' }
 }

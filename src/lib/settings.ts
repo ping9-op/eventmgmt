@@ -3,6 +3,8 @@ import { supabase } from './supabase'
 // ── 시스템 고정값 (수정 불가) ───────────────────────────────────────────────
 export { STAGE_ORDER, OUTREACH_CHANNELS } from './utils'
 export const PRIORITY_OPTS = ['High', 'Medium', 'Low']
+// 사업자 구분 (DB CHECK 제약과 동일)
+export const BUSINESS_TYPES = ['법인', '개인사업자']
 export const CONTRACT_STATUSES = ['Not Sent', 'Sent', 'Under Review', 'Revision Requested', 'Signed', 'Rejected']
 export const ONBOARD_STATUSES = ['Not Started', 'Waiting Docs', 'Under Review', 'Approved', 'Rejected', 'Completed']
 
@@ -12,7 +14,7 @@ export const DEFAULTS: Record<string, string[]> = {
   sources:         ['Expo', 'Referral', 'Website', 'Cold Call', 'Partner', 'Offline Visit'],
   event_names:     ['Korea Import Fair (KIF) 2026', 'Travel Show 2026', 'SITF 2026', 'Korea Expo in Tokyo 2026'],
   corridors:       ['Korea → Japan', 'Korea → Australia', 'Korea → USA', 'Korea → Vietnam', 'Korea → Singapore', 'Korea → Philippines', 'Japan → Korea', 'Other'],
-  business_types:  ['Korean Restaurant', 'Travel Agency', 'Korean Grocery', 'Education/Academy', 'Import/Export', 'Other Korean Business'],
+  industries:      ['수입', '수출', '제조', '여행', '교육', '요식업', '도소매', '물류', 'IT/서비스', '기타'],
   contact_methods: ['Email', 'Call', 'SMS', 'Kakao', 'Visit'],
   lost_reasons:    ['Pricing', 'No Response', 'Not a Fit', 'Chose Competitor', 'KYB Issue', 'Timing', 'Other'],
 }
@@ -22,7 +24,7 @@ export interface SalesSettingsData {
   sources: string[]
   event_names: string[]
   corridors: string[]
-  business_types: string[]
+  industries: string[]
   contact_methods: string[]
   lost_reasons: string[]
 }
@@ -38,7 +40,7 @@ export async function loadAllSettings(): Promise<SalesSettingsData> {
     sources:         map.sources         ?? DEFAULTS.sources,
     event_names:     map.event_names     ?? DEFAULTS.event_names,
     corridors:       map.corridors       ?? DEFAULTS.corridors,
-    business_types:  map.business_types  ?? DEFAULTS.business_types,
+    industries:      map.industries      ?? DEFAULTS.industries,
     contact_methods: map.contact_methods ?? DEFAULTS.contact_methods,
     lost_reasons:    map.lost_reasons    ?? DEFAULTS.lost_reasons,
   }
@@ -55,7 +57,7 @@ export function loadSalesSettings() {
   return {
     owners:       DEFAULTS.owners,
     sources:      DEFAULTS.sources,
-    businessTypes: DEFAULTS.business_types,
+    businessTypes: DEFAULTS.industries,
     corridors:    DEFAULTS.corridors,
   }
 }

@@ -8,7 +8,8 @@ import { logStageChange } from '../../lib/stageHistory'
 import { loadAllEventRefs, type EventRef } from '../../lib/events'
 import { encryptRows, decryptRows } from '../../lib/pii'
 import { toEventRefMap, leadEventLabel, eventSelectOptions, leadEventSelectValue, eventSelectToFields } from '../../lib/leadEvents'
-import { loadAllSettings, CONTRACT_STATUSES as SYSTEM_CONTRACT_STATUSES, ONBOARD_STATUSES as SYSTEM_ONBOARD_STATUSES, type SalesSettingsData } from '../../lib/settings'
+import EventSelect from '../EventSelect'
+import { loadAllSettings, BUSINESS_TYPES, CONTRACT_STATUSES as SYSTEM_CONTRACT_STATUSES, ONBOARD_STATUSES as SYSTEM_ONBOARD_STATUSES, type SalesSettingsData } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
 import type { SalesLead, SalesActivity, SalesTask, SalesProposal } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
@@ -162,6 +163,7 @@ export default function LeadDetailPanel({
         priority: form.priority || lead.priority,
         country_corridor: form.country_corridor ?? lead.country_corridor,
         business_type: form.business_type ?? lead.business_type,
+        industry: form.industry ?? lead.industry,
         expected_monthly_volume: form.expected_monthly_volume ?? null,
         volume_currency: form.volume_currency || lead.volume_currency,
         address: form.address,
@@ -393,11 +395,8 @@ export default function LeadDetailPanel({
                   </select>
                 </Field>
                 <Field label="Event Name">
-                  <select value={eventSel} onChange={e => setEventSel(e.target.value)}>
-                    <option value="">{t('select_placeholder')}</option>
-                    {/* 등록 화면과 동일: 박람회 행사 우선, 설정의 박람회 외 행사 추가 */}
-                    {eventOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
+                  {/* 등록 화면과 동일: 박람회 행사 우선, 설정의 박람회 외 행사 추가, 목록에 없으면 직접 입력 */}
+                  <EventSelect value={eventSel} onChange={setEventSel} options={eventOptions} placeholder={t('select_placeholder')} />
                 </Field>
                 <Field label="Owner">
                   {isAdmin ? (
@@ -431,7 +430,13 @@ export default function LeadDetailPanel({
                 <Field label="Business Type">
                   <select value={form.business_type || ''} onChange={e => setForm(f => ({ ...f, business_type: e.target.value }))}>
                     <option value="">—</option>
-                    {withCurrent(settings?.business_types, form.business_type).map(b => <option key={b}>{b}</option>)}
+                    {BUSINESS_TYPES.map(b => <option key={b}>{b}</option>)}
+                  </select>
+                </Field>
+                <Field label="Industry">
+                  <select value={form.industry || ''} onChange={e => setForm(f => ({ ...f, industry: e.target.value }))}>
+                    <option value="">—</option>
+                    {withCurrent(settings?.industries, form.industry).map(b => <option key={b}>{b}</option>)}
                   </select>
                 </Field>
                 <div style={{ gridColumn: '1 / -1' }}>

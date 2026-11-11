@@ -207,7 +207,7 @@ export const STAGE_COLORS: Record<string, {bg: string, light: string}> = {
   'Lost':              { bg:'#636363', light:'#F0F0F0' },
 }
 
-export const OUTREACH_CHANNELS = ['Cold Email', 'Cold Call', 'LinkedIn', 'Trade Show', 'Referral', 'Inbound', 'Other']
+export const OUTREACH_CHANNELS = ['Cold Email', 'Cold Call', 'LinkedIn', 'Trade Show', 'On-site Visit', 'Referral', 'Inbound', 'Other']
 
 /** 엑셀 업로드 등 외부 입력의 단계명 정규화 (이전 단계명 호환). 알 수 없는 값은 'New Lead' */
 const LEGACY_STAGE_MAP: Record<string, string> = {
