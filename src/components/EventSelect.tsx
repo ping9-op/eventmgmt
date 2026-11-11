@@ -26,8 +26,8 @@ export default function EventSelect({ value, onChange, options, placeholder }: P
           onChange(e.target.value)
         }}>
         <option value="">{placeholder}</option>
-        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         <option value={CUSTOM}>✏️ 직접 입력…</option>
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
       {custom && (
         <input autoFocus value={value.startsWith('t:') ? value.slice(2) : ''}

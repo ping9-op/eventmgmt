@@ -9,6 +9,8 @@ import { loadAllEventRefs, type EventRef } from '../../lib/events'
 import { encryptRows, decryptRows } from '../../lib/pii'
 import { toEventRefMap, leadEventLabel, eventSelectOptions, leadEventSelectValue, eventSelectToFields } from '../../lib/leadEvents'
 import EventSelect from '../EventSelect'
+import RadioGroup from '../RadioGroup'
+import { parseCorridor, composeCorridor, TX_TYPES, type TxType } from '../../lib/corridor'
 import { loadAllSettings, BUSINESS_TYPES, CONTRACT_STATUSES as SYSTEM_CONTRACT_STATUSES, ONBOARD_STATUSES as SYSTEM_ONBOARD_STATUSES, type SalesSettingsData } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
 import type { SalesLead, SalesActivity, SalesTask, SalesProposal } from '../../types/database'
@@ -90,6 +92,9 @@ export default function LeadDetailPanel({
   const [eventRefs, setEventRefs] = useState<EventRef[]>([])
   // 행사 선택값: 'p:<proposalId>' (박람회 행사) / 't:<행사명>' (박람회 외) / '' (없음)
   const [eventSel, setEventSel] = useState('')
+  // 거래유형 + 송금 국가 (저장은 country_corridor 한 칸)
+  const [corrTx, setCorrTx] = useState<TxType>('')
+  const [corrCountry, setCorrCountry] = useState('')
   const refMap = toEventRefMap(eventRefs)
 
   useEffect(() => {
@@ -101,6 +106,9 @@ export default function LeadDetailPanel({
     setLead(l)
     setForm(l)
     setEventSel(leadEventSelectValue(l))
+    const c = parseCorridor(l.country_corridor)
+    setCorrTx(c.txType)
+    setCorrCountry(c.country)
   }
 
   useEffect(() => {
@@ -421,17 +429,17 @@ export default function LeadDetailPanel({
                     {['High', 'Medium', 'Low'].map(p => <option key={p}>{p}</option>)}
                   </select>
                 </Field>
-                <Field label="Corridor">
-                  <select value={form.country_corridor || ''} onChange={e => setForm(f => ({ ...f, country_corridor: e.target.value }))}>
-                    <option value="">—</option>
-                    {withCurrent(settings?.corridors, form.country_corridor).map(c => <option key={c}>{c}</option>)}
-                  </select>
+                <Field label="Transaction Type">
+                  <RadioGroup value={corrTx} onChange={v => { setCorrTx(v as TxType); setForm(f => ({ ...f, country_corridor: composeCorridor(v as TxType, corrCountry) })) }}
+                    options={TX_TYPES.map(x => ({ value: x, label: x }))} />
+                </Field>
+                <Field label="Remittance Country">
+                  <input value={corrCountry} placeholder="예: Japan, Vietnam"
+                    onChange={e => { setCorrCountry(e.target.value); setForm(f => ({ ...f, country_corridor: composeCorridor(corrTx, e.target.value) })) }} />
                 </Field>
                 <Field label="Business Type">
-                  <select value={form.business_type || ''} onChange={e => setForm(f => ({ ...f, business_type: e.target.value }))}>
-                    <option value="">—</option>
-                    {BUSINESS_TYPES.map(b => <option key={b}>{b}</option>)}
-                  </select>
+                  <RadioGroup value={form.business_type || ''} onChange={v => setForm(f => ({ ...f, business_type: v }))}
+                    options={BUSINESS_TYPES.map(b => ({ value: b, label: b === '법인' ? '법인사업자' : b }))} />
                 </Field>
                 <Field label="Industry">
                   <select value={form.industry || ''} onChange={e => setForm(f => ({ ...f, industry: e.target.value }))}>

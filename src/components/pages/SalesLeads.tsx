@@ -17,6 +17,8 @@ import { logStageChange, logStageChanges } from '../../lib/stageHistory'
 import { useIsMobile } from '../../hooks/useBreakpoint'
 import LoadingSpinner from '../LoadingSpinner'
 import EventSelect from '../EventSelect'
+import RadioGroup from '../RadioGroup'
+import { parseCorridor, composeCorridor, TX_TYPES, type TxType } from '../../lib/corridor'
 
 type GroupBy = 'event' | 'date' | 'source'
 type ViewMode = 'group' | 'detail'
@@ -193,6 +195,9 @@ export default function SalesLeads() {
   const [form, setForm] = useState<Partial<SalesLead>>(emptyForm)
   // 등록 폼 행사 선택값: 'p:<proposalId>' / 't:<행사명>' / ''
   const [formEvent, setFormEvent] = useState('')
+  // 거래유형 + 송금 국가 → country_corridor ('Korea → Japan' 형식)
+  const [formTx, setFormTx] = useState<TxType>('')
+  const [formCountry, setFormCountry] = useState('')
 
   useEffect(() => {
     // Handle navigation state (from dashboard/reports)
@@ -343,7 +348,7 @@ export default function SalesLeads() {
       lead_source: form.lead_source,
       business_type: form.business_type || '',
       industry: form.industry || '',
-      country_corridor: form.country_corridor || '',
+      country_corridor: composeCorridor(formTx, formCountry),
       priority: form.priority || 'Medium',
       // 관리자가 아니면 owner를 임의로 지정할 수 없음 — 항상 본인 계정으로 등록 (RLS와 일치)
       owner,
@@ -359,8 +364,6 @@ export default function SalesLeads() {
       address: form.address || null,
       expected_monthly_volume: form.expected_monthly_volume || null,
       remarks: form.remarks || null,
-      outreach_channel: form.outreach_channel || null,
-      last_contact_date: form.last_contact_date || null,
     }
     // 개인정보 필드는 암호화해서 저장 (암호문이 행 id에 묶이므로 id를 미리 생성)
     let row
@@ -377,6 +380,8 @@ export default function SalesLeads() {
   function resetForm() {
     setForm(emptyForm())
     setFormEvent('')
+    setFormTx('')
+    setFormCountry('')
   }
 
   async function downloadTemplate() {
@@ -1201,6 +1206,12 @@ export default function SalesLeads() {
               <button className="modal-close" onClick={() => { setShowRegister(false); resetForm() }}>✕</button>
             </div>
             <div className="form-row cols2">
+              {/* 사업자 구분 — 가장 먼저 고르는 항목이라 상단에 버튼으로 */}
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ marginTop: 0 }}>{t('biz_type_lbl')}</label>
+                <RadioGroup value={form.business_type || ''} onChange={v => setForm(f => ({ ...f, business_type: v }))}
+                  options={BUSINESS_TYPES.map(b => ({ value: b, label: b === '법인' ? '법인사업자' : b }))} />
+              </div>
               <div><ReqLabel text={t('company_name_lbl')} /><input value={form.company_name || ''} onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))} placeholder="회사명" /></div>
               <div><label style={{ marginTop: 0 }}>{t('contact_person_lbl')}</label><input value={form.contact_person || ''} onChange={e => setForm(f => ({ ...f, contact_person: e.target.value }))} placeholder="담당자명" /></div>
               <div><label style={{ marginTop: 0 }}>{t('phone_lbl')}</label><input value={form.phone || ''} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="전화번호" /></div>
@@ -1240,24 +1251,15 @@ export default function SalesLeads() {
                 </div>
               )}
               <div>
-                <label style={{ marginTop: 0 }}>{t('priority_lbl')}</label>
-                <select value={form.priority || 'Medium'} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
-                  {['High', 'Medium', 'Low'].map(p => <option key={p}>{p}</option>)}
-                </select>
+                <label style={{ marginTop: 0 }}>{t('tx_type_lbl')}</label>
+                <RadioGroup value={formTx} onChange={v => setFormTx(v as TxType)} options={TX_TYPES.map(x => ({ value: x, label: x }))} />
               </div>
               <div>
-                <label style={{ marginTop: 0 }}>{t('corridor_lbl')}</label>
-                <select value={form.country_corridor || ''} onChange={e => setForm(f => ({ ...f, country_corridor: e.target.value }))}>
-                  <option value="">—</option>
-                  {(settings?.corridors || []).map(c => <option key={c}>{c}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{ marginTop: 0 }}>{t('biz_type_lbl')}</label>
-                <select value={form.business_type || ''} onChange={e => setForm(f => ({ ...f, business_type: e.target.value }))}>
-                  <option value="">—</option>
-                  {BUSINESS_TYPES.map(b => <option key={b}>{b}</option>)}
-                </select>
+                <label style={{ marginTop: 0 }}>{t('remit_country_lbl')}</label>
+                <input value={formCountry} onChange={e => setFormCountry(e.target.value)} list="remit-countries" placeholder="예: Japan, Vietnam" />
+                <datalist id="remit-countries">
+                  {[...new Set(leads.map(l => parseCorridor(l.country_corridor).country).filter(Boolean))].map(c => <option key={c} value={c} />)}
+                </datalist>
               </div>
               <div>
                 <label style={{ marginTop: 0 }}>{t('industry_lbl')}</label>
@@ -1275,15 +1277,7 @@ export default function SalesLeads() {
                   </select>
                 </div>
               </div>
-              <div><label style={{ marginTop: 0 }}>{t('address_lbl')}</label><input value={form.address || ''} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="주소" /></div>
-              <div>
-                <label style={{ marginTop: 0 }}>{t('outreach_channel_lbl')}</label>
-                <select value={form.outreach_channel || ''} onChange={e => setForm(f => ({ ...f, outreach_channel: e.target.value || null }))}>
-                  <option value="">—</option>
-                  {OUTREACH_CHANNELS.map(c => <option key={c}>{c}</option>)}
-                </select>
-              </div>
-              <div><label style={{ marginTop: 0 }}>{t('last_contact_lbl')}</label><input type="date" value={form.last_contact_date || ''} onChange={e => setForm(f => ({ ...f, last_contact_date: e.target.value || null }))} /></div>
+              <div style={{ gridColumn: '1 / -1' }}><label style={{ marginTop: 0 }}>{t('address_lbl')}</label><input value={form.address || ''} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="주소" /></div>
             </div>
             <label>{t('remarks_lbl')}</label>
             <textarea value={form.remarks || ''} rows={2} onChange={e => setForm(f => ({ ...f, remarks: e.target.value }))} style={{ resize: 'vertical', fontFamily: 'inherit' }} />

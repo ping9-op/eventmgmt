@@ -136,7 +136,6 @@ export default function SalesSettings() {
     { key: 'owners',          label: t('owner_label'),          desc: t('owner_desc'),          icon: '👤' },
     { key: 'event_names',     label: t('event_names_label'),    desc: t('event_names_desc'),    icon: '🏛' },
     { key: 'sources',         label: t('sources_label'),        desc: t('sources_desc'),        icon: '📥' },
-    { key: 'corridors',       label: t('corridors_label'),      desc: t('corridors_desc'),      icon: '🌏' },
     { key: 'industries',      label: t('biz_types_label'),      desc: t('biz_types_desc'),      icon: '🏭' },
     { key: 'contact_methods', label: t('contact_methods_label'),desc: t('contact_methods_desc'),icon: '📞' },
     { key: 'lost_reasons',    label: t('lost_reasons_label'),   desc: t('lost_reasons_desc'),   icon: '❌' },
