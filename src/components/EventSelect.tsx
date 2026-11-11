@@ -17,11 +17,14 @@ interface Props {
  */
 export default function EventSelect({ value, onChange, options, placeholder }: Props) {
   const [custom, setCustom] = useState(false)
+  // '직접 입력'을 고른 뒤 아무것도 안 쓰면 원래 행사를 유지 (빈 값으로 지워지지 않도록)
+  const [before, setBefore] = useState(value)
+  const [typed, setTyped] = useState('')
   return (
     <>
       <select value={custom ? CUSTOM : value}
         onChange={e => {
-          if (e.target.value === CUSTOM) { setCustom(true); onChange(''); return }
+          if (e.target.value === CUSTOM) { setBefore(value); setTyped(''); setCustom(true); return }
           setCustom(false)
           onChange(e.target.value)
         }}>
@@ -30,8 +33,8 @@ export default function EventSelect({ value, onChange, options, placeholder }: P
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
       {custom && (
-        <input autoFocus value={value.startsWith('t:') ? value.slice(2) : ''}
-          onChange={e => onChange(e.target.value ? `t:${e.target.value}` : '')}
+        <input autoFocus value={typed}
+          onChange={e => { setTyped(e.target.value); onChange(e.target.value.trim() ? `t:${e.target.value}` : before) }}
           placeholder="행사명 입력 (예: 방문한 박람회·행사)" style={{ marginTop: 6 }} />
       )}
     </>

@@ -19,7 +19,7 @@ import LoadingSpinner from '../LoadingSpinner'
 import EventSelect from '../EventSelect'
 import OwnerBadge from '../OwnerBadge'
 import RadioGroup from '../RadioGroup'
-import { parseCorridor, composeCorridor, TX_TYPES, type TxType } from '../../lib/corridor'
+import { parseCorridor, composeCorridor, normalizeCorridor, TX_TYPES, type TxType } from '../../lib/corridor'
 
 type GroupBy = 'event' | 'date' | 'source'
 type ViewMode = 'group' | 'detail'
@@ -69,6 +69,16 @@ function normalizeBusinessType(v: string): string {
   if (s.includes('개인') || s.includes('sole') || s.includes('individual')) return '개인사업자'
   if (s.includes('법인') || s.includes('corp') || s.includes('company') || s.includes('주식회사')) return '법인'
   return ''
+}
+
+// 예전 Business Type(업종) 값 → 산업군 (supabase/migrations/20261111020000 의 이전 규칙과 동일, 모르는 값은 그대로)
+function legacyIndustry(v: string): string {
+  const map: Record<string, string> = {
+    'Korean Restaurant': '요식업', 'Korean Grocery': '도소매', 'Travel Agency': '여행',
+    'Education/Academy': '교육', 'Other Korean Business': '기타',
+  }
+  const s = v.trim()
+  return map[s] ?? s
 }
 
 // 필수 입력 라벨 — 번역 문구 끝의 '*'를 빨간 별표로 표시
@@ -143,7 +153,6 @@ export default function SalesLeads() {
   const isMobile = useIsMobile()
   const { isAdmin, salesOwner } = useAuth()
   const [settings, setSettings] = useState<SalesSettingsData | null>(null)
-  const PRIORITIES = ['High', 'Medium', 'Low']
 
   const [leads, setLeads] = useState<SalesLead[]>([])
   const [eventRefs, setEventRefs] = useState<EventRef[]>([]) // 박람회 행사 목록 (보관 제외)
@@ -271,6 +280,12 @@ export default function SalesLeads() {
     setChecked(new Set())
   }, [location.key])
 
+  // 보는 범위(그룹·검색·필터)가 바뀌면 첫 페이지로, 선택도 해제 — 안 보이는 리드가 일괄 변경·보관되지 않도록
+  useEffect(() => {
+    setDetailPage(0)
+    setChecked(new Set())
+  }, [viewMode, groupKey, groupBy, stageFilter, search, filterOwner, filterStage, filterReached, filterLostReason, filterCorridor])
+
   async function load() {
     try {
       const { data } = await supabase.from('sales_leads').select('*').is('archived_at', null).order('registered_date', { ascending: false })
@@ -284,6 +299,12 @@ export default function SalesLeads() {
 
   // last_contact_date / lost_at_stage 는 DB 트리거가 채우므로 갱신된 행으로 state를 교체한다
   // 단, DB가 돌려준 행의 개인정보 필드는 암호문이므로 화면의 복호화된 값을 유지
+  // 단계 변경 뒤 트리거가 자동 할 일 → 다음 할 일(next_action 등)을 한 번 더 바꾸므로 UPDATE 응답이 아니라 다시 읽은 행을 씀
+  async function refetchAndMerge(ids: string[]) {
+    const { data } = await supabase.from('sales_leads').select('*').in('id', ids)
+    mergeUpdated(data as SalesLead[] | null)
+  }
+
   function mergeUpdated(rows: SalesLead[] | null) {
     if (!rows?.length) return
     const byId = new Map(rows.map(r => [r.id, r]))
@@ -296,10 +317,10 @@ export default function SalesLeads() {
   async function updateStage(leadId: string, stage: string, lost?: LostReasonInput) {
     if (stage === 'Lost' && !lost) { setPendingLostIds([leadId]); return }
     const prev = leads.find(l => l.id === leadId)?.current_stage || null
-    const { data, error } = await supabase.from('sales_leads').update({ current_stage: stage, ...lost }).eq('id', leadId).select()
+    const { error } = await supabase.from('sales_leads').update({ current_stage: stage, ...lost }).eq('id', leadId)
     if (error) { showToast('⚠️ Stage 변경 실패: ' + error.message); return }
-    mergeUpdated(data as SalesLead[])
     logStageChange(leadId, prev, stage)
+    await refetchAndMerge([leadId])
   }
 
   async function bulkUpdateStage(ids: string[], stage: string, lost?: LostReasonInput) {
@@ -308,10 +329,10 @@ export default function SalesLeads() {
     setBulkStaging(true)
     const prevStages = ids.map(id => ({ leadId: id, fromStage: leads.find(l => l.id === id)?.current_stage || null }))
     try {
-      const { data, error } = await supabase.from('sales_leads').update({ current_stage: stage, ...lost }).in('id', ids).select()
+      const { error } = await supabase.from('sales_leads').update({ current_stage: stage, ...lost }).in('id', ids)
       if (error) { showToast('⚠️ 일괄 변경 실패: ' + error.message); return }
-      mergeUpdated(data as SalesLead[])
       logStageChanges(prevStages, stage)
+      await refetchAndMerge(ids)
       setChecked(new Set())
       setShowBulkStage(false)
       showToast(`✅ ${ids.length}개 리드 → ${stage}`)
@@ -467,9 +488,10 @@ export default function SalesLeads() {
         owner: get(r, 'owner'),
         sourced_by: get(r, 'sourced_by') || null,
         current_stage: normalizeStage(rawStage),
-        country_corridor: get(r, 'country_corridor'),
+        country_corridor: normalizeCorridor(get(r, 'country_corridor')),
         business_type: normalizeBusinessType(get(r, 'business_type')),
-        industry: get(r, 'industry'),
+        // 예전 양식의 Business Type 칸에 업종(Korean Restaurant 등)이 있으면 산업군으로 옮김 (DB 이전 규칙과 동일)
+        industry: get(r, 'industry') || (normalizeBusinessType(get(r, 'business_type')) ? '' : legacyIndustry(get(r, 'business_type'))),
         expected_monthly_volume: parseAmount(get(r, 'expected_monthly_volume')),
         volume_currency: get(r, 'volume_currency').toUpperCase(),
         address: get(r, 'address') || null,
@@ -535,8 +557,10 @@ export default function SalesLeads() {
     }
   }
 
+  // ids를 넘기면 그 리드만 (빈 배열이면 내보낼 것 없음), 안 넘기면 선택한 리드
   function exportCSV(ids?: string[]) {
-    const toExport = ids && ids.length > 0 ? leads.filter(l => ids.includes(l.id)) : (checked.size > 0 ? leads.filter(l => checked.has(l.id)) : leads)
+    const idSet = new Set(ids ?? [...checked])
+    const toExport = leads.filter(l => idSet.has(l.id))
     if (!toExport.length) { showToast('⚠️ 내보낼 리드가 없습니다.'); return }
     const H = ['SN', '등록일', '행사명', 'Company', '담당자', 'Phone', 'Email', 'Source', '주소', 'Owner', '발굴자', 'Stage', '첫연락', '마지막연락', '다음팔로업', '예상Volume', '통화', 'LostReason', 'Remarks']
     const rows = toExport.map(l => [l.serial_no, l.registered_date, leadEventLabel(l, refMap), l.company_name, l.contact_person, l.phone || '', l.email || '', l.lead_source, l.address || '', l.owner, l.sourced_by || '', l.current_stage, l.first_contact_done ? 'Y' : 'N', l.last_contact_date || '', l.next_follow_up_date || '', l.expected_monthly_volume || '', l.volume_currency, l.lost_reason || '', l.remarks || ''])
@@ -646,7 +670,7 @@ export default function SalesLeads() {
           onClick={() => openGroupUpload(viewMode === 'detail' ? uploadTargetOf(groupKey) : null)}>📤 엑셀 업로드</button>
         <button className="btn btn-outline btn-sm" onClick={downloadTemplate}>📋 업로드 양식</button>
         <button className="btn btn-outline btn-sm" title={checked.size > 0 ? `선택한 ${checked.size}건 다운로드` : '지금 보이는 리드 다운로드'}
-          onClick={() => exportCSV(checked.size > 0 ? undefined : (viewMode === 'detail' ? detailLeads.map(l => l.id) : []))}>
+          onClick={() => exportCSV(checked.size > 0 ? undefined : (viewMode === 'detail' ? detailLeads : Object.values(groupSearchFiltered).flat()).map(l => l.id))}>
           {t('export_excel')}{checked.size > 0 ? ` (${checked.size})` : ''}
         </button>
       </div>

@@ -403,7 +403,7 @@ export default function SalesDashboard() {
           leadStage={leads.find(l => l.id === completing.lead_id)?.current_stage || 'New Lead'}
           companyName={leads.find(l => l.id === completing.lead_id)?.company_name}
           onClose={() => setCompleting(null)}
-          onDone={async () => { setCompleting(null); await reload() }} />
+          onDone={async () => { setCompleting(null); try { await reload() } catch { showToast('새로고침 중 오류가 발생했습니다.', 'error') } }} />
       )}
 
       {selectedLeadId && (

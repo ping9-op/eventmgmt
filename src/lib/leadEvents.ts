@@ -112,6 +112,12 @@ export function eventSelectToFields(value: string, map: EventRefMap, fallbackNam
     const ref = map.get(value.slice(2))
     return { proposal_id: value.slice(2), event_name: ref ? eventLabel(ref) : fallbackName }
   }
-  if (value.startsWith('t:')) return { proposal_id: null, event_name: value.slice(2).trim() }
+  if (value.startsWith('t:')) {
+    const name = value.slice(2).trim()
+    // 직접 입력한 이름이 박람회 행사명과 같으면 그 박람회 행사로 연결 (같은 행사가 두 그룹으로 나뉘지 않도록)
+    const ref = [...map.values()].find(r => eventLabel(r).toLowerCase() === name.toLowerCase())
+    if (ref) return { proposal_id: ref.proposalId, event_name: eventLabel(ref) }
+    return { proposal_id: null, event_name: name }
+  }
   return { proposal_id: null, event_name: '' }
 }

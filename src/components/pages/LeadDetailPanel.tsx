@@ -170,14 +170,16 @@ export default function LeadDetailPanel({
         volume_currency: form.volume_currency || lead.volume_currency,
         address: form.address,
         remarks: form.remarks,
-        current_stage: newStage,
-        first_contact_done: form.first_contact_done,
-        last_contact_date: form.last_contact_date || null,
         // next_action / next_follow_up_date는 DB가 할 일(Task)에서 채우므로 보내지 않음
         lost_reason: form.lost_reason,
         lost_reason_note: form.lost_reason_note || null,
         outreach_channel: form.outreach_channel || null,
       }
+      // 단계·첫 연락·마지막 연락일은 다른 화면에서 할 일 완료·활동 기록으로 DB가 바꿀 수 있으므로, 이 창에서 직접 바꾼 경우에만 보냄
+      // (그대로 보내면 열어둔 예전 값으로 되돌림)
+      if (newStage !== lead.current_stage) updates.current_stage = newStage
+      if ((form.first_contact_done ?? lead.first_contact_done) !== lead.first_contact_done) updates.first_contact_done = form.first_contact_done
+      if ((form.last_contact_date || null) !== (lead.last_contact_date || null)) updates.last_contact_date = form.last_contact_date || null
       // 개인정보 필드는 암호화해서 저장 (암호화 실패 시 저장하지 않음)
       const [encUpdates] = await encryptRows('sales_leads', [{ ...updates, id: leadId }])
       const { id: _id, ...encFields } = encUpdates
@@ -263,6 +265,7 @@ export default function LeadDetailPanel({
 
   async function submitNewTask() {
     if (!newTask.title.trim()) { showToast('⚠️ 할 일을 입력해주세요.'); return }
+    if (!newTask.due) { showToast('⚠️ 기한 날짜를 입력해주세요.'); return }
     try {
       await addLeadTask(leadId, newTask)
       setShowAddTask(false)
@@ -312,6 +315,7 @@ export default function LeadDetailPanel({
   const openTasks = tasks.filter(tk => tk.status !== 'Done')
   const nextTask = openTasks[0] || null
   const nextOverdue = !!nextTask && nextTask.due_date < localDateStr()
+  const isClosed = lead.current_stage === 'Won' || lead.current_stage === 'Lost'
 
   return (
     <>
@@ -359,7 +363,7 @@ export default function LeadDetailPanel({
                   {openTasks.length > 1 && <span style={{ color: 'var(--muted)' }}> 외 {openTasks.length - 1}건</span>}
                 </span>
               ) : (
-                <span style={{ flex: 1, color: '#B45309' }}>없음 — 다음에 언제 무엇을 할지 정해두세요</span>
+                <span style={{ flex: 1, color: isClosed ? 'var(--muted)' : '#B45309' }}>{isClosed ? `없음 (${lead.current_stage} — 종료된 리드)` : '없음 — 다음에 언제 무엇을 할지 정해두세요'}</span>
               )}
               {nextTask && (
                 <button onClick={() => setCompleting(nextTask)}

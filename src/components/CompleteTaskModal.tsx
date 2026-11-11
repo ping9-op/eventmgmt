@@ -45,7 +45,10 @@ export default function CompleteTaskModal({ task, leadStage, companyName, onClos
 
   async function submit(lost?: LostReasonInput) {
     if (record && !actResult) { showToast('⚠️ 결과를 선택해주세요.'); return }
-    if (!noNext && !nextTitle.trim()) { showToast("⚠️ 다음 할 일을 입력하거나 '다음 할 일 없음'을 체크해주세요."); return }
+    const closing = stage === 'Won' || stage === 'Lost'
+    const wantNext = !noNext && !closing // Won/Lost면 DB가 할 일을 모두 닫으므로 다음 할 일을 만들지 않음
+    if (wantNext && !nextTitle.trim()) { showToast("⚠️ 다음 할 일을 입력하거나 '다음 할 일 없음'을 체크해주세요."); return }
+    if (wantNext && !nextDue) { showToast('⚠️ 다음 할 일의 날짜를 입력해주세요.'); return }
     if (stage === 'Lost' && stage !== leadStage && !lost) { setAskLost(true); return }
     setSaving(true)
     try {
@@ -54,7 +57,7 @@ export default function CompleteTaskModal({ task, leadStage, companyName, onClos
         leadId: task.lead_id,
         activity: record ? { type: actType, result: actResult, note: actNote } : undefined,
         stage: { from: leadStage, to: stage, lost },
-        next: noNext ? undefined : { title: nextTitle, type: nextType, due: nextDue },
+        next: wantNext ? { title: nextTitle, type: nextType, due: nextDue } : undefined,
       })
       showToast('✅ 완료 처리되었습니다.')
       onDone()
@@ -112,7 +115,7 @@ export default function CompleteTaskModal({ task, leadStage, companyName, onClos
               {stage} 처리하면 남은 할 일은 모두 자동 종료됩니다.
             </div>
           )}
-          {!noNext && (
+          {!noNext && stage !== 'Won' && stage !== 'Lost' && (
             <>
               <input value={nextTitle} onChange={e => setNextTitle(e.target.value)} placeholder="무엇을? 예: 견적서 보내기, 2차 통화" />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
@@ -131,10 +134,10 @@ export default function CompleteTaskModal({ task, leadStage, companyName, onClos
               </div>
             </>
           )}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)', marginTop: 6, cursor: 'pointer' }}>
+          {stage !== 'Won' && stage !== 'Lost' && (<label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)', marginTop: 6, cursor: 'pointer' }}>
             <input type="checkbox" checked={noNext} onChange={e => setNoNext(e.target.checked)} style={{ width: 14, height: 14 }} />
             다음 할 일 없음
-          </label>
+          </label>)}
 
           <div className="modal-footer">
             <button className="btn btn-muted" onClick={onClose}>취소</button>

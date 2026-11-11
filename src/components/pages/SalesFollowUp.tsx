@@ -256,7 +256,7 @@ export default function SalesFollowUp() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: 'var(--accent)', color: 'white' }}>
-                <th style={{ padding: '9px 10px', width: 38 }}><input type="checkbox" style={{ width: 15, height: 15, cursor: 'pointer' }} /></th>
+                <th style={{ padding: '9px 10px', width: 38 }}><input type="checkbox" checked={allIds.length > 0 && allIds.every(i => checked.has(i))} onChange={() => toggleCheck('', allIds)} style={{ width: 15, height: 15, cursor: 'pointer' }} /></th>
                 <th style={{ padding: '9px 14px', textAlign: 'left' }}>Due Date</th>
                 <th style={{ padding: '9px 14px' }}>Company</th>
                 <th style={{ padding: '9px 14px' }}>Contact</th>

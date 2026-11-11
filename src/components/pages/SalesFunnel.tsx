@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { STAGE_ORDER, STAGE_COLORS, isInProgressStage, localDateStr, reachedProposal } from '../../lib/utils'
+import { STAGE_ORDER, STAGE_COLORS, isInProgressStage, localDateStr } from '../../lib/utils'
 import { logStageChange } from '../../lib/stageHistory'
-import type { SalesLead, SalesProposal } from '../../types/database'
+import type { SalesLead } from '../../types/database'
 import { loadAllSettings } from '../../lib/settings'
 import LeadDetailPanel from './LeadDetailPanel'
 import OwnerBadge from '../OwnerBadge'
@@ -16,7 +16,7 @@ import { loadAllEventRefs, type EventRef } from '../../lib/events'
 import { decryptRows, PII_FIELDS } from '../../lib/pii'
 import { toEventRefMap, leadEventLabel } from '../../lib/leadEvents'
 
-type TabType = 'board' | 'table' | 'proposal'
+type TabType = 'board' | 'table'
 
 const CONTRACT_STATUSES = ['Not Sent', 'Sent', 'Under Review', 'Revision Requested', 'Signed', 'Rejected']
 const ONBOARD_STATUSES = ['Not Started', 'Waiting Docs', 'Under Review', 'Approved', 'Rejected', 'Completed']
@@ -45,7 +45,6 @@ export default function SalesFunnel() {
     { lbl: t('conversion_rate'), stage: '__conv__', col: '#7C3AED' },
   ]
   const [leads, setLeads] = useState<SalesLead[]>([])
-  const [proposals, setProposals] = useState<SalesProposal[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<TabType>('board')
   const [filterOwner, setFilterOwner] = useState('')
@@ -91,16 +90,11 @@ export default function SalesFunnel() {
 
     async function loadOnMount() {
       try {
-        const [{ data: leadData, error: le }, { data: propData, error: pe }] = await Promise.all([
-          supabase.from('sales_leads').select('*').is('archived_at', null),
-          supabase.from('sales_proposals').select('*'),
-        ])
+        const { data: leadData, error: le } = await supabase.from('sales_leads').select('*').is('archived_at', null)
         if (le) throw le
-        if (pe) throw pe
         const plainLeads = await decryptRows('sales_leads', (leadData || []) as SalesLead[])
         if (cancelled) return
         setLeads(plainLeads)
-        setProposals((propData || []) as SalesProposal[])
       } catch (err: any) {
         showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error')
       } finally {
@@ -118,14 +112,9 @@ export default function SalesFunnel() {
 
   async function load() {
     try {
-      const [{ data: leadData, error: le }, { data: propData, error: pe }] = await Promise.all([
-        supabase.from('sales_leads').select('*').is('archived_at', null),
-        supabase.from('sales_proposals').select('*'),
-      ])
+      const { data: leadData, error: le } = await supabase.from('sales_leads').select('*').is('archived_at', null)
       if (le) throw le
-      if (pe) throw pe
       setLeads(await decryptRows('sales_leads', (leadData || []) as SalesLead[]))
-      setProposals((propData || []) as SalesProposal[])
     } catch (err: any) {
       console.error('SalesFunnel load error:', err?.message)
     } finally {
@@ -136,8 +125,10 @@ export default function SalesFunnel() {
   async function moveStage(leadId: string, stage: string, lost?: LostReasonInput) {
     if (stage === 'Lost' && !lost) { setPendingLostId(leadId); return }
     const prev = leads.find(l => l.id === leadId)?.current_stage || null
-    // last_contact_date / lost_at_stage 는 DB 트리거가 채우므로 갱신된 행을 받아온다
-    const { data, error } = await supabase.from('sales_leads').update({ current_stage: stage, ...lost }).eq('id', leadId).select().single()
+    // last_contact_date / lost_at_stage / 다음 할 일(자동 배정 후 next_action)은 DB 트리거가 채우므로 변경 후 다시 읽어온다
+    // (UPDATE 응답에는 그 뒤에 실행되는 할 일 트리거의 변경이 빠져 있음)
+    const { error } = await supabase.from('sales_leads').update({ current_stage: stage, ...lost }).eq('id', leadId)
+    const { data } = error ? { data: null } : await supabase.from('sales_leads').select('*').eq('id', leadId).single()
     if (!error && data) {
       // DB가 돌려준 행의 개인정보 필드는 암호문이므로 화면의 복호화된 값을 유지
       setLeads(p => p.map(l => l.id === leadId
@@ -145,11 +136,6 @@ export default function SalesFunnel() {
         : l))
       logStageChange(leadId, prev, stage)
     } else if (error) showToast('단계 변경에 실패했습니다.', 'error')
-  }
-
-  async function updatePropField(propId: string, field: string, value: string) {
-    const { error } = await supabase.from('sales_proposals').update({ [field]: value } as never).eq('id', propId)
-    if (!error) setProposals(prev => prev.map(p => p.id === propId ? { ...p, [field]: value } : p))
   }
 
   function toggleCheck(id: string, all?: string[]) {
@@ -199,7 +185,6 @@ export default function SalesFunnel() {
   const tabs: { id: TabType; label: string }[] = [
     { id: 'board', label: t('s_board_view') },
     { id: 'table', label: t('s_table_view') },
-    { id: 'proposal', label: t('s_proposal_tab') },
   ]
 
   return (
@@ -397,7 +382,7 @@ export default function SalesFunnel() {
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1050 }}>
                     <thead>
                       <tr style={{ background: 'var(--accent)', color: 'white' }}>
-                        <th style={{ padding: '9px 10px', width: 38 }}><input type="checkbox" style={{ width: 15, height: 15, cursor: 'pointer' }} /></th>
+                        <th style={{ padding: '9px 10px', width: 38 }}><input type="checkbox" checked={allIds.length > 0 && allIds.every(i => checked.has(i))} onChange={() => toggleCheck('', allIds)} style={{ width: 15, height: 15, cursor: 'pointer' }} /></th>
                         <th style={{ padding: '9px 12px', textAlign: 'left' }}>{t('col_company')}</th>
                         <th style={{ padding: '9px 12px' }}>Event</th>
                         <th style={{ padding: '9px 12px' }}>{t('col_owner')}</th>
@@ -444,11 +429,6 @@ export default function SalesFunnel() {
             )}
           </div>
         )}
-
-        {/* Proposal & Contract */}
-        {tab === 'proposal' && (
-          <ProposalContractView leads={leads} proposals={proposals} onUpdate={updatePropField} onOpenLead={setSelectedLeadId} />
-        )}
       </div>
 
       {selectedLeadId && (
@@ -460,105 +440,6 @@ export default function SalesFunnel() {
           onCancel={() => setPendingLostId(null)}
           onConfirm={async v => { await moveStage(pendingLostId, 'Lost', v); setPendingLostId(null) }} />
       )}
-    </div>
-  )
-}
-
-function ProposalContractView({ leads, proposals, onUpdate, onOpenLead }: {
-  leads: SalesLead[]; proposals: SalesProposal[]
-  onUpdate: (id: string, field: string, value: string) => void
-  onOpenLead: (id: string) => void
-}) {
-  const { t } = useLang()
-  // Lost는 Proposal 단계 이상에서 잃은 리드만 (New Lead 단계에서 Lost된 리드 제외)
-  const propLeads = leads.filter(l => ['Proposal Sent', 'Onboarding', 'Won'].includes(l.current_stage) || (l.current_stage === 'Lost' && reachedProposal(l)))
-  const propMap: Record<string, SalesProposal> = {}
-  for (const p of proposals) propMap[p.lead_id] = p
-
-  const byCS = (s: string) => proposals.filter(p => p.contract_status === s).length
-  const byOS = (s: string) => proposals.filter(p => p.onboarding_status === s).length
-
-  const kpiCards = [
-    { lbl: 'Proposal Sent', val: leads.filter(l => l.current_stage === 'Proposal Sent').length, col: '#4F46E5' },
-    { lbl: 'Under Review', val: byCS('Under Review'), col: '#D97706' },
-    { lbl: 'Signed', val: byCS('Signed'), col: '#059669' },
-    { lbl: 'Onboarding', val: leads.filter(l => l.current_stage === 'Onboarding').length, col: '#7C3AED' },
-    { lbl: 'Completed', val: byOS('Completed'), col: '#065F46' },
-  ]
-
-  return (
-    <div>
-      <div className="g3" style={{ gap: 10, marginBottom: 16 }}>
-        {kpiCards.map(k => (
-          <div key={k.lbl} style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 10, padding: '12px 14px', textAlign: 'center' }}>
-            <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 4 }}>{k.lbl}</div>
-            <div style={{ fontSize: 22, fontWeight: 800, color: k.col }}>{k.val}</div>
-          </div>
-        ))}
-      </div>
-      <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, overflow: 'hidden' }}>
-        <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}>Proposal ~ Won 단계 리드 ({propLeads.length}개)</span>
-        </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 950 }}>
-            <thead>
-              <tr style={{ background: 'var(--accent)', color: 'white' }}>
-                <th style={{ padding: '9px 14px', textAlign: 'left' }}>{t('col_company')}</th>
-                <th style={{ padding: '9px 14px' }}>{t('col_stage')}</th>
-                <th style={{ padding: '9px 14px' }}>{t('proposal_date')}</th>
-                <th style={{ padding: '9px 14px', textAlign: 'right' }}>{t('fee_rate')}</th>
-                <th style={{ padding: '9px 14px', textAlign: 'right' }}>{t('monthly_vol')}</th>
-                <th style={{ padding: '9px 14px' }}>{t('col_contract')}</th>
-                <th style={{ padding: '9px 14px' }}>{t('col_onboard')}</th>
-                <th style={{ padding: '9px 14px' }}>{t('col_owner')}</th>
-                <th style={{ padding: '9px 14px' }}>Remarks</th>
-              </tr>
-            </thead>
-            <tbody>
-              {propLeads.map(l => {
-                const p = propMap[l.id]
-                const stageBg = STAGE_COLORS[l.current_stage]?.bg || '#6B7280'
-                return (
-                  <tr key={l.id} style={{ borderBottom: '0.5px solid var(--border)', cursor: 'pointer', transition: 'background .1s' }}
-                    onClick={() => onOpenLead(l.id)}
-                    onMouseOver={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = '#FDF5F5'))}
-                    onMouseOut={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(td => (td.style.background = ''))}>
-                    <td style={{ padding: '9px 14px', fontWeight: 700 }}>{l.company_name}<br /><span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 400 }}>{l.contact_person}</span></td>
-                    <td style={{ padding: '9px 14px' }} onClick={e => e.stopPropagation()}>
-                      <span style={{ display: 'inline-block', padding: '3px 9px', borderRadius: 99, fontSize: 11, fontWeight: 700, color: 'white', background: stageBg }}>{l.current_stage}</span>
-                    </td>
-                    <td style={{ padding: '9px 14px', fontSize: 12 }}>{p?.proposal_sent_date || '—'}</td>
-                    <td style={{ padding: '9px 14px', textAlign: 'right', fontWeight: 700, color: 'var(--accent)' }}>{p?.proposed_fee_rate ? `${p.proposed_fee_rate}%` : '—'}</td>
-                    <td style={{ padding: '9px 14px', textAlign: 'right' }}>
-                      {p?.expected_monthly_volume ? `${p.volume_currency} ${p.expected_monthly_volume.toLocaleString()}` : '—'}
-                    </td>
-                    <td style={{ padding: '9px 14px' }} onClick={e => e.stopPropagation()}>
-                      {p ? (
-                        <select value={p.contract_status} onChange={e => onUpdate(p.id, 'contract_status', e.target.value)}
-                          style={{ fontSize: 12, padding: '4px 7px', border: '1.5px solid var(--border2)', borderRadius: 6, background: 'white', cursor: 'pointer', width: '100%' }}>
-                          {CONTRACT_STATUSES.map(s => <option key={s}>{s}</option>)}
-                        </select>
-                      ) : <span style={{ fontSize: 12, color: 'var(--muted)' }}>—</span>}
-                    </td>
-                    <td style={{ padding: '9px 14px' }} onClick={e => e.stopPropagation()}>
-                      {p ? (
-                        <select value={p.onboarding_status} onChange={e => onUpdate(p.id, 'onboarding_status', e.target.value)}
-                          style={{ fontSize: 12, padding: '4px 7px', border: '1.5px solid var(--border2)', borderRadius: 6, background: 'white', cursor: 'pointer', width: '100%' }}>
-                          {ONBOARD_STATUSES.map(s => <option key={s}>{s}</option>)}
-                        </select>
-                      ) : <span style={{ fontSize: 12, color: 'var(--muted)' }}>—</span>}
-                    </td>
-                    <td style={{ padding: '9px 14px' }}><OwnerBadge owner={l.owner} /></td>
-                    <td style={{ padding: '9px 14px', fontSize: 11, color: 'var(--muted)' }}>{p?.remarks || '—'}</td>
-                  </tr>
-                )
-              })}
-              {propLeads.length === 0 && <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>{t('no_stage_leads')}</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   )
 }
