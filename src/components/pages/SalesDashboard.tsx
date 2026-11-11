@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { STAGE_ORDER, STAGE_COLORS, isInProgressStage, localDateStr, dayDiffFromToday, priorityColor } from '../../lib/utils'
+import { STAGE_ORDER, STAGE_COLORS, isInProgressStage, localDateStr, dayDiffFromToday } from '../../lib/utils'
 import type { SalesLead, SalesTask } from '../../types/database'
 import LeadDetailPanel from './LeadDetailPanel'
 import { useLang } from '../../contexts/LangContext'
@@ -14,7 +14,6 @@ import { toEventRefMap, groupLeadsByEvent, eventGroupFilter } from '../../lib/le
 
 const UPCOMING_DAYS = 14   // 다가오는 일정: 오늘부터 며칠 뒤까지 (지연된 Task는 기간과 무관하게 모두 표시)
 const UPCOMING_MAX = 8     // 대시보드에 표시할 최대 개수 (나머지는 팔로우업 관리에서)
-const PRIORITY_RANK: Record<string, number> = { High: 0, Medium: 1, Low: 2 }
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
 const ONBOARDING_COLOR = STAGE_COLORS['Onboarding']?.bg || '#16A085'
 
@@ -121,7 +120,7 @@ export default function SalesDashboard() {
     .filter(tk => tk.status !== 'Done')
     .map(tk => ({ task: tk, days: dayDiffFromToday(tk.due_date) ?? 0 }))
     .filter(u => u.days <= UPCOMING_DAYS)
-    .sort((a, b) => a.days - b.days || (PRIORITY_RANK[a.task.priority] ?? 9) - (PRIORITY_RANK[b.task.priority] ?? 9))
+    .sort((a, b) => a.days - b.days)
   const shownTasks = upcomingTasks.slice(0, UPCOMING_MAX)
 
   const toUSD = (l: SalesLead) => l.volume_currency === 'KRW'
@@ -209,10 +208,10 @@ export default function SalesDashboard() {
               const bg = d < 0 ? '#FFF1F0' : d <= 3 ? '#FFF8E6' : 'white'
               const dt = d < 0 ? `${Math.abs(d)}일 지연` : d === 0 ? '오늘' : d === 1 ? '내일' : `D-${d}`
               return (
-                <div key={tk.id} className="ucard" style={{ borderColor: priorityColor(tk.priority), background: bg }}
+                <div key={tk.id} className="ucard" style={{ borderColor: 'var(--border2)', background: bg }}
                   onClick={() => setSelectedLeadId(tk.lead_id)} title="클릭하면 리드 상세가 열립니다">
                   <div className="uc-top">
-                    <span className="uc-kind">{tk.task_type} · <span style={{ color: priorityColor(tk.priority), fontWeight: 700 }}>{tk.priority}</span></span>
+                    <span className="uc-kind">{tk.task_type}</span>
                     <span className="uc-d" style={{ color: dc }}>{dt}</span>
                   </div>
                   <div className="uc-name">{tk.task_title}</div>

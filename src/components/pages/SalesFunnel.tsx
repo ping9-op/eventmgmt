@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { STAGE_ORDER, STAGE_COLORS, priorityColor, isInProgressStage, localDateStr, reachedProposal } from '../../lib/utils'
+import { STAGE_ORDER, STAGE_COLORS, isInProgressStage, localDateStr, reachedProposal } from '../../lib/utils'
 import { logStageChange } from '../../lib/stageHistory'
 import type { SalesLead, SalesProposal } from '../../types/database'
 import { loadAllSettings } from '../../lib/settings'
@@ -19,11 +19,6 @@ type TabType = 'board' | 'table' | 'proposal'
 
 const CONTRACT_STATUSES = ['Not Sent', 'Sent', 'Under Review', 'Revision Requested', 'Signed', 'Rejected']
 const ONBOARD_STATUSES = ['Not Started', 'Waiting Docs', 'Under Review', 'Approved', 'Rejected', 'Completed']
-
-function PriorityBadge({ p }: { p: string }) {
-  const col = p === 'High' ? '#DC2626' : p === 'Medium' ? '#D97706' : '#6B7280'
-  return <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 600, color: 'white', background: col }}>{p}</span>
-}
 
 export default function SalesFunnel() {
   const { t } = useLang()
@@ -167,8 +162,8 @@ export default function SalesFunnel() {
 
   function exportCSV() {
     const toExport = checked.size > 0 ? leads.filter(l => checked.has(l.id)) : leads
-    const H = ['Company', 'Contact', 'Stage', 'Owner', 'Volume', 'Priority', 'Last Contact', 'Next Follow-up']
-    const rows = toExport.map(l => [l.company_name, l.contact_person, l.current_stage, l.owner, `${l.volume_currency} ${l.expected_monthly_volume || 0}`, l.priority, l.last_contact_date || '', l.next_follow_up_date || ''])
+    const H = ['Company', 'Contact', 'Stage', 'Owner', 'Volume', 'Last Contact', 'Next Follow-up']
+    const rows = toExport.map(l => [l.company_name, l.contact_person, l.current_stage, l.owner, `${l.volume_currency} ${l.expected_monthly_volume || 0}`, l.last_contact_date || '', l.next_follow_up_date || ''])
     const csv = [H, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
     const a = Object.assign(document.createElement('a'), { href: 'data:text/csv;charset=utf-8,﻿' + encodeURIComponent(csv), download: `GME_Funnel_${localDateStr()}.csv` })
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
@@ -410,7 +405,6 @@ export default function SalesFunnel() {
                         <th style={{ padding: '9px 12px' }}>{t('col_last_contact')}</th>
                         <th style={{ padding: '9px 12px' }}>Follow-up</th>
                         <th style={{ padding: '9px 12px', textAlign: 'right' }}>{t('col_vol')}</th>
-                        <th style={{ padding: '9px 12px' }}>Priority</th>
                         <th style={{ padding: '9px 12px' }}>Lost Reason</th>
                       </tr>
                     </thead>
@@ -438,11 +432,10 @@ export default function SalesFunnel() {
                           <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 700, color: 'var(--accent)' }}>
                             {l.volume_currency === 'KRW' ? `₩${(l.expected_monthly_volume || 0).toLocaleString()}` : `$${(l.expected_monthly_volume || 0).toLocaleString()}`}
                           </td>
-                          <td style={{ padding: '9px 12px' }}><PriorityBadge p={l.priority} /></td>
                           <td style={{ padding: '9px 12px', fontSize: 11, color: '#DC2626' }}>{l.lost_reason || '—'}</td>
                         </tr>
                       ))}
-                      {tableFiltered.length === 0 && <tr><td colSpan={11} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>{t('no_matching_leads')}</td></tr>}
+                      {tableFiltered.length === 0 && <tr><td colSpan={10} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>{t('no_matching_leads')}</td></tr>}
                     </tbody>
                   </table>
                 </div>

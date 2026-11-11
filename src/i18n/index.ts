@@ -63,7 +63,7 @@ const translations: Record<Lang, Record<string, string>> = {
     funnel_stage_status: 'Funnel 단계별 현황',
     // Report 라벨
     cost_note_placeholder: '차이 사유...',
-    search_placeholder: '🔍 Company, 담당자, Owner 검색...',
+    search_placeholder: '🔍 회사명 · 고객사 담당자 · 영업 담당자 검색',
     search_short: '🔍 검색...',
     prop_upload_title: '📤 Proposal 파일 업로드',
     prop_upload_desc: '기존에 작성된 Proposal 문서(PDF, Word, 이미지)를 업로드하면 AI가 내용을 자동으로 분석해 등록합니다.',

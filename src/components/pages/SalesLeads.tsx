@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
-import { STAGE_ORDER, STAGE_COLORS, OUTREACH_CHANNELS, priorityColor, normalizeStage, localDateStr, reachedStage, reachedOutreach } from '../../lib/utils'
+import { STAGE_ORDER, STAGE_COLORS, normalizeStage, localDateStr, reachedStage, reachedOutreach } from '../../lib/utils'
 import type { SalesLead } from '../../types/database'
 import { loadAllSettings, BUSINESS_TYPES, type SalesSettingsData } from '../../lib/settings'
 import { loadAllEventRefs, eventLabel, type EventRef } from '../../lib/events'
@@ -49,7 +49,6 @@ const FIELD_DEFS: { key: string; label: string; required?: boolean; aliases: str
   { key: 'event_name', label: '행사명', aliases: ['event_name', 'event', '행사명'] },
   { key: 'owner', label: 'Owner', aliases: ['owner', '담당매니저', '매니저'] },
   { key: 'sourced_by', label: '발굴자', aliases: ['sourced_by', 'sourced by', '발굴자', '발굴'] },
-  { key: 'priority', label: 'Priority', aliases: ['priority', '우선순위'] },
   { key: 'current_stage', label: 'Stage', aliases: ['current_stage', 'stage', '스테이지', '단계'] },
   { key: 'country_corridor', label: 'Corridor', aliases: ['country_corridor', 'corridor', '송금국가', '국가'] },
   { key: 'business_type', label: 'Business Type', aliases: ['business_type', 'business type', '사업자구분', '사업자 구분', '사업자유형'] },
@@ -81,6 +80,16 @@ function OwnerBadge({ owner }: { owner: string }) {
   return (
     <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 99, background: '#EEF2FF', color: '#4F46E5', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
       👤 {owner || '—'}
+    </span>
+  )
+}
+
+// 적용 중인 필터 표시 (✕로 해제)
+function FilterChip({ label, color, bg, onClear }: { label: string; color: string; bg: string; onClear: () => void }) {
+  return (
+    <span style={{ background: bg, color, padding: '5px 10px', borderRadius: 99, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+      {label}
+      <button onClick={onClear} title="필터 해제" style={{ background: 'none', border: 'none', cursor: 'pointer', color, fontSize: 13, marginLeft: 2, padding: 0 }}>✕</button>
     </span>
   )
 }
@@ -166,7 +175,6 @@ export default function SalesLeads() {
   const [excelPreview, setExcelPreview] = useState<ExcelPreview | null>(null)
   const [mappingState, setMappingState] = useState<MappingState | null>(null)
   const [importing, setImporting] = useState(false)
-  const [pdfFileName, setPdfFileName] = useState('')
   const workbookRef = useRef<any>(null)
   const xlsxModRef = useRef<any>(null)
 
@@ -181,14 +189,13 @@ export default function SalesLeads() {
   // 그룹별 업로드용 행사 ref
   const importTargetRef = useRef<UploadTarget | null>(null)
   const groupExcelInputRef = useRef<HTMLInputElement>(null)
-  const groupPdfInputRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
   const isFirstRender = useRef(true)
 
   // Register form
   // 업종/코리도/담당자는 기본값으로 채우지 않음 — 사용자가 고르지 않은 값이 실제 데이터처럼 저장되지 않도록
   const emptyForm = (): Partial<SalesLead> => ({
-    registered_date: localDateStr(), priority: 'Medium',
+    registered_date: localDateStr(),
     owner: salesOwner || '', current_stage: 'New Lead',
     volume_currency: 'USD', first_contact_done: false,
   })
@@ -349,7 +356,7 @@ export default function SalesLeads() {
       business_type: form.business_type || '',
       industry: form.industry || '',
       country_corridor: composeCorridor(formTx, formCountry),
-      priority: form.priority || 'Medium',
+      priority: 'Medium', // 우선순위는 화면에서 제거 — DB 칸만 유지
       // 관리자가 아니면 owner를 임의로 지정할 수 없음 — 항상 본인 계정으로 등록 (RLS와 일치)
       owner,
       // 발굴자는 관리자만 지정 (비우면 DB에서 등록자 본인으로 채움)
@@ -386,8 +393,8 @@ export default function SalesLeads() {
 
   async function downloadTemplate() {
     const XLSX = await import('xlsx')
-    const headers = ['회사명', '담당자', '연락처', '이메일', 'Source', '행사명', '등록일', 'Owner', 'Stage', 'Priority', 'Corridor', 'Business Type', '산업군', 'Volume', 'Currency', 'Address', 'Remarks']
-    const sample  = ['Sample Co.', '김철수', '+81-90-1234-5678', 'john@sample.com', 'Expo', 'KIF 2026', '2026-10-16', 'Andrew', 'New Lead', 'Medium', 'Korea → Japan', '법인', '요식업', '10000', 'USD', 'Tokyo, Japan', 'Booth에서 만남']
+    const headers = ['회사명', '담당자', '연락처', '이메일', 'Source', '행사명', '등록일', 'Owner', 'Stage', 'Corridor', 'Business Type', '산업군', 'Volume', 'Currency', 'Address', 'Remarks']
+    const sample  = ['Sample Co.', '김철수', '+81-90-1234-5678', 'john@sample.com', 'Expo', 'KIF 2026', '2026-10-16', 'Andrew', 'New Lead', 'Korea → Japan', '법인', '요식업', '10000', 'USD', 'Tokyo, Japan', 'Booth에서 만남']
     const stageNote = ['※ Stage 유효값 →', ...STAGE_ORDER, ...Array(headers.length - 1 - STAGE_ORDER.length).fill('')]
     const ws = XLSX.utils.aoa_to_sheet([headers, sample, stageNote])
     ws['!cols'] = [22, 16, 18, 24, 16, 12, 22, 10, 18, 18, 10, 10, 18, 20].map(wch => ({ wch }))
@@ -467,7 +474,6 @@ export default function SalesLeads() {
         event_name: event,
         owner: get(r, 'owner'),
         sourced_by: get(r, 'sourced_by') || null,
-        priority: get(r, 'priority') || 'Medium',
         current_stage: normalizeStage(rawStage),
         country_corridor: get(r, 'country_corridor'),
         business_type: normalizeBusinessType(get(r, 'business_type')),
@@ -512,7 +518,7 @@ export default function SalesLeads() {
         owner: isAdmin ? (r.owner || '') : (salesOwner || r.owner || ''), // confirmMapping에서 관리자 빈 Owner는 걸러짐
         // 발굴자: 관리자 업로드만 Excel 값 사용, 비어 있으면 DB에서 업로드한 본인으로 채움
         sourced_by: isAdmin ? (r.sourced_by || null) : null,
-        priority: r.priority || 'Medium',
+        priority: 'Medium',
         current_stage: normalizeStage(r.current_stage),
         country_corridor: r.country_corridor || '',
         business_type: r.business_type || '',
@@ -540,8 +546,8 @@ export default function SalesLeads() {
   function exportCSV(ids?: string[]) {
     const toExport = ids && ids.length > 0 ? leads.filter(l => ids.includes(l.id)) : (checked.size > 0 ? leads.filter(l => checked.has(l.id)) : leads)
     if (!toExport.length) { showToast('⚠️ 내보낼 리드가 없습니다.'); return }
-    const H = ['SN', '등록일', '행사명', 'Company', '담당자', 'Phone', 'Email', 'Source', '주소', 'Owner', '발굴자', 'Stage', '첫연락', '마지막연락', '다음팔로업', '예상Volume', '통화', 'Priority', 'LostReason', 'Remarks']
-    const rows = toExport.map(l => [l.serial_no, l.registered_date, leadEventLabel(l, refMap), l.company_name, l.contact_person, l.phone || '', l.email || '', l.lead_source, l.address || '', l.owner, l.sourced_by || '', l.current_stage, l.first_contact_done ? 'Y' : 'N', l.last_contact_date || '', l.next_follow_up_date || '', l.expected_monthly_volume || '', l.volume_currency, l.priority, l.lost_reason || '', l.remarks || ''])
+    const H = ['SN', '등록일', '행사명', 'Company', '담당자', 'Phone', 'Email', 'Source', '주소', 'Owner', '발굴자', 'Stage', '첫연락', '마지막연락', '다음팔로업', '예상Volume', '통화', 'LostReason', 'Remarks']
+    const rows = toExport.map(l => [l.serial_no, l.registered_date, leadEventLabel(l, refMap), l.company_name, l.contact_person, l.phone || '', l.email || '', l.lead_source, l.address || '', l.owner, l.sourced_by || '', l.current_stage, l.first_contact_done ? 'Y' : 'N', l.last_contact_date || '', l.next_follow_up_date || '', l.expected_monthly_volume || '', l.volume_currency, l.lost_reason || '', l.remarks || ''])
     const csv = [H, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
     const a = Object.assign(document.createElement('a'), { href: 'data:text/csv;charset=utf-8,﻿' + encodeURIComponent(csv), download: `GME_Leads_${localDateStr()}.csv` })
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
@@ -633,78 +639,84 @@ export default function SalesLeads() {
           e.target.value = ''
         }} />
 
+      <input id="excel-input" type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }}
+        onChange={e => { const f = e.target.files?.[0]; if (f) openMappingModal(f); e.target.value = '' }} />
+
+      {/* ── 헤더: 제목 + 주요 동작 (모든 보기에서 동일) ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+        <div className="sec-hdr" style={{ margin: 0, flex: 1, minWidth: 200 }}>
+          <div className="bar" />
+          <div className="txt">{t('s_leads_title')}</div>
+          <div className="sub">{t('s_leads_sub')}</div>
+        </div>
+        <button className="btn btn-primary" onClick={() => setShowRegister(true)}>{t('s_register')}</button>
+        <button className="btn btn-outline btn-sm" title="엑셀 파일로 리드 여러 건 등록 (행사 안에서 누르면 그 행사로 등록)"
+          onClick={() => openGroupUpload(viewMode === 'detail' ? uploadTargetOf(groupKey) : null)}>📤 엑셀 업로드</button>
+        <button className="btn btn-outline btn-sm" onClick={downloadTemplate}>📋 업로드 양식</button>
+        <button className="btn btn-outline btn-sm" title={checked.size > 0 ? `선택한 ${checked.size}건 다운로드` : '지금 보이는 리드 다운로드'}
+          onClick={() => exportCSV(checked.size > 0 ? undefined : (viewMode === 'detail' ? detailLeads.map(l => l.id) : []))}>
+          {t('export_excel')}{checked.size > 0 ? ` (${checked.size})` : ''}
+        </button>
+      </div>
+
+      {/* ── 보기 방식 탭 ── */}
+      <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--light)', borderRadius: 10, marginBottom: 12, overflowX: 'auto' }}>
+        {([['all', '📋 전체 목록'], ['event', '🎪 행사별'], ['date', '📅 등록일별'], ['source', '📥 출처별']] as const).map(([k, lbl]) => {
+          const active = k === 'all' ? viewMode === 'detail' && !groupKey : groupBy === k && (viewMode === 'group' || !!groupKey)
+          return (
+            <button key={k}
+              onClick={() => {
+                setChecked(new Set()); setStageFilter(null); setDetailPage(0)
+                if (k === 'all') { setViewMode('detail'); setGroupKey(null) }
+                else { setGroupBy(k); setViewMode('group'); setGroupKey(null) }
+              }}
+              style={{ flex: 1, minWidth: 96, padding: '8px 12px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', background: active ? 'white' : 'transparent', color: active ? 'var(--accent)' : 'var(--muted)', boxShadow: active ? '0 1px 3px rgba(0,0,0,.12)' : 'none' }}>
+              {lbl}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ── 검색 · 필터 ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        <input value={search} onChange={e => { setSearch(e.target.value); setDetailPage(0) }} placeholder={t('search_placeholder')}
+          className="leads-search-input"
+          style={{ flex: 1, minWidth: 200, padding: '8px 12px', border: '1px solid var(--border2)', borderRadius: 8, fontSize: 13 }} />
+        {/* 담당자 필터 — 매니저는 본인 리드만 보이므로 관리자에게만 표시 */}
+        {isAdmin && (
+          <select value={filterOwner || ''} onChange={e => { setFilterOwner(e.target.value || null); setDetailPage(0) }}
+            style={{ padding: '8px 10px', border: '1px solid var(--border2)', borderRadius: 8, fontSize: 13, width: 'auto' }}>
+            <option value="">👤 전체 담당자</option>
+            {withCurrentOwner(settings?.owners, leads, filterOwner).map(o => <option key={o}>{o}</option>)}
+          </select>
+        )}
+        {filterOwner && !isAdmin && <FilterChip color="#4F46E5" bg="#EEF2FF" label={`👤 ${filterOwner}`} onClear={() => setFilterOwner(null)} />}
+        {filterStage && <FilterChip color="#DC2626" bg="#FEF2F2" label={`📊 ${filterStage}`} onClear={() => { setFilterStage(null); setFilterLostReason(null) }} />}
+        {filterReached && <FilterChip color="#4F46E5" bg="#EEF2FF" label={`📈 ${filterReached} 이상 도달`} onClear={() => setFilterReached(null)} />}
+        {filterLostReason && <FilterChip color="#DC2626" bg="#FEF2F2" label={`❌ ${filterLostReason}`} onClear={() => setFilterLostReason(null)} />}
+        {filterCorridor && <FilterChip color="#059669" bg="#F0FFF4" label={`🌏 ${filterCorridor}`} onClear={() => setFilterCorridor(null)} />}
+        <span style={{ fontSize: 13, color: 'var(--muted)', whiteSpace: 'nowrap', marginLeft: 'auto' }}>
+          총 <b style={{ color: 'var(--text)' }}>{viewMode === 'detail' ? detailLeads.length : filteredLeads.length}</b>건
+        </span>
+      </div>
+
+      {/* ── 그룹 안으로 들어온 경우: 현재 위치 ── */}
+      {viewMode === 'detail' && groupKey && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '10px 14px', marginBottom: 12, background: '#FFF7F7', border: '1px solid #F5D0D0', borderRadius: 10, fontSize: 13 }}>
+          <button onClick={() => { setViewMode('group'); setGroupKey(null); setStageFilter(null); setChecked(new Set()) }}
+            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--muted)', fontWeight: 600, fontSize: 13 }}>
+            {groupBy === 'event' ? '🎪 행사별' : groupBy === 'date' ? '📅 등록일별' : '📥 출처별'}
+          </button>
+          <span style={{ color: 'var(--muted)' }}>›</span>
+          <b style={{ color: 'var(--accent)' }}>{groupKeyLabel}</b>
+          <span style={{ color: 'var(--muted)' }}>{detailLeads.length}건</span>
+          <button className="btn btn-outline btn-sm" style={{ marginLeft: 'auto' }}
+            onClick={() => { setViewMode('group'); setGroupKey(null); setStageFilter(null); setChecked(new Set()) }}>← 목록으로</button>
+        </div>
+      )}
+
       {viewMode === 'group' ? (
         <>
-          <div className="sec-hdr">
-            <div className="bar" />
-            <div className="txt">{t('s_leads_title')}</div>
-            <div className="sub">{t('s_leads_sub')}</div>
-          </div>
-
-          {/* 숨겨진 file inputs */}
-          <input id="pdf-input" type="file" accept=".pdf" style={{ display: 'none' }}
-            onChange={e => { const f = e.target.files?.[0]; if (f) { setPdfFileName(f.name); showToast(`📎 "${f.name}" 첨부됨`) }; e.target.value = '' }} />
-          <input id="excel-input" type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }}
-            onChange={e => { const f = e.target.files?.[0]; if (f) openMappingModal(f); e.target.value = '' }} />
-
-          {/* 액션 버튼 */}
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-            <button className="btn btn-outline btn-sm" onClick={() => { setViewMode('detail'); setGroupKey(null); setDetailPage(0) }}>📋 전체 목록</button>
-            <button className="btn btn-primary" onClick={() => setShowRegister(true)}>{t('s_register')}</button>
-            <button className="btn btn-outline btn-sm" onClick={() => document.getElementById('pdf-input')?.click()}
-              style={pdfFileName ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : {}}>
-              📎 {pdfFileName ? pdfFileName.replace(/(.{14}).+(\.[^.]+)$/, '$1…$2') : 'PDF'}
-            </button>
-            <button className="btn btn-outline btn-sm" onClick={() => document.getElementById('excel-input')?.click()}>📤 Excel Upload</button>
-            <button className="btn btn-outline btn-sm" onClick={downloadTemplate}>📋 Template</button>
-            <button className="btn btn-outline btn-sm" onClick={() => exportCSV([])}>{t('export_excel')}</button>
-          </div>
-
-          {/* 그룹 + 검색 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-            <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 500 }}>{t('s_group_by')}</span>
-            {([['event', t('s_event')], ['date', t('s_date')], ['source', 'Source']] as const).map(([k, lbl]) => (
-              <button key={k} onClick={() => setGroupBy(k)}
-                style={{ padding: '5px 12px', borderRadius: 7, fontSize: 13, cursor: 'pointer', fontWeight: 600, minHeight: 44, background: groupBy === k ? 'var(--accent)' : 'white', color: groupBy === k ? 'white' : 'var(--muted)', border: `1.5px solid ${groupBy === k ? 'var(--accent)' : 'var(--border2)'}` }}>
-                {lbl}
-              </button>
-            ))}
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('search_placeholder')}
-              className="leads-search-input"
-              style={{ flex: 1, minWidth: 200, padding: '7px 12px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13 }} />
-            {filterOwner && (
-              <span style={{ background: '#EEF2FF', color: '#4F46E5', padding: '4px 10px', borderRadius: 99, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
-                👤 {filterOwner}
-                <button onClick={() => setFilterOwner(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#4F46E5', fontSize: 13, marginLeft: 2 }}>✕</button>
-              </span>
-            )}
-            {filterStage && (
-              <span style={{ background: '#FEF2F2', color: '#DC2626', padding: '4px 10px', borderRadius: 99, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
-                📊 {filterStage}
-                <button onClick={() => { setFilterStage(null); setFilterLostReason(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: 13, marginLeft: 2 }}>✕</button>
-              </span>
-            )}
-            {filterReached && (
-              <span style={{ background: '#EEF2FF', color: '#4F46E5', padding: '4px 10px', borderRadius: 99, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
-                📈 {filterReached} 이상 도달
-                <button onClick={() => setFilterReached(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#4F46E5', fontSize: 13, marginLeft: 2 }}>✕</button>
-              </span>
-            )}
-            {filterLostReason && (
-              <span style={{ background: '#FEF2F2', color: '#DC2626', padding: '4px 10px', borderRadius: 99, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
-                ❌ {filterLostReason}
-                <button onClick={() => setFilterLostReason(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: 13, marginLeft: 2 }}>✕</button>
-              </span>
-            )}
-            {filterCorridor && (
-              <span style={{ background: '#F0FFF4', color: '#059669', padding: '4px 10px', borderRadius: 99, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
-                🌏 {filterCorridor}
-                <button onClick={() => setFilterCorridor(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#059669', fontSize: 13, marginLeft: 2 }}>✕</button>
-              </span>
-            )}
-            <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{t('total')} {filteredLeads.length}</span>
-          </div>
-
           {/* 그룹 테이블 */}
           <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, overflow: 'hidden' }}>
             <div style={{ overflowX: 'auto' }}>
@@ -774,78 +786,32 @@ export default function SalesLeads() {
       ) : (
         /* Detail View */
         <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
-            {groupKey ? (
-              <button className="btn btn-outline btn-sm" onClick={() => { setViewMode('group'); setGroupKey(null); setStageFilter(null); setSearch('') }}>← 그룹별 보기</button>
-            ) : (
-              <button className="btn btn-outline btn-sm" onClick={() => { setViewMode('group'); setStageFilter(null); setSearch('') }}>🗂 그룹별 보기</button>
-            )}
-            <div className="sec-hdr" style={{ margin: 0, flex: 1 }}>
-              <div className="bar" />
-              <span className="txt">👥 {groupKey ? groupKeyLabel : t('s_leads_title')}{filterReached ? ` · ${filterReached} 이상 도달` : ''}{filterLostReason ? ` · Lost: ${filterLostReason}` : ''}</span>
-              <span className="sub">{detailLeads.length}개</span>
+          {/* 리드가 없을 때만 업로드 안내 (평소엔 상단 '엑셀 업로드' 버튼 사용) */}
+          {detailLeads.length === 0 && (
+            <div
+              onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={e => {
+                e.preventDefault()
+                setDragOver(false)
+                const file = e.dataTransfer.files?.[0]
+                if (!file) return
+                const ext = file.name.split('.').pop()?.toLowerCase()
+                if (['xlsx', 'xls', 'csv'].includes(ext || '')) {
+                  openMappingModal(file, uploadTargetOf(groupKey) || undefined)
+                } else {
+                  showToast('⚠️ Excel 파일(.xlsx/.xls/.csv)만 지원합니다.')
+                }
+              }}
+              onClick={() => openGroupUpload(uploadTargetOf(groupKey))}
+              style={{ marginBottom: 12, padding: '40px 20px', border: `2px dashed ${dragOver ? 'var(--accent)' : 'var(--border2)'}`, borderRadius: 10, background: dragOver ? '#FFF5F5' : '#FAFAFA', textAlign: 'center', cursor: 'pointer', transition: 'all .15s' }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>📂</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: dragOver ? 'var(--accent)' : 'var(--muted)', marginBottom: 4 }}>
+                {groupKey ? `"${groupKeyLabel}" 리드 파일을 여기에 드래그하거나 클릭하여 업로드` : '리드가 없습니다 — 엑셀 파일을 드래그하거나 클릭하여 업로드'}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>Excel (.xlsx / .xls / .csv) 지원 · 한 건씩은 상단 '+ 리드 등록'</div>
             </div>
-            {/* 담당자 필터 — 매니저는 본인 리드만 보이므로 관리자에게만 표시 */}
-            {isAdmin && (
-              <select value={filterOwner || ''} onChange={e => { setFilterOwner(e.target.value || null); setDetailPage(0) }}
-                style={{ padding: '7px 10px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13 }}>
-                <option value="">👤 전체 담당자</option>
-                {withCurrentOwner(settings?.owners, leads, filterOwner).map(o => <option key={o}>{o}</option>)}
-              </select>
-            )}
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('search_short')}
-              style={{ padding: '7px 12px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13, flex: 1, minWidth: 140, maxWidth: 200 }} />
-            <button className="btn btn-primary btn-sm" onClick={() => setShowRegister(true)}>+ 등록</button>
-            {isEventGroup(groupKey) && (
-              <button className="btn btn-outline btn-sm" onClick={() => openGroupUpload(uploadTargetOf(groupKey))}>📤 Excel 업로드</button>
-            )}
-          </div>
-
-          {/* 드래그앤드랍 업로드 존 */}
-          <div
-            onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={e => {
-              e.preventDefault()
-              setDragOver(false)
-              const file = e.dataTransfer.files?.[0]
-              if (!file) return
-              const ext = file.name.split('.').pop()?.toLowerCase()
-              if (['xlsx', 'xls', 'csv'].includes(ext || '')) {
-                openMappingModal(file, uploadTargetOf(groupKey) || undefined)
-              } else {
-                showToast('⚠️ Excel 파일(.xlsx/.xls/.csv)만 지원합니다.')
-              }
-            }}
-            onClick={() => {
-              importTargetRef.current = uploadTargetOf(groupKey)
-              groupExcelInputRef.current?.click()
-            }}
-            style={{
-              marginBottom: 12,
-              padding: detailLeads.length === 0 ? '40px 20px' : '12px 20px',
-              border: `2px dashed ${dragOver ? 'var(--accent)' : 'var(--border2)'}`,
-              borderRadius: 10,
-              background: dragOver ? '#FFF5F5' : detailLeads.length === 0 ? '#FAFAFA' : 'white',
-              textAlign: 'center',
-              cursor: 'pointer',
-              transition: 'all .15s',
-            }}>
-            {detailLeads.length === 0 ? (
-              <div>
-                <div style={{ fontSize: 32, marginBottom: 8 }}>📂</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: dragOver ? 'var(--accent)' : 'var(--muted)', marginBottom: 4 }}>
-                  {groupKey ? `"${groupKeyLabel}" 리드 파일을 여기에 드래그하거나 클릭하여 업로드` : '파일을 드래그하거나 클릭하여 업로드'}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--muted)' }}>Excel (.xlsx / .xls / .csv) 지원</div>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 12, color: dragOver ? 'var(--accent)' : 'var(--muted)', fontWeight: 600 }}>
-                <span style={{ fontSize: 16 }}>📤</span>
-                {dragOver ? '여기에 놓으세요' : `Excel 파일 드래그 또는 클릭하여 업로드${isEventGroup(groupKey) ? ` (행사명 자동: ${groupKeyLabel})` : ''}`}
-              </div>
-            )}
-          </div>
+          )}
 
           {/* Stage 필터 바 */}
           <div style={{ marginBottom: 12, padding: '8px 12px', background: 'white', border: '0.5px solid var(--border2)', borderRadius: 9, display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -867,15 +833,9 @@ export default function SalesLeads() {
             )}
           </div>
 
-          {/* 액션 바 */}
-          {isMobile ? (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
-              <button onClick={() => exportCSV()} style={{ padding: '8px 14px', borderRadius: 7, background: 'white', border: '1.5px solid #059669', color: '#059669', fontSize: 12, fontWeight: 700, cursor: 'pointer', minHeight: 44 }}>
-                ⬇️ {t('export_excel')}
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '10px 16px', borderBottom: '1px solid var(--border)', background: '#FAFAFA', marginBottom: 0 }}>
+          {/* 액션 바 (선택·일괄 처리) — 표 위에 붙는 머리 */}
+          {!isMobile && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '10px 16px', background: '#FAFAFA', border: '0.5px solid var(--border2)', borderBottom: '1px solid var(--border)', borderRadius: '12px 12px 0 0' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
                 <input type="checkbox" checked={allDetailIds.length > 0 && allDetailIds.every(i => checked.has(i))} onChange={() => toggleCheck('', allDetailIds)} style={{ width: 16, height: 16, accentColor: 'var(--accent)', cursor: 'pointer' }} />
                 {t('select_all')}
@@ -940,12 +900,6 @@ export default function SalesLeads() {
                   </select>
                 </div>
               )}
-
-              <div style={{ marginLeft: 'auto' }}>
-                <button onClick={() => exportCSV()} style={{ padding: '6px 14px', borderRadius: 7, background: 'white', border: '1.5px solid #059669', color: '#059669', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                  {t('export_excel')}
-                </button>
-              </div>
             </div>
           )}
 
@@ -985,7 +939,7 @@ export default function SalesLeads() {
             </div>
           ) : (
             /* 데스크탑 테이블 뷰 */
-            <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: totalDetailPages > 1 ? '12px 12px 0 0' : 12, overflow: 'hidden' }}>
+            <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderTop: 'none', borderRadius: totalDetailPages > 1 ? 0 : '0 0 12px 12px', overflow: 'hidden' }}>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1180 }}>
                   <thead>
@@ -1162,7 +1116,6 @@ export default function SalesLeads() {
                     <th style={{ padding: '7px 10px', textAlign: 'left' }}>Phone / Email</th>
                     <th style={{ padding: '7px 10px', textAlign: 'left' }}>Event</th>
                     <th style={{ padding: '7px 10px' }}>Owner</th>
-                    <th style={{ padding: '7px 10px' }}>Priority</th>
                     <th style={{ padding: '7px 10px' }}>Stage</th>
                   </tr>
                 </thead>
@@ -1175,7 +1128,6 @@ export default function SalesLeads() {
                       <td style={{ padding: '6px 10px', fontSize: 11 }}>{r.phone || '—'}<br /><span style={{ color: 'var(--muted)' }}>{r.email || '—'}</span></td>
                       <td style={{ padding: '6px 10px', fontSize: 11, fontWeight: excelPreview.eventName ? 700 : 400, color: excelPreview.eventName ? 'var(--accent)' : 'inherit' }}>{r.event_name || '—'}</td>
                       <td style={{ padding: '6px 10px', textAlign: 'center' }}>{r.owner}</td>
-                      <td style={{ padding: '6px 10px', textAlign: 'center' }}>{r.priority}</td>
                       <td style={{ padding: '6px 10px', textAlign: 'center' }}>
                         <StageBadge stage={r.current_stage || 'New Lead'} />
                       </td>

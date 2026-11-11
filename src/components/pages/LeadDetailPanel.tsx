@@ -168,7 +168,6 @@ export default function LeadDetailPanel({
         owner: form.owner || lead.owner,
         // 발굴자는 관리자만 변경 (DB 트리거도 매니저의 변경은 무시)
         ...(isAdmin ? { sourced_by: form.sourced_by || lead.sourced_by } : {}),
-        priority: form.priority || lead.priority,
         country_corridor: form.country_corridor ?? lead.country_corridor,
         business_type: form.business_type ?? lead.business_type,
         industry: form.industry ?? lead.industry,
@@ -423,11 +422,6 @@ export default function LeadDetailPanel({
                   ) : (
                     <input value={form.sourced_by || ''} disabled style={{ background: 'var(--light)', color: 'var(--muted)' }} />
                   )}
-                </Field>
-                <Field label="Priority">
-                  <select value={form.priority || ''} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
-                    {['High', 'Medium', 'Low'].map(p => <option key={p}>{p}</option>)}
-                  </select>
                 </Field>
                 <Field label="Transaction Type">
                   <RadioGroup value={corrTx} onChange={v => { setCorrTx(v as TxType); setForm(f => ({ ...f, country_corridor: composeCorridor(v as TxType, corrCountry) })) }}

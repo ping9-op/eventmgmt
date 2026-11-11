@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   loadAllSettings, saveSetting,
-  STAGE_ORDER, PRIORITY_OPTS, BUSINESS_TYPES, CONTRACT_STATUSES, ONBOARD_STATUSES,
+  STAGE_ORDER, BUSINESS_TYPES, CONTRACT_STATUSES, ONBOARD_STATUSES,
   type SalesSettingsData,
 } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
@@ -143,7 +143,6 @@ export default function SalesSettings() {
 
   const READONLY_GROUPS = [
     { label: t('funnel_stage_label'), items: STAGE_ORDER,       icon: '🔀', desc: t('funnel_stage_desc') },
-    { label: t('priority_label'),     items: PRIORITY_OPTS,     icon: '⚡', desc: t('priority_desc') },
     { label: t('biz_entity_label'),   items: BUSINESS_TYPES,    icon: '🏢', desc: t('biz_entity_desc') },
     { label: t('contract_label'),     items: CONTRACT_STATUSES, icon: '📄', desc: t('contract_desc') },
     { label: t('onboard_label'),      items: ONBOARD_STATUSES,  icon: '✅', desc: t('onboard_desc') },

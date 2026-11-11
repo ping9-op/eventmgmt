@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { STAGE_COLORS, priorityColor, isActiveStage, localDateStr } from '../../lib/utils'
+import { STAGE_COLORS, isActiveStage, localDateStr } from '../../lib/utils'
 import type { SalesTask, SalesLead } from '../../types/database'
 import { useToast } from '../../contexts/ToastContext'
 import LeadDetailPanel from './LeadDetailPanel'
@@ -9,7 +9,6 @@ import { encryptRows, decryptRows } from '../../lib/pii'
 import { useLang } from '../../contexts/LangContext'
 
 const TASK_TYPES = ['Email', 'Call', 'SMS', 'Meeting', 'Send Proposal', 'Request Docs', 'Other']
-const PRIORITIES = ['High', 'Medium', 'Low']
 const STATUSES = ['Pending', 'In Progress', 'Done']
 
 // DB에 한국어로 저장된 task_type 영어 매핑
@@ -23,11 +22,6 @@ function taskTypeEn(type: string): string {
 }
 
 type TaskFilter = 'today' | 'week' | 'overdue' | 'done' | null
-
-function PriorityBadge({ p }: { p: string }) {
-  const col = p === 'High' ? '#DC2626' : p === 'Medium' ? '#D97706' : '#6B7280'
-  return <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 600, color: 'white', background: col }}>{p}</span>
-}
 
 function StatusBadge({ s }: { s: string }) {
   const col = s === 'Done' ? '#2E7D51' : s === 'Overdue' ? '#DC2626' : '#D97706'
@@ -52,7 +46,7 @@ export default function SalesFollowUp() {
   // Add task form
   const [form, setForm] = useState({
     lead_id: '', task_title: '', task_type: 'Email', due_date: today,
-    status: 'Pending', priority: 'Medium', note: '',
+    status: 'Pending', note: '',
   })
 
   useEffect(() => {
@@ -162,14 +156,14 @@ export default function SalesFollowUp() {
     try {
       [task] = await encryptRows('sales_tasks', [{
         lead_id: form.lead_id, task_title: form.task_title, task_type: form.task_type,
-        due_date: form.due_date, status: form.status, priority: form.priority,
+        due_date: form.due_date, status: form.status,
         owner: leads.find(l => l.id === form.lead_id)?.owner || '', note: form.note || null,
       }])
     } catch (e: any) { showToast('⚠️ Task 추가 실패 (암호화): ' + (e?.message || '알 수 없는 오류')); return }
     const { error } = await supabase.from('sales_tasks').insert(task)
     if (error) { showToast('⚠️ Task 추가 실패: ' + error.message); return }
     setShowAddTask(false)
-    setForm({ lead_id: '', task_title: '', task_type: 'Email', due_date: today, status: 'Pending', priority: 'Medium', note: '' })
+    setForm({ lead_id: '', task_title: '', task_type: 'Email', due_date: today, status: 'Pending', note: '' })
     showToast('Task가 추가되었습니다.')
     load()
   }
@@ -273,7 +267,6 @@ export default function SalesFollowUp() {
                 <th style={{ padding: '9px 14px' }}>Task Type</th>
                 <th style={{ padding: '9px 14px' }}>Next Action</th>
                 <th style={{ padding: '9px 14px' }}>Owner</th>
-                <th style={{ padding: '9px 14px' }}>Priority</th>
                 <th style={{ padding: '9px 14px' }}>Status</th>
                 <th style={{ padding: '9px 14px' }}></th>
               </tr>
@@ -304,7 +297,6 @@ export default function SalesFollowUp() {
                     <td style={{ padding: '9px 14px', fontSize: 12 }}>{lang === 'en' ? taskTypeEn(task.task_type) : task.task_type}</td>
                     <td style={{ padding: '9px 14px', fontSize: 12, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.note || '—'}</td>
                     <td style={{ padding: '9px 14px' }}>{task.owner}</td>
-                    <td style={{ padding: '9px 14px' }}><PriorityBadge p={task.priority} /></td>
                     <td style={{ padding: '9px 14px' }}><StatusBadge s={task.status} /></td>
                     <td style={{ padding: '9px 14px' }}>
                       <div style={{ display: 'flex', gap: 5 }}>
@@ -324,7 +316,7 @@ export default function SalesFollowUp() {
                 )
               })}
               {shown.length === 0 && (
-                <tr><td colSpan={11} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>{t('no_tasks')}</td></tr>
+                <tr><td colSpan={10} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>{t('no_tasks')}</td></tr>
               )}
             </tbody>
           </table>
@@ -348,7 +340,7 @@ export default function SalesFollowUp() {
             </select>
             <label>{t('task_title_lbl')}</label>
             <input value={form.task_title} onChange={e => setForm(f => ({ ...f, task_title: e.target.value }))} />
-            <div className="form-row cols3" style={{ marginTop: 14 }}>
+            <div className="form-row cols2" style={{ marginTop: 14 }}>
               <div>
                 <label style={{ marginTop: 0 }}>{t('task_type_lbl')}</label>
                 <select value={form.task_type} onChange={e => setForm(f => ({ ...f, task_type: e.target.value }))}>
@@ -358,12 +350,6 @@ export default function SalesFollowUp() {
               <div>
                 <label style={{ marginTop: 0 }}>{t('task_due_lbl')}</label>
                 <input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} />
-              </div>
-              <div>
-                <label style={{ marginTop: 0 }}>{t('task_priority_lbl')}</label>
-                <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
-                  {PRIORITIES.map(p => <option key={p}>{p}</option>)}
-                </select>
               </div>
             </div>
             <div className="form-row cols2" style={{ marginTop: 14 }}>
