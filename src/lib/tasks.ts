@@ -8,7 +8,21 @@ import { logStageChange } from './stageHistory'
 import type { LostReasonInput } from '../components/LostReasonModal'
 
 export const TASK_TYPES = ['Email', 'Call', 'SMS', 'Meeting', 'Send Proposal', 'Request Docs', 'Other']
-export const ACTIVITY_RESULTS = ['Interested', 'No Response', 'Not Interested', 'Requested Info', 'Scheduled Meeting']
+/**
+ * 단계별 기본 할 일 — DB 트리거(sales_leads_auto_task)가 리드 등록·단계 변경 시 자동 배정
+ * 여기 값은 화면 안내용이므로 바꿀 때는 supabase/migrations/20261111040000_auto_task_playbook.sql 과 함께 바꿀 것
+ */
+export const TASK_PLAYBOOK: { stage: string; title: string; days: number }[] = [
+  { stage: 'New Lead', title: '첫 연락 (Cold Call / Cold Email)', days: 1 },
+  { stage: 'Outreach Sent', title: '응답 확인 · 재연락', days: 3 },
+  { stage: 'Engaged', title: '미팅 일정 잡기', days: 3 },
+  { stage: 'Meeting Scheduled', title: '미팅 후 제안서 발송', days: 3 },
+  { stage: 'Proposal Sent', title: '제안서 회신 확인', days: 3 },
+  { stage: 'Onboarding', title: '온보딩 서류·진행 확인', days: 3 },
+]
+export const playbookFor = (stage: string) => TASK_PLAYBOOK.find(p => p.stage === stage)
+
+export const ACTIVITY_RESULTS =['Interested', 'No Response', 'Not Interested', 'Requested Info', 'Scheduled Meeting']
 
 /** Task 유형 → 완료 기록 시 기본 연락 방법 */
 export function contactMethodForTask(taskType: string, methods: string[]): string {

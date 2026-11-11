@@ -6,6 +6,7 @@ import type { SalesTask, SalesLead } from '../../types/database'
 import { useToast } from '../../contexts/ToastContext'
 import LeadDetailPanel from './LeadDetailPanel'
 import OwnerBadge from '../OwnerBadge'
+import AutoBadge from '../AutoBadge'
 import { encryptRows, decryptRows } from '../../lib/pii'
 import { useLang } from '../../contexts/LangContext'
 import CompleteTaskModal from '../CompleteTaskModal'
@@ -261,7 +262,7 @@ export default function SalesFollowUp() {
                 <th style={{ padding: '9px 14px' }}>Contact</th>
                 <th style={{ padding: '9px 14px' }}>Stage</th>
                 <th style={{ padding: '9px 14px' }}>Task Type</th>
-                <th style={{ padding: '9px 14px' }}>Next Action</th>
+                <th style={{ padding: '9px 14px' }}>할 일</th>
                 <th style={{ padding: '9px 14px' }}>Owner</th>
                 <th style={{ padding: '9px 14px' }}>Status</th>
                 <th style={{ padding: '9px 14px' }}></th>
@@ -291,7 +292,9 @@ export default function SalesFollowUp() {
                         : '—'}
                     </td>
                     <td style={{ padding: '9px 14px', fontSize: 12 }}>{lang === 'en' ? taskTypeEn(task.task_type) : task.task_type}</td>
-                    <td style={{ padding: '9px 14px', fontSize: 12, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.note || '—'}</td>
+                    <td style={{ padding: '9px 14px', fontSize: 12, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.note || undefined}>
+                      {task.auto_stage && <AutoBadge />}{task.task_title}
+                    </td>
                     <td style={{ padding: '9px 14px' }}><OwnerBadge owner={task.owner} /></td>
                     <td style={{ padding: '9px 14px' }}><StatusBadge s={task.status} /></td>
                     <td style={{ padding: '9px 14px' }}>

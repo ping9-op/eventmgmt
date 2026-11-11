@@ -7,6 +7,7 @@ import {
 import { useToast } from '../../contexts/ToastContext'
 import { useLang } from '../../contexts/LangContext'
 import { useAuth } from '../../contexts/AuthContext'
+import { TASK_PLAYBOOK } from '../../lib/tasks'
 
 // ── 편집 가능 설정 카드 ─────────────────────────────────────────────────────
 function EditableCard({
@@ -144,6 +145,7 @@ export default function SalesSettings() {
   const READONLY_GROUPS = [
     { label: t('funnel_stage_label'), items: STAGE_ORDER,       icon: '🔀', desc: t('funnel_stage_desc') },
     { label: t('biz_entity_label'),   items: BUSINESS_TYPES,    icon: '🏢', desc: t('biz_entity_desc') },
+    { label: t('playbook_label'),     items: TASK_PLAYBOOK.map(p => `${p.stage} → ${p.title} (${p.days === 1 ? '다음날' : `${p.days}일 뒤`})`), icon: '🤖', desc: t('playbook_desc') },
     { label: t('contract_label'),     items: CONTRACT_STATUSES, icon: '📄', desc: t('contract_desc') },
     { label: t('onboard_label'),      items: ONBOARD_STATUSES,  icon: '✅', desc: t('onboard_desc') },
   ]

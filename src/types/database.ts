@@ -372,7 +372,7 @@ export interface SalesActivity {
 export interface SalesTask {
   id: string; lead_id: string; task_title: string; task_type: string
   due_date: string; status: string; priority: string; owner: string
-  completed_at: string | null; note: string | null
+  completed_at: string | null; note: string | null; auto_stage?: string | null
 }
 
 export interface SalesProposal {

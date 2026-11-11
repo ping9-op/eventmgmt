@@ -10,17 +10,15 @@ import { encryptRows, decryptRows } from '../../lib/pii'
 import { toEventRefMap, leadEventLabel, eventSelectOptions, leadEventSelectValue, eventSelectToFields } from '../../lib/leadEvents'
 import EventSelect from '../EventSelect'
 import CompleteTaskModal from '../CompleteTaskModal'
+import AutoBadge from '../AutoBadge'
 import { ACTIVITY_RESULTS, TASK_TYPES, addLeadTask, daysFromToday } from '../../lib/tasks'
 import RadioGroup from '../RadioGroup'
 import { parseCorridor, composeCorridor, TX_TYPES, type TxType } from '../../lib/corridor'
-import { loadAllSettings, BUSINESS_TYPES, CONTRACT_STATUSES as SYSTEM_CONTRACT_STATUSES, ONBOARD_STATUSES as SYSTEM_ONBOARD_STATUSES, type SalesSettingsData } from '../../lib/settings'
+import { loadAllSettings, BUSINESS_TYPES, type SalesSettingsData } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
-import type { SalesLead, SalesActivity, SalesTask, SalesProposal } from '../../types/database'
+import type { SalesLead, SalesActivity, SalesTask } from '../../types/database'
 import { useLang } from '../../contexts/LangContext'
 import { useAuth } from '../../contexts/AuthContext'
-
-const CONTRACT_STATUSES = SYSTEM_CONTRACT_STATUSES
-const ONBOARD_STATUSES = SYSTEM_ONBOARD_STATUSES
 
 const TASK_TYPE_MAP: Record<string, string> = {
   '이메일': 'Email', '전화': 'Call', '문자': 'SMS', '카카오': 'KakaoTalk',
@@ -54,7 +52,7 @@ const RESULT_COLORS: Record<string, string> = {
   'Scheduled Meeting': '#7C3AED',
 }
 
-type TabId = 'basic' | 'funnel' | 'activity' | 'proposal'
+type TabId = 'basic' | 'funnel' | 'activity'
 
 export default function LeadDetailPanel({
   leadId, onClose, onRefresh
@@ -72,7 +70,6 @@ export default function LeadDetailPanel({
   const [lead, setLead] = useState<SalesLead | null>(null)
   const [activities, setActivities] = useState<SalesActivity[]>([])
   const [tasks, setTasks] = useState<SalesTask[]>([])
-  const [proposal, setProposal] = useState<SalesProposal | null>(null)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [showLostModal, setShowLostModal] = useState(false)
@@ -91,9 +88,6 @@ export default function LeadDetailPanel({
 
   // Lead edit state
   const [form, setForm] = useState<Partial<SalesLead>>({})
-  const [propForm, setPropForm] = useState<Partial<SalesProposal>>({})
-  // Fee Rate는 입력 중인 문자열을 그대로 유지해야 "0." 같은 중간 입력(소수점)이 가능하다
-  const [feeRateText, setFeeRateText] = useState<string | null>(null)
 
   const [eventRefs, setEventRefs] = useState<EventRef[]>([])
   // 행사 선택값: 'p:<proposalId>' (박람회 행사) / 't:<행사명>' (박람회 외) / '' (없음)
@@ -121,11 +115,10 @@ export default function LeadDetailPanel({
     let cancelled = false
     async function load() {
       try {
-        const [{ data: lData }, { data: aData }, { data: tData }, { data: pData }] = await Promise.all([
+        const [{ data: lData }, { data: aData }, { data: tData }] = await Promise.all([
           supabase.from('sales_leads').select('*').eq('id', leadId).single(),
           supabase.from('sales_activities').select('*').eq('lead_id', leadId).order('activity_date', { ascending: false }),
           supabase.from('sales_tasks').select('*').eq('lead_id', leadId).order('due_date'),
-          supabase.from('sales_proposals').select('*').eq('lead_id', leadId).single(),
         ])
         const [leadRows, acts, tsks] = await Promise.all([
           decryptRows('sales_leads', lData ? [lData as SalesLead] : []),
@@ -136,10 +129,6 @@ export default function LeadDetailPanel({
         if (leadRows[0]) applyLoadedLead(leadRows[0])
         setActivities(acts)
         setTasks(tsks)
-        if (pData) {
-          setProposal(pData as SalesProposal)
-          setPropForm(pData as SalesProposal)
-        }
       } catch (err: any) {
         if (!cancelled) showToast('⚠️ 데이터 로딩 실패: ' + (err?.message || '알 수 없는 오류'))
       }
@@ -198,28 +187,6 @@ export default function LeadDetailPanel({
       // 스테이지 변경 시 이력 기록
       if (stageChanged) {
         logStageChange(leadId, lead.current_stage, newStage)
-      }
-
-      // Save proposal
-      // 기존 Proposal이 있거나, 새로 어떤 필드든 입력했으면 저장 (Fee Rate만 입력해도 저장되도록)
-      if (proposal || Object.keys(propForm).length > 0) {
-        const propData = {
-          lead_id: leadId,
-          proposal_sent_date: propForm.proposal_sent_date || null,
-          proposed_fee_rate: propForm.proposed_fee_rate ?? null,
-          expected_monthly_volume: propForm.expected_monthly_volume ?? null,
-          volume_currency: propForm.volume_currency || 'USD',
-          contract_status: propForm.contract_status || 'Not Sent',
-          onboarding_status: propForm.onboarding_status || 'Not Started',
-          remarks: propForm.remarks || null,
-        }
-        if (proposal) {
-          const { error: propErr } = await supabase.from('sales_proposals').update(propData).eq('id', proposal.id)
-          if (propErr) throw propErr
-        } else {
-          const { error: propErr } = await supabase.from('sales_proposals').insert(propData)
-          if (propErr) throw propErr
-        }
       }
 
       showToast(t('saved_ok'))
@@ -334,18 +301,10 @@ export default function LeadDetailPanel({
     eventOptions.unshift({ value: eventSel, label: isExpo ? (lead.event_name || '(보관된 행사)') : eventSel.slice(2), isExpo })
   }
 
-  const feeRateValue = feeRateText ?? String(propForm.proposed_fee_rate ?? proposal?.proposed_fee_rate ?? '')
-  function onFeeRateChange(v: string) {
-    if (!/^\d*\.?\d*$/.test(v)) return
-    setFeeRateText(v)
-    setPropForm(f => ({ ...f, proposed_fee_rate: v === '' || v === '.' ? null : parseFloat(v) }))
-  }
-
   const tabs: { id: TabId; label: string }[] = [
     { id: 'basic', label: '📋 기본 정보' },
     { id: 'funnel', label: '🔀 Funnel / Stage' },
     { id: 'activity', label: `📝 활동 · 할 일 ${activities.length > 0 ? `(${activities.length})` : ''}` },
-    { id: 'proposal', label: '📄 Proposal/Contract' },
   ]
 
   const stageBg = STAGE_COLORS[form.current_stage || lead.current_stage]?.bg || '#6B7280'
@@ -576,29 +535,6 @@ export default function LeadDetailPanel({
                       </Field>
                     </div>
                   </>}
-                  {proposal && <>
-                    <Field label="Contract Status">
-                      <select value={propForm.contract_status || proposal.contract_status} onChange={e => setPropForm(f => ({ ...f, contract_status: e.target.value }))}>
-                        {CONTRACT_STATUSES.map(s => <option key={s}>{s}</option>)}
-                      </select>
-                    </Field>
-                    <Field label="Onboarding Status">
-                      <select value={propForm.onboarding_status || proposal.onboarding_status} onChange={e => setPropForm(f => ({ ...f, onboarding_status: e.target.value }))}>
-                        {ONBOARD_STATUSES.map(s => <option key={s}>{s}</option>)}
-                      </select>
-                    </Field>
-                    <Field label="Proposed Fee Rate">
-                      <input inputMode="decimal" value={feeRateValue} onChange={e => onFeeRateChange(e.target.value)} placeholder="e.g. 0.8" />
-                    </Field>
-                    <Field label="Proposal Sent Date">
-                      <input type="date" value={propForm.proposal_sent_date ?? ''} onChange={e => setPropForm(f => ({ ...f, proposal_sent_date: e.target.value }))} />
-                    </Field>
-                  </>}
-                  {!proposal && (
-                    <div style={{ gridColumn: '1 / -1', color: 'var(--muted)', fontSize: 13, padding: '10px 0' }}>
-                      아직 Proposal이 없습니다. Proposal Sent 단계로 변경 후 정보를 입력하세요.
-                    </div>
-                  )}
                 </div>
               </div>
             )}
@@ -721,7 +657,7 @@ export default function LeadDetailPanel({
                           flexWrap: 'wrap', gap: 8 }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 13, fontWeight: 600, color: isOverdue ? '#DC2626' : 'var(--text)', textDecoration: isDone ? 'line-through' : 'none' }}>
-                              {tk.task_title}
+                              {tk.auto_stage && <AutoBadge />}{tk.task_title}
                             </div>
                             <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
                               {lang === 'en' ? taskTypeEn(tk.task_type) : tk.task_type} · {tk.due_date}
@@ -735,46 +671,6 @@ export default function LeadDetailPanel({
                         </div>
                       )
                     })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Proposal/Contract */}
-            {tab === 'proposal' && (
-              <div className="g2" style={{ padding: isMobile ? 14 : 20 }}>
-                <Field label="Proposal Sent Date">
-                  <input type="date" value={propForm.proposal_sent_date ?? ''} onChange={e => setPropForm(f => ({ ...f, proposal_sent_date: e.target.value }))} />
-                </Field>
-                <Field label="Proposed Fee Rate (%)">
-                  <input inputMode="decimal" value={feeRateValue} onChange={e => onFeeRateChange(e.target.value)} placeholder="e.g. 0.8" />
-                </Field>
-                <Field label="Contract Status">
-                  <select value={propForm.contract_status || proposal?.contract_status || 'Not Sent'} onChange={e => setPropForm(f => ({ ...f, contract_status: e.target.value }))}>
-                    {CONTRACT_STATUSES.map(s => <option key={s}>{s}</option>)}
-                  </select>
-                </Field>
-                <Field label="Onboarding Status">
-                  <select value={propForm.onboarding_status || proposal?.onboarding_status || 'Not Started'} onChange={e => setPropForm(f => ({ ...f, onboarding_status: e.target.value }))}>
-                    {ONBOARD_STATUSES.map(s => <option key={s}>{s}</option>)}
-                  </select>
-                </Field>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 5 }}>Expected Volume</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px', gap: 8 }}>
-                    <DecimalInput value={propForm.expected_monthly_volume} onChange={v => setPropForm(f => ({ ...f, expected_monthly_volume: v }))} placeholder="월 예상 금액" />
-                    <select value={propForm.volume_currency || proposal?.volume_currency || 'USD'} onChange={e => setPropForm(f => ({ ...f, volume_currency: e.target.value }))}>
-                      <option>USD</option><option>KRW</option>
-                    </select>
-                  </div>
-                </div>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 5 }}>Remarks</div>
-                  <textarea value={propForm.remarks ?? ''} rows={3} onChange={e => setPropForm(f => ({ ...f, remarks: e.target.value }))} style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }} />
-                </div>
-                {!proposal && (
-                  <div style={{ gridColumn: '1 / -1', padding: 16, background: '#FFF8F0', borderRadius: 8, border: '1px solid #FDE68A', color: '#D97706', fontSize: 13 }}>
-                    💡 아직 Proposal 정보가 없습니다. 위 내용을 입력하고 헤더의 💾 저장 버튼을 눌러 등록하세요.
                   </div>
                 )}
               </div>
@@ -807,4 +703,3 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-export { CONTRACT_STATUSES, ONBOARD_STATUSES }
