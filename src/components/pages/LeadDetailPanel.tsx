@@ -9,6 +9,8 @@ import { loadAllEventRefs, type EventRef } from '../../lib/events'
 import { encryptRows, decryptRows } from '../../lib/pii'
 import { toEventRefMap, leadEventLabel, eventSelectOptions, leadEventSelectValue, eventSelectToFields } from '../../lib/leadEvents'
 import EventSelect from '../EventSelect'
+import CompleteTaskModal from '../CompleteTaskModal'
+import { ACTIVITY_RESULTS, TASK_TYPES, addLeadTask, daysFromToday } from '../../lib/tasks'
 import RadioGroup from '../RadioGroup'
 import { parseCorridor, composeCorridor, TX_TYPES, type TxType } from '../../lib/corridor'
 import { loadAllSettings, BUSINESS_TYPES, CONTRACT_STATUSES as SYSTEM_CONTRACT_STATUSES, ONBOARD_STATUSES as SYSTEM_ONBOARD_STATUSES, type SalesSettingsData } from '../../lib/settings'
@@ -19,7 +21,6 @@ import { useAuth } from '../../contexts/AuthContext'
 
 const CONTRACT_STATUSES = SYSTEM_CONTRACT_STATUSES
 const ONBOARD_STATUSES = SYSTEM_ONBOARD_STATUSES
-const ACTIVITY_RESULTS = ['Interested', 'No Response', 'Not Interested', 'Requested Info', 'Scheduled Meeting']
 
 const TASK_TYPE_MAP: Record<string, string> = {
   '이메일': 'Email', '전화': 'Call', '문자': 'SMS', '카카오': 'KakaoTalk',
@@ -82,6 +83,11 @@ export default function LeadDetailPanel({
   const [actResult, setActResult] = useState('Interested')
   const [actDate, setActDate] = useState(localDateStr())
   const [actNote, setActNote] = useState('')
+
+  // 다음 할 일 (Task)
+  const [completing, setCompleting] = useState<SalesTask | null>(null)
+  const [showAddTask, setShowAddTask] = useState(false)
+  const [newTask, setNewTask] = useState({ title: '', type: 'Email', due: daysFromToday(3) })
 
   // Lead edit state
   const [form, setForm] = useState<Partial<SalesLead>>({})
@@ -178,8 +184,7 @@ export default function LeadDetailPanel({
         current_stage: newStage,
         first_contact_done: form.first_contact_done,
         last_contact_date: form.last_contact_date || null,
-        next_follow_up_date: form.next_follow_up_date,
-        next_action: form.next_action,
+        // next_action / next_follow_up_date는 DB가 할 일(Task)에서 채우므로 보내지 않음
         lost_reason: form.lost_reason,
         lost_reason_note: form.lost_reason_note || null,
         outreach_channel: form.outreach_channel || null,
@@ -260,24 +265,46 @@ export default function LeadDetailPanel({
       const { error } = await supabase.from('sales_activities').insert(act)
       if (error) { showToast('⚠️ Activity 저장 실패: ' + error.message); return }
       setActNote(''); setShowActForm(false); setActDate(localDateStr())
-      const [{ data: aData }, { data: tData }] = await Promise.all([
-        supabase.from('sales_activities').select('*').eq('lead_id', leadId).order('activity_date', { ascending: false }),
-        supabase.from('sales_tasks').select('*').eq('lead_id', leadId).order('due_date'),
-      ])
-      setActivities(await decryptRows('sales_activities', (aData || []) as SalesActivity[]))
-      setTasks(await decryptRows('sales_tasks', (tData || []) as SalesTask[]))
-      onRefresh()
+      await refreshActivityAndTasks()
     } catch (err: any) {
       showToast('⚠️ Activity 저장 실패: ' + (err?.message || '알 수 없는 오류'))
     }
   }
 
-  async function markTaskDone(taskId: string) {
-    const { error } = await supabase.from('sales_tasks').update({ status: 'Done', completed_at: localDateStr() }).eq('id', taskId)
-    if (error) { showToast('⚠️ 완료 처리 실패: ' + error.message); return }
-    const { data } = await supabase.from('sales_tasks').select('*').eq('lead_id', leadId).order('due_date')
-    setTasks(await decryptRows('sales_tasks', (data || []) as SalesTask[]))
+  // Activity·할 일이 바뀌면 DB 트리거가 리드의 마지막 연락일·다음 할 일·단계를 바꾼다
+  // → 그 값만 다시 읽어 반영 (작성 중인 다른 입력값은 유지)
+  async function refreshActivityAndTasks() {
+    const [{ data: lData }, { data: aData }, { data: tData }] = await Promise.all([
+      supabase.from('sales_leads').select('*').eq('id', leadId).single(),
+      supabase.from('sales_activities').select('*').eq('lead_id', leadId).order('activity_date', { ascending: false }),
+      supabase.from('sales_tasks').select('*').eq('lead_id', leadId).order('due_date'),
+    ])
+    setActivities(await decryptRows('sales_activities', (aData || []) as SalesActivity[]))
+    setTasks(await decryptRows('sales_tasks', (tData || []) as SalesTask[]))
+    if (lData) {
+      const [l] = await decryptRows('sales_leads', [lData as SalesLead])
+      setLead(l)
+      setForm(f => ({
+        ...f,
+        current_stage: l.current_stage, last_contact_date: l.last_contact_date, first_contact_done: l.first_contact_done,
+        next_action: l.next_action, next_follow_up_date: l.next_follow_up_date,
+        lost_reason: l.lost_reason, lost_reason_note: l.lost_reason_note, lost_at_stage: l.lost_at_stage,
+      }))
+    }
     onRefresh()
+  }
+
+  async function submitNewTask() {
+    if (!newTask.title.trim()) { showToast('⚠️ 할 일을 입력해주세요.'); return }
+    try {
+      await addLeadTask(leadId, newTask)
+      setShowAddTask(false)
+      setNewTask({ title: '', type: 'Email', due: daysFromToday(3) })
+      showToast('📅 할 일이 추가되었습니다.')
+      await refreshActivityAndTasks()
+    } catch (err: any) {
+      showToast('⚠️ 할 일 추가 실패: ' + (err?.message || '알 수 없는 오류'))
+    }
   }
 
   async function updateStageInline(stage: string, lost?: LostReasonInput) {
@@ -317,11 +344,15 @@ export default function LeadDetailPanel({
   const tabs: { id: TabId; label: string }[] = [
     { id: 'basic', label: '📋 기본 정보' },
     { id: 'funnel', label: '🔀 Funnel / Stage' },
-    { id: 'activity', label: `📝 Activity ${activities.length > 0 ? `(${activities.length})` : ''}` },
+    { id: 'activity', label: `📝 활동 · 할 일 ${activities.length > 0 ? `(${activities.length})` : ''}` },
     { id: 'proposal', label: '📄 Proposal/Contract' },
   ]
 
   const stageBg = STAGE_COLORS[form.current_stage || lead.current_stage]?.bg || '#6B7280'
+  // 미완료 할 일 (due_date 순으로 불러옴) — 첫 번째가 리드의 '다음 할 일'
+  const openTasks = tasks.filter(tk => tk.status !== 'Done')
+  const nextTask = openTasks[0] || null
+  const nextOverdue = !!nextTask && nextTask.due_date < localDateStr()
 
   return (
     <>
@@ -357,6 +388,41 @@ export default function LeadDetailPanel({
                 ✕
               </button>
             </div>
+          </div>
+
+          {/* 다음 할 일 — 어느 탭에서든 보이도록 헤더 바로 아래 (팔로우업 메뉴의 Task와 같은 데이터) */}
+          <div style={{ padding: '10px 22px', background: nextTask ? (nextOverdue ? '#FEF2F2' : '#EEF2FF') : '#FFFBEB', borderBottom: '1px solid var(--border2)', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 13 }}>
+              <span style={{ fontWeight: 700, color: 'var(--muted)', whiteSpace: 'nowrap' }}>📅 다음 할 일</span>
+              {nextTask ? (
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <b style={{ color: nextOverdue ? '#DC2626' : '#4F46E5' }}>{nextTask.due_date}{nextOverdue ? ' (기한 지남)' : ''}</b> · {nextTask.task_title}
+                  {openTasks.length > 1 && <span style={{ color: 'var(--muted)' }}> 외 {openTasks.length - 1}건</span>}
+                </span>
+              ) : (
+                <span style={{ flex: 1, color: '#B45309' }}>없음 — 다음에 언제 무엇을 할지 정해두세요</span>
+              )}
+              {nextTask && (
+                <button onClick={() => setCompleting(nextTask)}
+                  style={{ padding: '5px 12px', borderRadius: 6, background: '#059669', color: 'white', border: 'none', fontSize: 12, cursor: 'pointer', fontWeight: 700 }}>✅ 완료</button>
+              )}
+              <button onClick={() => setShowAddTask(v => !v)}
+                style={{ padding: '5px 12px', borderRadius: 6, background: 'white', color: 'var(--accent)', border: '1.5px solid var(--accent)', fontSize: 12, cursor: 'pointer', fontWeight: 700 }}>
+                {showAddTask ? '접기' : '+ 할 일 추가'}
+              </button>
+            </div>
+            {showAddTask && (
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 120px 140px auto', gap: 8, marginTop: 10, alignItems: 'center' }}>
+                <input autoFocus value={newTask.title} onChange={e => setNewTask(n => ({ ...n, title: e.target.value }))}
+                  onKeyDown={e => { if (e.key === 'Enter') submitNewTask() }} placeholder="무엇을? 예: 견적서 보내기" />
+                <select value={newTask.type} onChange={e => setNewTask(n => ({ ...n, type: e.target.value }))}>
+                  {TASK_TYPES.map(tp => <option key={tp}>{tp}</option>)}
+                </select>
+                <input type="date" value={newTask.due} onChange={e => setNewTask(n => ({ ...n, due: e.target.value }))} />
+                <button onClick={submitNewTask}
+                  style={{ padding: '7px 14px', borderRadius: 7, background: 'var(--accent)', color: 'white', border: 'none', fontSize: 12, cursor: 'pointer', fontWeight: 700 }}>추가</button>
+              </div>
+            )}
           </div>
 
           {/* Tabs */}
@@ -492,14 +558,6 @@ export default function LeadDetailPanel({
                   <Field label="Last Contact Date">
                     <input type="date" value={form.last_contact_date || ''} onChange={e => setForm(f => ({ ...f, last_contact_date: e.target.value || null }))} />
                   </Field>
-                  <Field label="Next Follow-up Date">
-                    <input type="date" value={form.next_follow_up_date || ''} onChange={e => setForm(f => ({ ...f, next_follow_up_date: e.target.value }))} />
-                  </Field>
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <Field label="Next Action">
-                      <input value={form.next_action || ''} onChange={e => setForm(f => ({ ...f, next_action: e.target.value }))} placeholder="다음 액션" />
-                    </Field>
-                  </div>
                   {(form.current_stage || lead.current_stage) === 'Lost' && <>
                     <Field label="Lost Reason *">
                       <select value={form.lost_reason || ''} onChange={e => setForm(f => ({ ...f, lost_reason: e.target.value }))}>
@@ -672,7 +730,7 @@ export default function LeadDetailPanel({
                           </div>
                           {isDone
                             ? <span style={{ color: '#059669', fontWeight: 700, fontSize: 12, flexShrink: 0 }}>✅ Done</span>
-                            : <button onClick={() => markTaskDone(tk.id)} style={{ padding: '4px 12px', borderRadius: 6, background: '#059669', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 700, flexShrink: 0 }}>완료</button>
+                            : <button onClick={() => setCompleting(tk)} style={{ padding: '4px 12px', borderRadius: 6, background: '#059669', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 700, flexShrink: 0 }}>완료</button>
                           }
                         </div>
                       )
@@ -724,6 +782,12 @@ export default function LeadDetailPanel({
           </div>
         </div>
       </div>
+
+      {completing && (
+        <CompleteTaskModal task={completing} leadStage={lead.current_stage} companyName={lead.company_name}
+          onClose={() => setCompleting(null)}
+          onDone={async () => { setCompleting(null); await refreshActivityAndTasks() }} />
+      )}
 
       {showLostModal && (
         <LostReasonModal

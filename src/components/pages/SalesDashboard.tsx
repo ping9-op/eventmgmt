@@ -8,6 +8,7 @@ import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
 import { useIsMobile } from '../../hooks/useBreakpoint'
 import LoadingSpinner from '../LoadingSpinner'
+import CompleteTaskModal from '../CompleteTaskModal'
 import { loadAllEventRefs, type EventRef } from '../../lib/events'
 import { decryptRows } from '../../lib/pii'
 import { toEventRefMap, groupLeadsByEvent, eventGroupFilter } from '../../lib/leadEvents'
@@ -47,6 +48,7 @@ export default function SalesDashboard() {
   const [tasks, setTasks] = useState<SalesTask[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
+  const [completing, setCompleting] = useState<SalesTask | null>(null) // 완료 창 (결과·단계·다음 할 일)
   const [eventRefs, setEventRefs] = useState<EventRef[]>([])
 
   const today = localDateStr()
@@ -94,13 +96,6 @@ export default function SalesDashboard() {
     const activeIds = new Set(activeLeads.map(l => l.id))
     setLeads(activeLeads)
     setTasks(await decryptRows('sales_tasks', ((taskData || []) as SalesTask[]).filter(t => activeIds.has(t.lead_id))))
-  }
-
-  async function completeTask(taskId: string) {
-    const { error } = await supabase.from('sales_tasks').update({ status: 'Done', completed_at: today }).eq('id', taskId)
-    if (error) { showToast('⚠️ 완료 처리 실패: ' + error.message); return }
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'Done', completed_at: today } : t))
-    showToast('Task 완료!')
   }
 
   if (loading) return <div className="view wide"><LoadingSpinner /></div>
@@ -218,7 +213,7 @@ export default function SalesDashboard() {
                   <div className="uc-date">{fmtDue(tk.due_date)} · {lead?.company_name || '-'}</div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                     <span style={{ fontSize: 11, color: 'var(--muted)' }}>👤 {tk.owner}</span>
-                    <button onClick={e => { e.stopPropagation(); completeTask(tk.id) }}
+                    <button onClick={e => { e.stopPropagation(); setCompleting(tk) }}
                       style={{ background: 'white', border: '1px solid #A7F3D0', color: '#059669', borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
                       ✓ 완료
                     </button>
@@ -402,6 +397,14 @@ export default function SalesDashboard() {
           </div>
         )
       })()}
+
+      {completing && (
+        <CompleteTaskModal task={completing}
+          leadStage={leads.find(l => l.id === completing.lead_id)?.current_stage || 'New Lead'}
+          companyName={leads.find(l => l.id === completing.lead_id)?.company_name}
+          onClose={() => setCompleting(null)}
+          onDone={async () => { setCompleting(null); await reload() }} />
+      )}
 
       {selectedLeadId && (
         <LeadDetailPanel

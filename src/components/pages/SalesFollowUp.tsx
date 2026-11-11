@@ -7,8 +7,8 @@ import { useToast } from '../../contexts/ToastContext'
 import LeadDetailPanel from './LeadDetailPanel'
 import { encryptRows, decryptRows } from '../../lib/pii'
 import { useLang } from '../../contexts/LangContext'
-
-const TASK_TYPES = ['Email', 'Call', 'SMS', 'Meeting', 'Send Proposal', 'Request Docs', 'Other']
+import CompleteTaskModal from '../CompleteTaskModal'
+import { TASK_TYPES } from '../../lib/tasks'
 const STATUSES = ['Pending', 'In Progress', 'Done']
 
 // DB에 한국어로 저장된 task_type 영어 매핑
@@ -39,6 +39,7 @@ export default function SalesFollowUp() {
   const [showAddTask, setShowAddTask] = useState(false)
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
   const [checked, setChecked] = useState<Set<string>>(new Set())
+  const [completing, setCompleting] = useState<SalesTask | null>(null) // 완료 창 (결과·단계·다음 할 일)
 
   const today = localDateStr()
   const thisWeekEnd = localDateStr(new Date(Date.now() + 7 * 864e5))
@@ -114,12 +115,6 @@ export default function SalesFollowUp() {
     }
   }
 
-  async function markDone(taskId: string) {
-    const { error } = await supabase.from('sales_tasks').update({ status: 'Done', completed_at: today }).eq('id', taskId)
-    if (error) { showToast('⚠️ 업데이트 실패: ' + error.message); return }
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'Done', completed_at: today } : t))
-    showToast('Task 완료!')
-  }
 
   async function deleteTask(taskId: string) {
     const { error } = await supabase.from('sales_tasks').delete().eq('id', taskId)
@@ -301,7 +296,7 @@ export default function SalesFollowUp() {
                     <td style={{ padding: '9px 14px' }}>
                       <div style={{ display: 'flex', gap: 5 }}>
                         {task.status !== 'Done' && (
-                          <button onClick={() => markDone(task.id)}
+                          <button onClick={() => setCompleting(task)}
                             style={{ padding: '4px 10px', borderRadius: 6, background: '#059669', color: 'white', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', minHeight: 44 }}>
                             {t('mark_done')}
                           </button>
@@ -374,6 +369,14 @@ export default function SalesFollowUp() {
             </div>
           </div>
         </div>
+      )}
+
+      {completing && (
+        <CompleteTaskModal task={completing}
+          leadStage={leads.find(l => l.id === completing.lead_id)?.current_stage || 'New Lead'}
+          companyName={leads.find(l => l.id === completing.lead_id)?.company_name}
+          onClose={() => setCompleting(null)}
+          onDone={() => { setCompleting(null); load() }} />
       )}
 
       {selectedLeadId && (
