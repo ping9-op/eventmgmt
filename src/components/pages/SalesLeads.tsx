@@ -10,7 +10,7 @@ import { encryptRows, decryptRows, PII_FIELDS } from '../../lib/pii'
 import { toEventRefMap, leadEventLabel, leadEventGroupKey, eventGroupLabel, isEventKey, isExpoKey, matchEventRef, eventSelectOptions, eventSelectToFields } from '../../lib/leadEvents'
 import { useToast } from '../../contexts/ToastContext'
 import LeadDetailPanel from './LeadDetailPanel'
-import LostReasonModal, { LeadContactMeta, type LostReasonInput } from '../LostReasonModal'
+import LostReasonModal, { type LostReasonInput } from '../LostReasonModal'
 import DecimalInput, { parseAmount } from '../DecimalInput'
 import { useLang } from '../../contexts/LangContext'
 import { logStageChange, logStageChanges } from '../../lib/stageHistory'
@@ -921,12 +921,6 @@ export default function SalesLeads() {
                         {l.current_stage}
                       </span>
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>{[leadEventLabel(l, refMap), l.lead_source].filter(Boolean).join(' · ')}</div>
-                    <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--muted)', flexWrap: 'wrap', alignItems: 'center' }}>
-                      <LeadContactMeta channel={l.outreach_channel} lastContact={l.last_contact_date} />
-                      {l.next_follow_up_date && <span style={{ color: '#4F46E5', fontWeight: 600 }}>팔업: {l.next_follow_up_date}</span>}
-                      {l.next_action && <span style={{ color: 'var(--accent)' }}>→ {l.next_action}</span>}
-                    </div>
                     <div style={{ marginTop: 10 }} onClick={e => e.stopPropagation()}>
                       <InlineStageSelect lead={l} onUpdate={updateStage} />
                     </div>
@@ -941,22 +935,16 @@ export default function SalesLeads() {
             /* 데스크탑 테이블 뷰 */
             <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderTop: 'none', borderRadius: totalDetailPages > 1 ? 0 : '0 0 12px 12px', overflow: 'hidden' }}>
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1180 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 820 }}>
                   <thead>
                     <tr style={{ background: 'var(--accent)', color: 'white' }}>
-                      <th style={{ padding: '9px 10px', width: 38 }}><input type="checkbox" style={{ width: 15, height: 15, cursor: 'pointer' }} /></th>
+                      <th style={{ padding: '9px 10px', width: 38 }}><input type="checkbox" checked={allDetailIds.length > 0 && allDetailIds.every(i => checked.has(i))} onChange={() => toggleCheck('', allDetailIds)} style={{ width: 15, height: 15, cursor: 'pointer' }} /></th>
                       <th style={{ padding: '9px 12px' }}>SN</th>
-                      <th style={{ padding: '9px 12px' }}>{t('registered_date_lbl')}</th>
-                      <th style={{ padding: '9px 12px' }}>{t('s_event')}</th>
-                      <th style={{ padding: '9px 12px', textAlign: 'left' }}>Company</th>
+                      <th style={{ padding: '9px 12px', textAlign: 'left' }}>Company Name</th>
                       <th style={{ padding: '9px 12px' }}>Owner</th>
                       <th style={{ padding: '9px 12px' }}>Contact</th>
                       <th style={{ padding: '9px 12px' }}>Phone/Email</th>
-                      <th style={{ padding: '9px 12px' }}>Source</th>
                       <th style={{ padding: '9px 12px' }}>Stage</th>
-                      <th style={{ padding: '9px 12px' }}>Last Contact</th>
-                      <th style={{ padding: '9px 12px' }}>Next Action</th>
-                      <th style={{ padding: '9px 12px' }}>Follow-up</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -969,23 +957,17 @@ export default function SalesLeads() {
                           <input type="checkbox" checked={checked.has(l.id)} onChange={() => toggleCheck(l.id)} style={{ width: 15, height: 15, accentColor: 'var(--accent)', cursor: 'pointer' }} />
                         </td>
                         <td style={{ padding: '9px 12px', color: 'var(--muted)', fontWeight: 600 }}>{l.serial_no}</td>
-                        <td style={{ padding: '9px 12px' }}>{l.registered_date}</td>
-                        <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--muted)' }}>{leadEventLabel(l, refMap) || '—'}</td>
                         <td style={{ padding: '9px 12px', fontWeight: 700 }}>{l.company_name}</td>
                         <td style={{ padding: '9px 12px' }}><OwnerBadge owner={l.owner} /></td>
                         <td style={{ padding: '9px 12px' }}>{l.contact_person}</td>
                         <td style={{ padding: '9px 12px', fontSize: 11 }}>{l.phone || '—'}<br /><span style={{ color: 'var(--muted)' }}>{l.email || '—'}</span></td>
-                        <td style={{ padding: '9px 12px', fontSize: 12 }}>{l.lead_source}</td>
                         <td style={{ padding: '9px 12px' }} onClick={e => e.stopPropagation()}>
                           <InlineStageSelect lead={l} onUpdate={updateStage} />
                         </td>
-                        <td style={{ padding: '9px 12px', fontSize: 12 }}>{l.last_contact_date || '—'}</td>
-                        <td style={{ padding: '9px 12px', fontSize: 11, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.next_action || '—'}</td>
-                        <td style={{ padding: '9px 12px', fontSize: 12 }}>{l.next_follow_up_date || '—'}</td>
                       </tr>
                     ))}
                     {detailLeads.length === 0 && (
-                      <tr><td colSpan={13} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>{t('no_leads')}</td></tr>
+                      <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>{t('no_leads')}</td></tr>
                     )}
                   </tbody>
                 </table>
