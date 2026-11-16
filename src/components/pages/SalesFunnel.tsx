@@ -1,4 +1,5 @@
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh'
+import { useUrlSync, useResetOnBareUrl, urlParam } from '../../hooks/useUrlSync'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
@@ -51,12 +52,16 @@ export default function SalesFunnel() {
   ]
   const [leads, setLeads] = useState<SalesLead[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<TabType>('board')
-  const [filterOwner, setFilterOwner] = useState('')
-  const [filterStage, setFilterStage] = useState<string | null>(null)
+  // 보기·필터 상태는 URL에도 남긴다 (useUrlSync) — 처음 값은 URL에서
+  const [tab, setTab] = useState<TabType>(() => urlParam('v') === 'table' ? 'table' : 'board')
+  const [filterOwner, setFilterOwner] = useState(() => urlParam('owner') || '')
+  const [filterStage, setFilterStage] = useState<string | null>(() => urlParam('stage'))
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
   const [checked, setChecked] = useState<Set<string>>(new Set())
-  const [tableSearch, setTableSearch] = useState('')
+  const [tableSearch, setTableSearch] = useState(() => urlParam('q') || '')
+  useUrlSync({ v: tab === 'table' && 'table', stage: filterStage, owner: filterOwner, q: tableSearch })
+  // 사이드바에서 같은 메뉴 재클릭 시 첫 화면으로
+  useResetOnBareUrl(() => { setTab('board'); setFilterStage(null); setFilterOwner(''); setTableSearch(''); setChecked(new Set()) })
   const [pendingLostId, setPendingLostId] = useState<string | null>(null)
   const [nextStep, setNextStep] = useState<{ leadId: string; stage: string } | null>(null)
 

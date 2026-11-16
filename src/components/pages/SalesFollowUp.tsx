@@ -1,4 +1,5 @@
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh'
+import { useUrlSync, useResetOnBareUrl, urlParam } from '../../hooks/useUrlSync'
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
@@ -40,13 +41,19 @@ export default function SalesFollowUp() {
   const [tasks, setTasks] = useState<SalesTask[]>([])
   const [leads, setLeads] = useState<SalesLead[]>([])
   const [loading, setLoading] = useState(true)
-  const [taskFilter, setTaskFilter] = useState<TaskFilter>(null)
+  // 보기·필터 상태는 URL에도 남긴다 (useUrlSync) — 처음 값은 URL에서
+  const [taskFilter, setTaskFilter] = useState<TaskFilter>(() => {
+    const f = urlParam('f'); return f === 'today' || f === 'week' || f === 'overdue' || f === 'done' ? f : null
+  })
   const [showAddTask, setShowAddTask] = useState(false)
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const [completing, setCompleting] = useState<SalesTask | null>(null) // 완료 창 (결과·단계·다음 할 일)
-  const [search, setSearch] = useState('')
-  const [filterOwner, setFilterOwner] = useState<string | null>(null)
+  const [search, setSearch] = useState(() => urlParam('q') || '')
+  const [filterOwner, setFilterOwner] = useState<string | null>(() => urlParam('owner'))
+  useUrlSync({ f: taskFilter, q: search, owner: filterOwner })
+  // 사이드바에서 같은 메뉴 재클릭 시 첫 화면으로
+  useResetOnBareUrl(() => { setTaskFilter(null); setSearch(''); setFilterOwner(null); setChecked(new Set()) })
   const { isAdmin } = useAuth()
 
   const today = localDateStr()

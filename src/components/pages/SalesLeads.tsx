@@ -1,4 +1,5 @@
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh'
+import { useUrlSync, useResetOnBareUrl, urlParam } from '../../hooks/useUrlSync'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
@@ -151,16 +152,23 @@ export default function SalesLeads() {
   const knownCountries = [...new Set(leads.map(l => parseCorridor(l.country_corridor).country).filter(Boolean))]
   const [loading, setLoading] = useState(true)
   // 첫 화면은 전체 리드 목록 (담당자가 바로 보이도록) — 행사·일자·출처별 요약은 '그룹별 보기'
-  const [viewMode, setViewMode] = useState<ViewMode>('detail')
-  const [groupBy, setGroupBy] = useState<GroupBy>('event')
-  const [groupKey, setGroupKey] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
-  const [stageFilter, setStageFilter] = useState<string | null>(null)
-  const [filterOwner, setFilterOwner] = useState<string | null>(null)
-  const [filterStage, setFilterStage] = useState<string | null>(null)
-  const [filterReached, setFilterReached] = useState<string | null>(null) // 리포트 KPI: 해당 단계 도달(누적) 리드
-  const [filterLostReason, setFilterLostReason] = useState<string | null>(null)
-  const [filterCorridor, setFilterCorridor] = useState<string | null>(null)
+  // 보기·필터 상태는 URL에도 남긴다 (useUrlSync) — 처음 값은 URL에서
+  const [viewMode, setViewMode] = useState<ViewMode>(() => urlParam('v') === 'group' ? 'group' : 'detail')
+  const [groupBy, setGroupBy] = useState<GroupBy>(() => { const b = urlParam('by'); return b === 'date' || b === 'source' ? b : 'event' })
+  const [groupKey, setGroupKey] = useState<string | null>(() => urlParam('g'))
+  const [search, setSearch] = useState(() => urlParam('q') || '')
+  const [stageFilter, setStageFilter] = useState<string | null>(() => urlParam('st'))
+  const [filterOwner, setFilterOwner] = useState<string | null>(() => urlParam('owner'))
+  const [filterStage, setFilterStage] = useState<string | null>(() => urlParam('stage'))
+  const [filterReached, setFilterReached] = useState<string | null>(() => urlParam('reached')) // 리포트 KPI: 해당 단계 도달(누적) 리드
+  const [filterLostReason, setFilterLostReason] = useState<string | null>(() => urlParam('lost'))
+  const [filterCorridor, setFilterCorridor] = useState<string | null>(() => urlParam('corr'))
+  useUrlSync({
+    v: viewMode === 'group' && 'group',
+    by: (viewMode === 'group' || groupKey) && groupBy !== 'event' && groupBy,
+    g: groupKey, q: search, st: stageFilter, owner: filterOwner, stage: filterStage,
+    reached: filterReached, lost: filterLostReason, corr: filterCorridor,
+  })
   const [detailPage, setDetailPage] = useState(0)
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
   const [showRegister, setShowRegister] = useState(false)
@@ -184,7 +192,6 @@ export default function SalesLeads() {
   const importTargetRef = useRef<UploadTarget | null>(null)
   const groupExcelInputRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
-  const isFirstRender = useRef(true)
 
   // Register form
   // 업종/코리도/담당자는 기본값으로 채우지 않음 — 사용자가 고르지 않은 값이 실제 데이터처럼 저장되지 않도록
@@ -263,15 +270,12 @@ export default function SalesLeads() {
     return () => { cancelled = true }
   }, [])
 
-  // 사이드바에서 같은 메뉴 재클릭 시 전체 목록으로 리셋
-  useEffect(() => {
-    if (isFirstRender.current) { isFirstRender.current = false; return }
-    setViewMode('detail')
-    setGroupKey(null)
-    setStageFilter(null)
-    setSearch('')
+  // 사이드바에서 같은 메뉴 재클릭(맨 주소로 이동) 시 전체 목록으로 리셋
+  useResetOnBareUrl(() => {
+    setViewMode('detail'); setGroupKey(null); setStageFilter(null); setSearch('')
+    setFilterOwner(null); setFilterStage(null); setFilterReached(null); setFilterLostReason(null); setFilterCorridor(null)
     setChecked(new Set())
-  }, [location.key])
+  })
 
   // 보는 범위(그룹·검색·필터)가 바뀌면 첫 페이지로, 선택도 해제 — 안 보이는 리드가 일괄 변경·보관되지 않도록
   useEffect(() => {
