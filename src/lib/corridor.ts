@@ -23,7 +23,7 @@ export const COUNTRIES = [
   'Cambodia', 'Mongolia', 'Uzbekistan', 'Sri Lanka', 'Bangladesh', 'Myanmar', 'India', 'Pakistan', 'Malaysia',
   'Hong Kong', 'Taiwan', 'Kazakhstan', 'Russia', 'Canada', 'UK', 'Germany', 'France', 'New Zealand',
 ]
-const COUNTRY_ALIASES: Record<string, string> = {
+export const COUNTRY_ALIASES: Record<string, string> = {
   '일본': 'Japan', '미국': 'USA', '중국': 'China', '베트남': 'Vietnam', '필리핀': 'Philippines', '호주': 'Australia',
   '싱가포르': 'Singapore', '태국': 'Thailand', '인도네시아': 'Indonesia', '네팔': 'Nepal', '캄보디아': 'Cambodia',
   '몽골': 'Mongolia', '우즈베키스탄': 'Uzbekistan', '스리랑카': 'Sri Lanka', '방글라데시': 'Bangladesh', '미얀마': 'Myanmar',
