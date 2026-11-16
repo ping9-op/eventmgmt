@@ -9,6 +9,8 @@ import LeadDetailPanel from './LeadDetailPanel'
 import OwnerBadge from '../OwnerBadge'
 import LostReasonModal, { LeadContactMeta, type LostReasonInput } from '../LostReasonModal'
 import NextStepModal, { needsNextStep } from '../NextStepModal'
+import { SalesHeader, SalesViewTabs, SalesFilterBar, FilterChip, ownerOptions } from '../SalesPageTop'
+import { useAuth } from '../../contexts/AuthContext'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
 import { useIsMobile } from '../../hooks/useBreakpoint'
@@ -25,6 +27,7 @@ const ONBOARD_STATUSES = ['Not Started', 'Waiting Docs', 'Under Review', 'Approv
 export default function SalesFunnel() {
   const { t } = useLang()
   const { showToast } = useToast()
+  const { isAdmin } = useAuth()
   const location = useLocation()
   const isMobile = useIsMobile()
   const [owners, setOwners] = useState<string[]>([])
@@ -154,8 +157,9 @@ export default function SalesFunnel() {
     }
   }
 
+  // 선택한 리드, 없으면 지금 보이는 리드(검색·필터 적용)
   function exportCSV() {
-    const toExport = checked.size > 0 ? leads.filter(l => checked.has(l.id)) : leads
+    const toExport = checked.size > 0 ? leads.filter(l => checked.has(l.id)) : tableFiltered
     const H = ['Company', 'Contact', 'Stage', 'Owner', 'Volume', 'Last Contact', 'Next Follow-up']
     const rows = toExport.map(l => [l.company_name, l.contact_person, l.current_stage, l.owner, `${l.volume_currency} ${l.expected_monthly_volume || 0}`, l.last_contact_date || '', l.next_follow_up_date || ''])
     const csv = [H, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -185,49 +189,33 @@ export default function SalesFunnel() {
     : baseFiltered
 
   const tableFiltered = tableSearch
-    ? filtered.filter(l => `${l.company_name} ${l.contact_person} ${evLabel(l)}`.toLowerCase().includes(tableSearch.toLowerCase()))
+    ? filtered.filter(l => `${l.company_name} ${l.contact_person} ${l.owner} ${evLabel(l)}`.toLowerCase().includes(tableSearch.toLowerCase()))
     : filtered
   const allIds = tableFiltered.map(l => l.id)
 
-  const tabs: { id: TabType; label: string }[] = [
-    { id: 'board', label: t('s_board_view') },
-    { id: 'table', label: t('s_table_view') },
-  ]
 
   return (
     <div className="view wide">
-      <div className="page-hdr-row">
-        <div className="sec-hdr">
-          <div className="bar" />
-          <div className="txt">{t('s_funnel_title')}</div>
-          <div className="sub">{t('s_funnel_sub')}</div>
-        </div>
-        <div className="page-hdr-actions">
-          <select value={filterOwner} onChange={e => setFilterOwner(e.target.value)} style={{ minWidth: 130, width: '100%' }}>
-            <option value="">{t('all_owners')}</option>
-            {owners.map(o => <option key={o}>{o}</option>)}
-          </select>
-        </div>
-      </div>
+      {/* ── 헤더 · 보기 탭 · 검색 (리드관리·팔로우업과 같은 모양) ── */}
+      <SalesHeader title={t('s_funnel_title')} sub={t('s_funnel_sub')}>
+        <button className="btn btn-outline btn-sm" title={checked.size > 0 ? `선택한 ${checked.size}건 다운로드` : '지금 보이는 리드 다운로드'}
+          onClick={exportCSV}>
+          {t('export_excel')}{checked.size > 0 ? ` (${checked.size})` : ''}
+        </button>
+      </SalesHeader>
 
-      {/* 탭 바 (프로토타입 스타일 - 언더라인) */}
-      <div style={{ display: 'flex', overflowX: 'auto', background: '#F5F0F0', borderBottom: '1px solid var(--border2)', padding: '0 0', gap: 0, marginTop: 12 }}>
-        {tabs.map(t => (
-          <div key={t.id} onClick={() => setTab(t.id)}
-            style={{
-              padding: '13px 22px', fontSize: 13,
-              fontWeight: tab === t.id ? 700 : 500,
-              cursor: 'pointer',
-              color: tab === t.id ? 'var(--accent)' : 'var(--muted)',
-              borderBottom: tab === t.id ? '3px solid var(--accent)' : '3px solid transparent',
-              marginBottom: -1, transition: 'all .15s', whiteSpace: 'nowrap',
-            }}>
-            {t.label}
-          </div>
-        ))}
-      </div>
+      <SalesViewTabs tabs={[{ key: 'board', label: t('s_board_view') }, { key: 'table', label: t('s_table_view') }]} active={tab} onChange={setTab} />
 
-      <div style={{ paddingTop: 16 }}>
+      <SalesFilterBar search={tableSearch} onSearch={setTableSearch} placeholder="🔍 회사명, 담당자, 행사 검색"
+        owners={isAdmin ? ownerOptions(owners, leads.map(l => l.owner), filterOwner || null) : undefined}
+        owner={filterOwner || null} onOwner={v => setFilterOwner(v || '')}
+        count={tableFiltered.length}>
+        {filterStage && (
+          <FilterChip color="#DC2626" bg="#FEF2F2" label={`📊 ${filterStage === '__active__' ? '진행 중인 영업 건' : filterStage}`} onClear={() => setFilterStage(null)} />
+        )}
+      </SalesFilterBar>
+
+      <div>
         {/* KPI 카드 8개 */}
         <div className="g4" style={{ gap: 10, marginBottom: 14 }}>
           {KPI_CARDS.map(k => {
@@ -252,14 +240,6 @@ export default function SalesFunnel() {
           })}
         </div>
 
-        {/* 필터 표시 */}
-        {filterStage && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, background: '#FFF8F0', border: '1px solid #FDE68A', borderRadius: 8, padding: '7px 14px' }}>
-            <span style={{ fontSize: 13 }}>🔍 <strong>{filterStage === '__active__' ? '진행 중인 영업 건' : filterStage}</strong> 필터 중 ({filtered.length}개)</span>
-            <button onClick={() => setFilterStage(null)} style={{ padding: '3px 10px', borderRadius: 5, background: 'white', border: '1px solid var(--border2)', fontSize: 12, cursor: 'pointer', marginLeft: 'auto' }}>{t('clear_view_all')}</button>
-          </div>
-        )}
-
         {/* 보드 뷰 */}
         {tab === 'board' && (
           <div style={{ paddingBottom: 16 }}>
@@ -276,7 +256,7 @@ export default function SalesFunnel() {
                     return (
                       <div key={stage} style={{ width: 210, flexShrink: 0, background: c.bg, color: 'white', padding: '9px 12px', borderRadius: '10px 10px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxSizing: 'border-box' }}>
                         <span style={{ fontSize: 11, fontWeight: 700 }}>{stage}</span>
-                        <span style={{ background: 'rgba(255,255,255,.25)', borderRadius: 99, padding: '1px 7px', fontSize: 11, fontWeight: 700 }}>{filtered.filter(l => l.current_stage === stage).length}</span>
+                        <span style={{ background: 'rgba(255,255,255,.25)', borderRadius: 99, padding: '1px 7px', fontSize: 11, fontWeight: 700 }}>{tableFiltered.filter(l => l.current_stage === stage).length}</span>
                       </div>
                     )
                   })}
@@ -287,7 +267,7 @@ export default function SalesFunnel() {
             <div style={{ display: 'flex', gap: 12, minWidth: 'max-content' }}>
               {STAGE_ORDER.map(stage => {
                 const c = STAGE_COLORS[stage] || { bg: '#6B7280', light: '#F3F4F6' }
-                const stageLeads = filtered.filter(l => l.current_stage === stage)
+                const stageLeads = tableFiltered.filter(l => l.current_stage === stage)
                 return (
                   <div key={stage} style={{ width: 210, flexShrink: 0 }}>
                     <div style={{ background: '#F8F4F4', border: `1px solid ${c.bg}40`, borderTop: 'none', borderRadius: '0 0 10px 10px', minHeight: 160, padding: 8, display: 'flex', flexDirection: 'column', gap: 7 }}>
@@ -328,12 +308,6 @@ export default function SalesFunnel() {
         {/* 테이블 뷰 */}
         {tab === 'table' && (
           <div style={{ background: isMobile ? 'transparent' : 'white', border: isMobile ? 'none' : '0.5px solid var(--border2)', borderRadius: 12, overflow: isMobile ? 'visible' : 'hidden' }}>
-            <div style={{ padding: '10px 16px', borderBottom: isMobile ? 'none' : '1px solid var(--border)', marginBottom: isMobile ? 10 : 0, display: 'flex', alignItems: 'center', gap: 10, background: isMobile ? 'white' : 'transparent', borderRadius: isMobile ? 10 : 0, border: isMobile ? '0.5px solid var(--border2)' : 'none' }}>
-              <input type="text" placeholder="🔍 Company, Contact 검색..." style={{ flex: 1, padding: '7px 12px', border: '1px solid var(--border2)', borderRadius: 7, fontSize: 13 }}
-                value={tableSearch}
-                onChange={e => setTableSearch(e.target.value)} />
-              <span style={{ fontSize: 12, color: 'var(--muted)' }}>{tableFiltered.length}개</span>
-            </div>
             {isMobile ? (
               /* 모바일 카드 뷰 */
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

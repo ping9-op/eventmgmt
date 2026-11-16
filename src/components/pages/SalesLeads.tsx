@@ -22,6 +22,7 @@ import RadioGroup from '../RadioGroup'
 import { parseCorridor, composeCorridor, normalizeCorridor, canonicalCountry, TX_TYPES, type TxType } from '../../lib/corridor'
 import CountrySelect from '../CountrySelect'
 import NextStepModal, { needsNextStep } from '../NextStepModal'
+import { SalesHeader, SalesViewTabs, SalesFilterBar, FilterChip, ownerOptions } from '../SalesPageTop'
 
 type GroupBy = 'event' | 'date' | 'source'
 type ViewMode = 'group' | 'detail'
@@ -88,20 +89,6 @@ function ReqLabel({ text }: { text: string }) {
   return <label style={{ marginTop: 0 }}>{text.replace(/\s*\*$/, '')} <span style={{ color: '#DC2626', fontWeight: 800 }}>*</span></label>
 }
 
-// 적용 중인 필터 표시 (✕로 해제)
-function FilterChip({ label, color, bg, onClear }: { label: string; color: string; bg: string; onClear: () => void }) {
-  return (
-    <span style={{ background: bg, color, padding: '5px 10px', borderRadius: 99, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
-      {label}
-      <button onClick={onClear} title="필터 해제" style={{ background: 'none', border: 'none', cursor: 'pointer', color, fontSize: 13, marginLeft: 2, padding: 0 }}>✕</button>
-    </span>
-  )
-}
-
-// 담당자 필터 목록: 설정의 담당자 + 실제 리드에 있는 담당자(설정에서 빠진 사람) + 현재 선택값
-function withCurrentOwner(owners: string[] | undefined, leads: SalesLead[], current: string | null): string[] {
-  return [...new Set([...(owners || []), ...leads.map(l => l.owner), ...(current ? [current] : [])].filter(Boolean))]
-}
 
 function guessMapping(headers: string[]): Record<string, string> {
   const norm = headers.map(h => ({ raw: h, norm: h.trim().toLowerCase() }))
@@ -665,12 +652,7 @@ export default function SalesLeads() {
         onChange={e => { const f = e.target.files?.[0]; if (f) openMappingModal(f); e.target.value = '' }} />
 
       {/* ── 헤더: 제목 + 주요 동작 (모든 보기에서 동일) ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-        <div className="sec-hdr" style={{ margin: 0, flex: 1, minWidth: 200 }}>
-          <div className="bar" />
-          <div className="txt">{t('s_leads_title')}</div>
-          <div className="sub">{t('s_leads_sub')}</div>
-        </div>
+      <SalesHeader title={t('s_leads_title')} sub={t('s_leads_sub')}>
         <button className="btn btn-primary" onClick={() => setShowRegister(true)}>{t('s_register')}</button>
         <button className="btn btn-outline btn-sm" title="엑셀 파일로 리드 여러 건 등록 (행사 안에서 누르면 그 행사로 등록)"
           onClick={() => openGroupUpload(viewMode === 'detail' ? uploadTargetOf(groupKey) : null)}>📤 엑셀 업로드</button>
@@ -679,48 +661,29 @@ export default function SalesLeads() {
           onClick={() => exportCSV(checked.size > 0 ? undefined : (viewMode === 'detail' ? detailLeads : Object.values(groupSearchFiltered).flat()).map(l => l.id))}>
           {t('export_excel')}{checked.size > 0 ? ` (${checked.size})` : ''}
         </button>
-      </div>
+      </SalesHeader>
 
       {/* ── 보기 방식 탭 ── */}
-      <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--light)', borderRadius: 10, marginBottom: 12, overflowX: 'auto' }}>
-        {([['all', '📋 전체 목록'], ['event', '🎪 행사별'], ['date', '📅 등록일별'], ['source', '📥 출처별']] as const).map(([k, lbl]) => {
-          const active = k === 'all' ? viewMode === 'detail' && !groupKey : groupBy === k && (viewMode === 'group' || !!groupKey)
-          return (
-            <button key={k}
-              onClick={() => {
-                setChecked(new Set()); setStageFilter(null); setDetailPage(0)
-                if (k === 'all') { setViewMode('detail'); setGroupKey(null) }
-                else { setGroupBy(k); setViewMode('group'); setGroupKey(null) }
-              }}
-              style={{ flex: 1, minWidth: 96, padding: '8px 12px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', background: active ? 'white' : 'transparent', color: active ? 'var(--accent)' : 'var(--muted)', boxShadow: active ? '0 1px 3px rgba(0,0,0,.12)' : 'none' }}>
-              {lbl}
-            </button>
-          )
-        })}
-      </div>
+      <SalesViewTabs
+        tabs={[{ key: 'all', label: '📋 전체 목록' }, { key: 'event', label: '🎪 행사별' }, { key: 'date', label: '📅 등록일별' }, { key: 'source', label: '📥 출처별' }]}
+        active={viewMode === 'detail' && !groupKey ? 'all' : groupBy}
+        onChange={k => {
+          setChecked(new Set()); setStageFilter(null); setDetailPage(0)
+          if (k === 'all') { setViewMode('detail'); setGroupKey(null) }
+          else { setGroupBy(k); setViewMode('group'); setGroupKey(null) }
+        }} />
 
       {/* ── 검색 · 필터 ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-        <input value={search} onChange={e => { setSearch(e.target.value); setDetailPage(0) }} placeholder={t('search_placeholder')}
-          className="leads-search-input"
-          style={{ flex: 1, minWidth: 200, padding: '8px 12px', border: '1px solid var(--border2)', borderRadius: 8, fontSize: 13 }} />
-        {/* 담당자 필터 — 매니저는 본인 리드만 보이므로 관리자에게만 표시 */}
-        {isAdmin && (
-          <select value={filterOwner || ''} onChange={e => { setFilterOwner(e.target.value || null); setDetailPage(0) }}
-            style={{ padding: '8px 10px', border: '1px solid var(--border2)', borderRadius: 8, fontSize: 13, width: 'auto' }}>
-            <option value="">👤 전체 담당자</option>
-            {withCurrentOwner(settings?.owners, leads, filterOwner).map(o => <option key={o}>{o}</option>)}
-          </select>
-        )}
+      <SalesFilterBar search={search} onSearch={v => { setSearch(v); setDetailPage(0) }} placeholder={t('search_placeholder')}
+        owners={isAdmin ? ownerOptions(settings?.owners, leads.map(l => l.owner), filterOwner) : undefined}
+        owner={filterOwner} onOwner={v => { setFilterOwner(v); setDetailPage(0) }}
+        count={viewMode === 'detail' ? detailLeads.length : filteredLeads.length}>
         {filterOwner && !isAdmin && <FilterChip color="#4F46E5" bg="#EEF2FF" label={`👤 ${filterOwner}`} onClear={() => setFilterOwner(null)} />}
         {filterStage && <FilterChip color="#DC2626" bg="#FEF2F2" label={`📊 ${filterStage}`} onClear={() => { setFilterStage(null); setFilterLostReason(null) }} />}
         {filterReached && <FilterChip color="#4F46E5" bg="#EEF2FF" label={`📈 ${filterReached} 이상 도달`} onClear={() => setFilterReached(null)} />}
         {filterLostReason && <FilterChip color="#DC2626" bg="#FEF2F2" label={`❌ ${filterLostReason}`} onClear={() => setFilterLostReason(null)} />}
         {filterCorridor && <FilterChip color="#059669" bg="#F0FFF4" label={`🌏 ${filterCorridor}`} onClear={() => setFilterCorridor(null)} />}
-        <span style={{ fontSize: 13, color: 'var(--muted)', whiteSpace: 'nowrap', marginLeft: 'auto' }}>
-          총 <b style={{ color: 'var(--text)' }}>{viewMode === 'detail' ? detailLeads.length : filteredLeads.length}</b>건
-        </span>
-      </div>
+      </SalesFilterBar>
 
       {/* ── 그룹 안으로 들어온 경우: 현재 위치 ── */}
       {viewMode === 'detail' && groupKey && (

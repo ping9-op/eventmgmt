@@ -11,6 +11,8 @@ import { encryptRows, decryptRows } from '../../lib/pii'
 import { useLang } from '../../contexts/LangContext'
 import CompleteTaskModal from '../CompleteTaskModal'
 import { TASK_TYPES } from '../../lib/tasks'
+import { SalesHeader, SalesViewTabs, SalesFilterBar, ownerOptions } from '../SalesPageTop'
+import { useAuth } from '../../contexts/AuthContext'
 const STATUSES = ['Pending', 'In Progress', 'Done']
 
 // DB에 한국어로 저장된 task_type 영어 매핑
@@ -42,6 +44,9 @@ export default function SalesFollowUp() {
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const [completing, setCompleting] = useState<SalesTask | null>(null) // 완료 창 (결과·단계·다음 할 일)
+  const [search, setSearch] = useState('')
+  const [filterOwner, setFilterOwner] = useState<string | null>(null)
+  const { isAdmin } = useAuth()
 
   const today = localDateStr()
   const thisWeekEnd = localDateStr(new Date(Date.now() + 7 * 864e5))
@@ -192,49 +197,39 @@ export default function SalesFollowUp() {
   if (taskFilter === 'today') shown = tasks.filter(t => t.due_date === today && t.status !== 'Done')
   else if (taskFilter === 'week') shown = tasks.filter(t => t.due_date > today && t.due_date <= thisWeekEnd && t.status !== 'Done')
   else if (taskFilter === 'overdue') shown = tasks.filter(t => t.status === 'Overdue')
-  else if (taskFilter === 'done') shown = tasks.filter(t => t.status === 'Done')
+  else if (taskFilter === 'done') shown = tasks.filter(t => t.status === 'Done' && t.completed_at === today) // 탭 이름·건수('오늘 완료')와 같은 기준
 
   const leadMap: Record<string, SalesLead> = {}
   for (const l of leads) leadMap[l.id] = l
+
+  // 기간 탭 위에 담당자·검색 적용 (탭의 건수는 전체 기준)
+  if (filterOwner) shown = shown.filter(x => x.owner === filterOwner)
+  if (search.trim()) {
+    const q = search.trim().toLowerCase()
+    shown = shown.filter(x => {
+      const l = leadMap[x.lead_id]
+      return [l?.company_name, l?.contact_person, x.task_title].some(v => (v || '').toLowerCase().includes(q))
+    })
+  }
 
   const allIds = shown.map(t => t.id)
 
   return (
     <div className="view wide">
-      <div className="page-hdr-row">
-        <div className="sec-hdr">
-          <div className="bar" />
-          <div className="txt">{t('s_followup_title')}</div>
-          <div className="sub">{t('s_followup_sub')}</div>
-        </div>
-        <div className="page-hdr-actions">
-          <button className="btn btn-primary btn-sm" onClick={() => setShowAddTask(true)}>{t('add_task_title')}</button>
-        </div>
-      </div>
+      {/* ── 헤더 · 보기 탭 · 검색 (리드관리·퍼널과 같은 모양) ── */}
+      <SalesHeader title={t('s_followup_title')} sub={t('s_followup_sub')}>
+        <button className="btn btn-primary" onClick={() => setShowAddTask(true)}>{t('add_task_title')}</button>
+      </SalesHeader>
 
-      {/* 필터 카드 4개 */}
-      <div className="g4" style={{ gap: 14, marginBottom: 20, marginTop: 16 }}>
-        {filterCards.map(k => {
-          const active = taskFilter === k.filter
-          return (
-            <div key={k.filter} onClick={() => setTaskFilter(active ? null : k.filter)}
-              style={{ background: active ? k.col : k.bg, border: `2px solid ${active ? k.col : k.col + '30'}`, borderRadius: 12, padding: '16px 18px', textAlign: 'center', cursor: 'pointer', transition: 'all .15s', userSelect: 'none' }}
-              onMouseOver={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 12px rgba(0,0,0,.1)' }}
-              onMouseOut={e => { (e.currentTarget as HTMLDivElement).style.transform = ''; (e.currentTarget as HTMLDivElement).style.boxShadow = '' }}>
-              <div style={{ fontSize: 12, color: active ? 'rgba(255,255,255,.8)' : k.col, fontWeight: 600, marginBottom: 6 }}>{k.lbl}</div>
-              <div style={{ fontSize: 34, fontWeight: 800, color: active ? 'white' : k.col }}>{k.val}</div>
-            </div>
-          )
-        })}
-      </div>
+      <SalesViewTabs
+        tabs={[{ key: 'all', label: '📋 전체', count: tasks.length }, ...filterCards.map(c => ({ key: c.filter as string, label: c.lbl, count: c.val }))]}
+        active={taskFilter || 'all'}
+        onChange={k => { setChecked(new Set()); setTaskFilter(k === 'all' ? null : k as TaskFilter) }} />
 
-      {/* 필터 배지 */}
-      {taskFilter && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, background: '#FFF8F0', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 14px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13 }}>🔍 필터: <strong>{filterCards.find(c => c.filter === taskFilter)?.lbl}</strong> ({shown.length}개)</span>
-          <button onClick={() => setTaskFilter(null)} style={{ padding: '3px 10px', borderRadius: 5, background: 'white', border: '1px solid var(--border2)', fontSize: 12, cursor: 'pointer', marginLeft: 'auto' }}>{t('clear_filter')}</button>
-        </div>
-      )}
+      <SalesFilterBar search={search} onSearch={setSearch} placeholder="🔍 회사명, 고객 담당자, 할 일 검색"
+        owners={isAdmin ? ownerOptions(undefined, tasks.map(x => x.owner), filterOwner) : undefined}
+        owner={filterOwner} onOwner={setFilterOwner}
+        count={shown.length} />
 
       {/* 테이블 */}
       <div style={{ background: 'white', border: '0.5px solid var(--border2)', borderRadius: 12, overflow: 'hidden' }}>
