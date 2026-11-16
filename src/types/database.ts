@@ -168,7 +168,7 @@ export type Database = {
         Row: {
           id: string; lead_id: string; task_title: string; task_type: string
           due_date: string; status: string; priority: string; owner: string
-          completed_at: string | null; note: string | null; created_at: string
+          completed_at: string | null; note: string | null; created_at: string; auto_stage: string | null
         }
         Insert: {
           id?: string; lead_id: string; task_title: string; task_type: string

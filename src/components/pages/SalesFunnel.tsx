@@ -8,6 +8,7 @@ import { loadAllSettings } from '../../lib/settings'
 import LeadDetailPanel from './LeadDetailPanel'
 import OwnerBadge from '../OwnerBadge'
 import LostReasonModal, { LeadContactMeta, type LostReasonInput } from '../LostReasonModal'
+import NextStepModal, { needsNextStep } from '../NextStepModal'
 import { useLang } from '../../contexts/LangContext'
 import { useToast } from '../../contexts/ToastContext'
 import { useIsMobile } from '../../hooks/useBreakpoint'
@@ -53,6 +54,7 @@ export default function SalesFunnel() {
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const [tableSearch, setTableSearch] = useState('')
   const [pendingLostId, setPendingLostId] = useState<string | null>(null)
+  const [nextStep, setNextStep] = useState<{ leadId: string; stage: string } | null>(null)
 
   // 보드 가로 스크롤: 상단 슬라이드 바 ↔ 보드 본문 ↔ 단계 헤더 동기화
   const boardRef = useRef<HTMLDivElement>(null)
@@ -128,14 +130,19 @@ export default function SalesFunnel() {
     // last_contact_date / lost_at_stage / 다음 할 일(자동 배정 후 next_action)은 DB 트리거가 채우므로 변경 후 다시 읽어온다
     // (UPDATE 응답에는 그 뒤에 실행되는 할 일 트리거의 변경이 빠져 있음)
     const { error } = await supabase.from('sales_leads').update({ current_stage: stage, ...lost }).eq('id', leadId)
-    const { data } = error ? { data: null } : await supabase.from('sales_leads').select('*').eq('id', leadId).single()
-    if (!error && data) {
-      // DB가 돌려준 행의 개인정보 필드는 암호문이므로 화면의 복호화된 값을 유지
-      setLeads(p => p.map(l => l.id === leadId
-        ? { ...(data as SalesLead), ...Object.fromEntries(PII_FIELDS.sales_leads.map(f => [f, l[f]])) }
-        : l))
-      logStageChange(leadId, prev, stage)
-    } else if (error) showToast('단계 변경에 실패했습니다.', 'error')
+    if (error) { showToast('단계 변경에 실패했습니다.', 'error'); return }
+    logStageChange(leadId, prev, stage)
+    await refetchLead(leadId)
+    if (needsNextStep(stage)) setNextStep({ leadId, stage })
+  }
+
+  async function refetchLead(leadId: string) {
+    const { data } = await supabase.from('sales_leads').select('*').eq('id', leadId).single()
+    if (!data) return
+    // DB가 돌려준 행의 개인정보 필드는 암호문이므로 화면의 복호화된 값을 유지
+    setLeads(p => p.map(l => l.id === leadId
+      ? { ...(data as SalesLead), ...Object.fromEntries(PII_FIELDS.sales_leads.map(f => [f, l[f]])) }
+      : l))
   }
 
   function toggleCheck(id: string, all?: string[]) {
@@ -439,6 +446,11 @@ export default function SalesFunnel() {
         <LostReasonModal
           onCancel={() => setPendingLostId(null)}
           onConfirm={async v => { await moveStage(pendingLostId, 'Lost', v); setPendingLostId(null) }} />
+      )}
+      {nextStep && (
+        <NextStepModal leadId={nextStep.leadId} stage={nextStep.stage}
+          companyName={leads.find(l => l.id === nextStep.leadId)?.company_name}
+          onClose={changed => { const id = nextStep.leadId; setNextStep(null); if (changed) refetchLead(id) }} />
       )}
     </div>
   )

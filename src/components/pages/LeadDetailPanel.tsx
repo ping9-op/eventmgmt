@@ -15,6 +15,7 @@ import { ACTIVITY_RESULTS, TASK_TYPES, addLeadTask, daysFromToday } from '../../
 import RadioGroup from '../RadioGroup'
 import { parseCorridor, composeCorridor, normalizeCorridor, TX_TYPES, type TxType } from '../../lib/corridor'
 import CountrySelect from '../CountrySelect'
+import NextStepModal, { needsNextStep } from '../NextStepModal'
 import { loadAllSettings, BUSINESS_TYPES, type SalesSettingsData } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
 import type { SalesLead, SalesActivity, SalesTask } from '../../types/database'
@@ -74,6 +75,7 @@ export default function LeadDetailPanel({
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [showLostModal, setShowLostModal] = useState(false)
+  const [nextStage, setNextStage] = useState<string | null>(null)
 
   // Activity form
   const [showActForm, setShowActForm] = useState(false)
@@ -290,6 +292,8 @@ export default function LeadDetailPanel({
       const { data } = await supabase.from('sales_leads').select('*').eq('id', leadId).single()
       if (data) applyLoadedLead((await decryptRows('sales_leads', [data as SalesLead]))[0])
       onRefresh()
+      await refreshActivityAndTasks()
+      if (needsNextStep(stage)) setNextStage(stage)
     } catch (err: any) {
       setForm(f => ({ ...f, current_stage: prev || undefined }))
       showToast('⚠️ 스테이지 변경 실패: ' + (err?.message || '알 수 없는 오류'))
@@ -695,6 +699,11 @@ export default function LeadDetailPanel({
         <LostReasonModal
           onCancel={() => setShowLostModal(false)}
           onConfirm={async v => { await updateStageInline('Lost', v); setShowLostModal(false) }} />
+      )}
+
+      {nextStage && (
+        <NextStepModal leadId={leadId} stage={nextStage} companyName={lead.company_name}
+          onClose={async changed => { setNextStage(null); if (changed) await refreshActivityAndTasks() }} />
       )}
     </>
   )

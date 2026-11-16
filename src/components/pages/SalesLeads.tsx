@@ -21,6 +21,7 @@ import OwnerBadge from '../OwnerBadge'
 import RadioGroup from '../RadioGroup'
 import { parseCorridor, composeCorridor, normalizeCorridor, canonicalCountry, TX_TYPES, type TxType } from '../../lib/corridor'
 import CountrySelect from '../CountrySelect'
+import NextStepModal, { needsNextStep } from '../NextStepModal'
 
 type GroupBy = 'event' | 'date' | 'source'
 type ViewMode = 'group' | 'detail'
@@ -189,6 +190,7 @@ export default function SalesLeads() {
   const [bulkDeleting, setBulkDeleting] = useState(false)
   // Lost 전환 대기 (사유 입력 모달)
   const [pendingLostIds, setPendingLostIds] = useState<string[] | null>(null)
+  const [nextStep, setNextStep] = useState<{ leadId: string; stage: string } | null>(null)
 
   // 그룹별 업로드용 행사 ref
   const importTargetRef = useRef<UploadTarget | null>(null)
@@ -324,6 +326,7 @@ export default function SalesLeads() {
     if (error) { showToast('⚠️ Stage 변경 실패: ' + error.message); return }
     logStageChange(leadId, prev, stage)
     await refetchAndMerge([leadId])
+    if (needsNextStep(stage)) setNextStep({ leadId, stage })
   }
 
   async function bulkUpdateStage(ids: string[], stage: string, lost?: LostReasonInput) {
@@ -1252,6 +1255,12 @@ export default function SalesLeads() {
             else await bulkUpdateStage(pendingLostIds, 'Lost', v)
             setPendingLostIds(null)
           }} />
+      )}
+
+      {nextStep && (
+        <NextStepModal leadId={nextStep.leadId} stage={nextStep.stage}
+          companyName={leads.find(l => l.id === nextStep.leadId)?.company_name}
+          onClose={changed => { const id = nextStep.leadId; setNextStep(null); if (changed) refetchAndMerge([id]) }} />
       )}
     </div>
   )
