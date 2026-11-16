@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { SalesTask } from '../types/database'
 import { loadAllSettings, DEFAULTS } from '../lib/settings'
 import { STAGE_ORDER } from '../lib/utils'
-import { ACTIVITY_RESULTS, TASK_TYPES, completeTask, contactMethodForTask, daysFromToday, playbookFor } from '../lib/tasks'
+import { ACTIVITY_RESULTS, TASK_TYPES, completeTask, contactMethodForTask, daysFromToday, playbookFor, loadPlaybook, TASK_PLAYBOOK, type PlaybookItem } from '../lib/tasks'
 import { useToast } from '../contexts/ToastContext'
 import RadioGroup from './RadioGroup'
 import LostReasonModal, { type LostReasonInput } from './LostReasonModal'
@@ -40,8 +40,10 @@ export default function CompleteTaskModal({ task, leadStage, companyName, onClos
   }, [task.task_type])
 
   // 단계를 바꾸면 그 단계의 기본 할 일이 자동으로 생기고(DB), Won/Lost면 할 일이 끝나므로 직접 입력은 기본 '없음'
-  const autoNext = stage !== leadStage ? playbookFor(stage) : undefined
-  useEffect(() => { setNoNext(stage === 'Won' || stage === 'Lost' || (stage !== leadStage && !!playbookFor(stage))) }, [stage, leadStage])
+  const [book, setBook] = useState<PlaybookItem[]>(TASK_PLAYBOOK)
+  useEffect(() => { loadPlaybook().then(setBook).catch(() => {}) }, [])
+  const autoNext = stage !== leadStage ? playbookFor(stage, book) : undefined
+  useEffect(() => { setNoNext(stage === 'Won' || stage === 'Lost' || (stage !== leadStage && !!playbookFor(stage, book))) }, [stage, leadStage, book])
 
   async function submit(lost?: LostReasonInput) {
     if (record && !actResult) { showToast('⚠️ 결과를 선택해주세요.'); return }
@@ -107,7 +109,7 @@ export default function CompleteTaskModal({ task, leadStage, companyName, onClos
           <div style={sub}>3. 다음 할 일</div>
           {autoNext && (
             <div style={{ padding: '8px 10px', background: '#EEF2FF', borderRadius: 8, fontSize: 12, color: '#4F46E5', marginBottom: 8 }}>
-              🤖 '{autoNext.title}' 할 일이 {autoNext.days === 1 ? '내일' : `${autoNext.days}일 뒤`}로 자동 배정됩니다. 추가로 할 일이 있을 때만 입력하세요.
+              🤖 '{autoNext.title}' 할 일이 {autoNext.days === 0 ? '오늘' : autoNext.days === 1 ? '내일' : `${autoNext.days}일 뒤`}로 자동 배정됩니다. 추가로 할 일이 있을 때만 입력하세요.
             </div>
           )}
           {(stage === 'Won' || stage === 'Lost') && stage !== leadStage && (

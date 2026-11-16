@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { TASK_TYPES, playbookFor, daysFromToday, addLeadTask } from '../lib/tasks'
+import { TASK_TYPES, TASK_PLAYBOOK, playbookFor, loadPlaybook, daysFromToday, addLeadTask } from '../lib/tasks'
 import { localDateStr } from '../lib/utils'
 
-/** 단계 변경 직후 팝업이 필요한 단계인지 (기본 할 일이 있는 단계만 — Won/Lost 제외) */
-export const needsNextStep = (stage: string) => !!playbookFor(stage)
+/**
+ * 단계 변경 직후 팝업을 띄울 단계인지 (Won/Lost 제외)
+ * 설정에서 그 단계의 자동 할 일을 꺼 두었으면 팝업이 열리자마자 스스로 닫힌다 (아래 useEffect)
+ */
+export const needsNextStep = (stage: string) => TASK_PLAYBOOK.some(p => p.stage === stage)
 
 const QUICK_DUE = [{ label: '오늘', days: 0 }, { label: '내일', days: 1 }, { label: '3일 뒤', days: 3 }, { label: '1주 뒤', days: 7 }]
 
@@ -30,14 +33,21 @@ export default function NextStepModal({ leadId, stage, companyName, onClose }: {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    supabase.from('sales_tasks').select('id, task_title, task_type, due_date')
-      .eq('lead_id', leadId).eq('auto_stage', stage).neq('status', 'Done')
-      .order('created_at', { ascending: false }).limit(1)
-      .then(({ data }) => {
-        const t = data?.[0]
-        if (t) { setTaskId(t.id); setTitle(t.task_title || ''); setType(t.task_type || 'Call'); setDue(t.due_date || due) }
-        setLoading(false)
-      })
+    let cancelled = false
+    Promise.all([
+      supabase.from('sales_tasks').select('id, task_title, task_type, due_date')
+        .eq('lead_id', leadId).eq('auto_stage', stage).neq('status', 'Done')
+        .order('created_at', { ascending: false }).limit(1),
+      loadPlaybook(),
+    ]).then(([{ data }, book]) => {
+      if (cancelled) return
+      const t = data?.[0]
+      // 설정에서 이 단계의 자동 할 일을 꺼 두었으면 제안할 것이 없으므로 닫는다
+      if (!t && !playbookFor(stage, book)) { onClose(false); return }
+      if (t) { setTaskId(t.id); setTitle(t.task_title || ''); setType(t.task_type || 'Call'); setDue(t.due_date || due) }
+      setLoading(false)
+    })
+    return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leadId, stage])
 

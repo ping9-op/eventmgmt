@@ -9,18 +9,41 @@ import type { LostReasonInput } from '../components/LostReasonModal'
 
 export const TASK_TYPES = ['Email', 'Call', 'SMS', 'Meeting', 'Send Proposal', 'Request Docs', 'Other']
 /**
- * 단계별 기본 할 일 — DB 트리거(sales_leads_auto_task)가 리드 등록·단계 변경 시 자동 배정
- * 여기 값은 화면 안내용이므로 바꿀 때는 supabase/migrations/20261111040000_auto_task_playbook.sql 과 함께 바꿀 것
+ * 단계별 기본 할 일(플레이북) — DB 트리거(sales_leads_auto_task)가 리드 등록·단계 변경 시 자동 배정
+ * 실제 값은 sales_settings.task_playbook (설정 화면에서 관리자가 편집). 아래는 설정이 없을 때의 기본값으로
+ * DB 함수 sales_default_playbook()과 같은 값 (supabase/migrations/20261116020000_editable_task_playbook.sql)
  */
-export const TASK_PLAYBOOK: { stage: string; title: string; days: number }[] = [
-  { stage: 'New Lead', title: '첫 연락 (Cold Call / Cold Email)', days: 1 },
-  { stage: 'Outreach Sent', title: '응답 확인 · 재연락', days: 3 },
-  { stage: 'Engaged', title: '미팅 일정 잡기', days: 3 },
-  { stage: 'Meeting Scheduled', title: '미팅 후 제안서 발송', days: 3 },
-  { stage: 'Proposal Sent', title: '제안서 회신 확인', days: 3 },
-  { stage: 'Onboarding', title: '온보딩 서류·진행 확인', days: 3 },
+export interface PlaybookItem { stage: string; title: string; type: string; days: number; on: boolean }
+export const TASK_PLAYBOOK: PlaybookItem[] = [
+  { stage: 'New Lead', title: '첫 연락 (Cold Call / Cold Email)', type: 'Call', days: 1, on: true },
+  { stage: 'Outreach Sent', title: '응답 확인 · 재연락', type: 'Call', days: 3, on: true },
+  { stage: 'Engaged', title: '미팅 일정 잡기', type: 'Meeting', days: 3, on: true },
+  { stage: 'Meeting Scheduled', title: '미팅 후 제안서 발송', type: 'Send Proposal', days: 3, on: true },
+  { stage: 'Proposal Sent', title: '제안서 회신 확인', type: 'Call', days: 3, on: true },
+  { stage: 'Onboarding', title: '온보딩 서류·진행 확인', type: 'Request Docs', days: 3, on: true },
 ]
-export const playbookFor = (stage: string) => TASK_PLAYBOOK.find(p => p.stage === stage)
+
+/** 설정의 플레이북 (단계 순서는 기본값 기준, 빠진 단계는 기본값으로 채움) */
+export async function loadPlaybook(): Promise<PlaybookItem[]> {
+  const { data } = await supabase.from('sales_settings').select('value').eq('key', 'task_playbook').maybeSingle()
+  const saved = Array.isArray(data?.value) ? (data!.value as unknown as Partial<PlaybookItem>[]) : []
+  return TASK_PLAYBOOK.map(d => {
+    const s = saved.find(x => x?.stage === d.stage)
+    return s ? { ...d, ...s, days: Number.isFinite(Number(s.days)) ? Number(s.days) : d.days, on: s.on !== false } : d
+  })
+}
+
+/** 플레이북 저장 (관리자만 — 아니면 RLS로 거부) */
+export async function savePlaybook(items: PlaybookItem[]): Promise<void> {
+  const value = items.map(i => ({ stage: i.stage, title: i.title.trim(), type: i.type, days: Math.min(Math.max(Math.round(i.days), 0), 60), on: i.on }))
+  const { error } = await supabase.from('sales_settings')
+    .upsert({ key: 'task_playbook', value: value as unknown as string[], updated_at: new Date().toISOString() }, { onConflict: 'key' })
+  if (error) throw error
+}
+
+/** 그 단계에서 자동 배정되는 할 일 (꺼져 있거나 문구가 비면 undefined) */
+export const playbookFor = (stage: string, book: PlaybookItem[] = TASK_PLAYBOOK) =>
+  book.find(p => p.stage === stage && p.on && p.title.trim())
 
 export const ACTIVITY_RESULTS =['Interested', 'No Response', 'Not Interested', 'Requested Info', 'Scheduled Meeting']
 
