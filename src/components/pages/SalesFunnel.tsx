@@ -75,7 +75,7 @@ export default function SalesFunnel() {
     ro.observe(el)
     if (el.firstElementChild) ro.observe(el.firstElementChild)
     return () => ro.disconnect()
-  }, [tab, loading])
+  }, [tab, loading, filterStage])
 
   function syncBoardScroll(from: 'board' | 'bar') {
     const board = boardRef.current, bar = topBarRef.current
@@ -196,6 +196,9 @@ export default function SalesFunnel() {
     ? filtered.filter(l => `${l.company_name} ${l.contact_person} ${l.owner} ${evLabel(l)}`.toLowerCase().includes(tableSearch.toLowerCase()))
     : filtered
   const allIds = tableFiltered.map(l => l.id)
+  // 위 숫자 카드로 한 단계를 고르면 보드에는 그 단계 칸만 표시
+  const singleStage = filterStage && STAGE_ORDER.includes(filterStage) ? filterStage : null
+  const boardStages = singleStage ? [singleStage] : STAGE_ORDER
 
 
   return (
@@ -248,17 +251,20 @@ export default function SalesFunnel() {
         {tab === 'board' && (
           <div style={{ paddingBottom: 16 }}>
             {/* 상단 고정 영역: 가로 슬라이드 바 + 단계 헤더 (리드가 많아도 스크롤 없이 바로 좌우 이동) */}
+            {/* 단계 카드(위 숫자 카드)를 고르면 그 단계 칸만 넓게 — 다른 칸을 옆으로 스크롤하지 않아도 되도록 */}
             <div style={{ position: 'sticky', top: 0, zIndex: 5, background: 'var(--bg)', paddingTop: 4 }}>
-              <div ref={topBarRef} onScroll={() => syncBoardScroll('bar')}
-                style={{ overflowX: 'auto', overflowY: 'hidden', height: 16, marginBottom: 4 }}>
-                <div style={{ width: boardScrollW, height: 1 }} />
-              </div>
+              {!singleStage && (
+                <div ref={topBarRef} onScroll={() => syncBoardScroll('bar')}
+                  style={{ overflowX: 'auto', overflowY: 'hidden', height: 16, marginBottom: 4 }}>
+                  <div style={{ width: boardScrollW, height: 1 }} />
+                </div>
+              )}
               <div ref={headRef} style={{ overflow: 'hidden' }}>
-                <div style={{ display: 'flex', gap: 12, minWidth: 'max-content' }}>
-                  {STAGE_ORDER.map(stage => {
+                <div style={{ display: 'flex', gap: 12, minWidth: singleStage ? undefined : 'max-content' }}>
+                  {boardStages.map(stage => {
                     const c = STAGE_COLORS[stage] || { bg: '#6B7280', light: '#F3F4F6' }
                     return (
-                      <div key={stage} style={{ width: 210, flexShrink: 0, background: c.bg, color: 'white', padding: '9px 12px', borderRadius: '10px 10px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxSizing: 'border-box' }}>
+                      <div key={stage} style={{ width: singleStage ? '100%' : 210, flexShrink: 0, background: c.bg, color: 'white', padding: '9px 12px', borderRadius: '10px 10px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxSizing: 'border-box' }}>
                         <span style={{ fontSize: 11, fontWeight: 700 }}>{stage}</span>
                         <span style={{ background: 'rgba(255,255,255,.25)', borderRadius: 99, padding: '1px 7px', fontSize: 11, fontWeight: 700 }}>{tableFiltered.filter(l => l.current_stage === stage).length}</span>
                       </div>
@@ -268,13 +274,18 @@ export default function SalesFunnel() {
               </div>
             </div>
             <div ref={boardRef} className="no-scrollbar" onScroll={() => syncBoardScroll('board')} style={{ overflowX: 'auto' }}>
-            <div style={{ display: 'flex', gap: 12, minWidth: 'max-content' }}>
-              {STAGE_ORDER.map(stage => {
+            <div style={{ display: 'flex', gap: 12, minWidth: singleStage ? undefined : 'max-content' }}>
+              {boardStages.map(stage => {
                 const c = STAGE_COLORS[stage] || { bg: '#6B7280', light: '#F3F4F6' }
                 const stageLeads = tableFiltered.filter(l => l.current_stage === stage)
                 return (
-                  <div key={stage} style={{ width: 210, flexShrink: 0 }}>
-                    <div style={{ background: '#F8F4F4', border: `1px solid ${c.bg}40`, borderTop: 'none', borderRadius: '0 0 10px 10px', minHeight: 160, padding: 8, display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  <div key={stage} style={{ width: singleStage ? '100%' : 210, flexShrink: 0 }}>
+                    <div style={{
+                      background: '#F8F4F4', border: `1px solid ${c.bg}40`, borderTop: 'none', borderRadius: '0 0 10px 10px', minHeight: 160, padding: 8, gap: 7,
+                      ...(singleStage
+                        ? { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', alignItems: 'start' }
+                        : { display: 'flex', flexDirection: 'column' }),
+                    }}>
                       {stageLeads.map(l => (
                         <div key={l.id}
                           style={{ background: 'white', borderRadius: 8, padding: 10, border: '0.5px solid var(--border2)', cursor: 'pointer', transition: 'box-shadow .15s,transform .15s' }}
@@ -299,7 +310,7 @@ export default function SalesFunnel() {
                           </div>
                         </div>
                       ))}
-                      {stageLeads.length === 0 && <div style={{ textAlign: 'center', color: `${c.bg}50`, fontSize: 11, padding: 16 }}>—</div>}
+                      {stageLeads.length === 0 && <div style={{ textAlign: 'center', color: singleStage ? 'var(--muted)' : `${c.bg}50`, fontSize: singleStage ? 13 : 11, padding: 16, gridColumn: '1 / -1' }}>{singleStage ? `${stage} 단계 리드가 없습니다.` : '—'}</div>}
                     </div>
                   </div>
                 )
