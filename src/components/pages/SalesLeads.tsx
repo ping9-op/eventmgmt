@@ -19,7 +19,8 @@ import LoadingSpinner from '../LoadingSpinner'
 import EventSelect from '../EventSelect'
 import OwnerBadge from '../OwnerBadge'
 import RadioGroup from '../RadioGroup'
-import { parseCorridor, composeCorridor, normalizeCorridor, canonicalCountry, COUNTRIES, TX_TYPES, type TxType } from '../../lib/corridor'
+import { parseCorridor, composeCorridor, normalizeCorridor, canonicalCountry, TX_TYPES, type TxType } from '../../lib/corridor'
+import CountrySelect from '../CountrySelect'
 
 type GroupBy = 'event' | 'date' | 'source'
 type ViewMode = 'group' | 'detail'
@@ -1208,10 +1209,7 @@ export default function SalesLeads() {
               </div>
               <div>
                 <label style={{ marginTop: 0 }}>{t('remit_country_lbl')}</label>
-                <input value={formCountry} onChange={e => setFormCountry(e.target.value)} list="remit-countries" placeholder="예: Japan, Vietnam" />
-                <datalist id="remit-countries">
-                  {[...new Set([...COUNTRIES, ...knownCountries])].map(c => <option key={c} value={c} />)}
-                </datalist>
+                <CountrySelect value={formCountry} onChange={setFormCountry} known={knownCountries} />
               </div>
               <div>
                 <label style={{ marginTop: 0 }}>{t('industry_lbl')}</label>

@@ -13,7 +13,8 @@ import CompleteTaskModal from '../CompleteTaskModal'
 import AutoBadge from '../AutoBadge'
 import { ACTIVITY_RESULTS, TASK_TYPES, addLeadTask, daysFromToday } from '../../lib/tasks'
 import RadioGroup from '../RadioGroup'
-import { parseCorridor, composeCorridor, normalizeCorridor, COUNTRIES, TX_TYPES, type TxType } from '../../lib/corridor'
+import { parseCorridor, composeCorridor, normalizeCorridor, TX_TYPES, type TxType } from '../../lib/corridor'
+import CountrySelect from '../CountrySelect'
 import { loadAllSettings, BUSINESS_TYPES, type SalesSettingsData } from '../../lib/settings'
 import { useToast } from '../../contexts/ToastContext'
 import type { SalesLead, SalesActivity, SalesTask } from '../../types/database'
@@ -458,11 +459,8 @@ export default function LeadDetailPanel({
                     options={TX_TYPES.map(x => ({ value: x, label: x }))} />
                 </Field>
                 <Field label="Remittance Country">
-                  <input value={corrCountry} placeholder="예: Japan, Vietnam" list="panel-countries"
-                    onChange={e => { setCorrCountry(e.target.value); setForm(f => ({ ...f, country_corridor: composeCorridor(corrTx, e.target.value) })) }} />
-                  <datalist id="panel-countries">
-                    {COUNTRIES.map(c => <option key={c} value={c} />)}
-                  </datalist>
+                  <CountrySelect key={leadId} value={corrCountry}
+                    onChange={v => { setCorrCountry(v); setForm(f => ({ ...f, country_corridor: composeCorridor(corrTx, v) })) }} />
                 </Field>
                 <Field label="Business Type">
                   <RadioGroup value={form.business_type || ''} onChange={v => setForm(f => ({ ...f, business_type: v }))}
