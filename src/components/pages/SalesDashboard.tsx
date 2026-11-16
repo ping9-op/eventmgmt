@@ -1,3 +1,4 @@
+import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
@@ -97,6 +98,9 @@ export default function SalesDashboard() {
     setLeads(activeLeads)
     setTasks(await decryptRows('sales_tasks', ((taskData || []) as SalesTask[]).filter(t => activeIds.has(t.lead_id))))
   }
+
+  // 다른 직원의 변경을 새로고침 없이 반영
+  useRealtimeRefresh(['sales_leads', 'sales_tasks'], () => { reload().catch(() => {}) })
 
   if (loading) return <div className="view wide"><LoadingSpinner /></div>
 

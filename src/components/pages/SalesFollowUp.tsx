@@ -1,3 +1,4 @@
+import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh'
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
@@ -178,6 +179,9 @@ export default function SalesFollowUp() {
       setChecked(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
     }
   }
+
+  // 다른 직원의 변경을 새로고침 없이 반영 (할 일 + 리드 단계·회사명)
+  useRealtimeRefresh(['sales_leads', 'sales_tasks'], load)
 
   if (loading) return <div className="view wide"><div style={{ color: 'var(--muted)', padding: 40 }}>{t('loading')}</div></div>
 

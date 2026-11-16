@@ -1,3 +1,4 @@
+import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
@@ -635,6 +636,9 @@ export default function SalesLeads() {
   const pagedDetailLeads = detailLeads.slice(detailPage * DETAIL_PER_PAGE, (detailPage + 1) * DETAIL_PER_PAGE)
   const allDetailIds = pagedDetailLeads.map(l => l.id)
   const checkedDetailIds = allDetailIds.filter(id => checked.has(id))
+
+  // 다른 직원의 변경을 새로고침 없이 반영
+  useRealtimeRefresh(['sales_leads'], load)
 
   if (loading) return <div className="view wide"><LoadingSpinner /></div>
 

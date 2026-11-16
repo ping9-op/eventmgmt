@@ -1,3 +1,4 @@
+import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
@@ -167,6 +168,9 @@ export default function SalesFunnel() {
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
     setChecked(new Set())
   }
+
+  // 다른 직원의 변경을 새로고침 없이 반영
+  useRealtimeRefresh(['sales_leads'], load)
 
   if (loading) return <div className="view wide"><LoadingSpinner /></div>
 
