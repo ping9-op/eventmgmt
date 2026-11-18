@@ -66,15 +66,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(LAST_ACTIVITY_KEY, String(now))
     }
 
+    // 마지막 활동 기록이 없으면(저장소 삭제 등) 만료로 간주 — 로그인 시 signIn()에서 항상 기록함
     const checkIdle = () => {
-      const last = Number(localStorage.getItem(LAST_ACTIVITY_KEY)) || Date.now()
+      const last = Number(localStorage.getItem(LAST_ACTIVITY_KEY)) || 0
       if (Date.now() - last >= IDLE_TIMEOUT_MS) {
         supabase.auth.signOut()
+        return false
       }
+      return true
     }
 
+    // 반드시 체크를 먼저 — 활동 기록을 먼저 쓰면 2시간 뒤 다시 열어도 '방금 활동'으로 덮여 로그아웃이 안 됨
+    if (!checkIdle()) return
     markActivity()
-    checkIdle() // 탭을 닫았다가 2시간 후 다시 열었을 때도 즉시 체크
 
     ACTIVITY_EVENTS.forEach(e => window.addEventListener(e, markActivity))
     const interval = setInterval(checkIdle, 60 * 1000)
@@ -105,6 +109,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const mfaVerified = jwtAal(session?.access_token) === 'aal2'
 
   async function signIn(email: string, password: string) {
+    // 새 로그인은 활동 시각을 갱신 — 이전 세션의 오래된 기록 때문에 로그인 직후 바로 로그아웃되는 것 방지
+    localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()))
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) return { error: error.message }
     return { error: null }
